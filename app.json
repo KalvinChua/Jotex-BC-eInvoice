@@ -10,7 +10,14 @@
   "help": "",
   "url": "",
   "logo": "",
-  "dependencies": [],
+  "dependencies": [
+          {
+           "id": "e41c95d1-d093-45cf-a32e-7e3c52721a20",
+           "name": "SalesPurchaseReport",
+           "publisher": "Evopoint Izzat",
+           "version": "1.0.0.86"
+          }
+  ],
   "screenshots": [],
   "platform": "1.0.0.0",
   "application": "26.0.0.0",
