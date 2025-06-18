@@ -22,9 +22,9 @@ codeunit 50301 "eInvoice TIN Validator"
         Token := TokenHelper.GetAccessTokenFromSetup(MyInvoisSetup);
 
         if MyInvoisSetup.Environment = MyInvoisSetup.Environment::Preprod then
-            URL := 'https://preprod-api.myinvois.hasil.gov.my/api/v1.0/taxpayer/' + CustomerRec."VAT Registration No."
+            URL := 'https://preprod-api.myinvois.hasil.gov.my/api/v1.0/taxpayer/' + CustomerRec."TIN No."
         else
-            URL := 'https://api.myinvois.hasil.gov.my/api/v1.0/taxpayer/' + CustomerRec."VAT Registration No.";
+            URL := 'https://api.myinvois.hasil.gov.my/api/v1.0/taxpayer/' + CustomerRec."TIN No.";
 
         HttpClient.DefaultRequestHeaders().Clear();
         HttpClient.DefaultRequestHeaders().Add('Authorization', 'Bearer ' + Token);
@@ -38,20 +38,19 @@ codeunit 50301 "eInvoice TIN Validator"
 
         JsonResponse.ReadFrom(ResponseText);
 
-        JsonResponse.Get('name', TokenValue);
-        TaxpayerName := TokenValue.AsValue().AsText();
+        if JsonResponse.Get('name', TokenValue) then
+            TaxpayerName := TokenValue.AsValue().AsText();
 
-        JsonResponse.Get('status', TokenValue);
-        TaxpayerStatus := TokenValue.AsValue().AsText();
+        if JsonResponse.Get('status', TokenValue) then
+            TaxpayerStatus := TokenValue.AsValue().AsText();
 
-        // Update customer record
         CustomerRec."Last Validated TIN Name" := TaxpayerName;
         CustomerRec."Last TIN Validation" := CurrentDateTime();
         CustomerRec.Modify();
 
         exit(StrSubstNo(
             'TIN: %1\nName: %2\nStatus: %3',
-            CustomerRec."VAT Registration No.", TaxpayerName, TaxpayerStatus
+            CustomerRec."TIN No.", TaxpayerName, TaxpayerStatus
         ));
     end;
 }
