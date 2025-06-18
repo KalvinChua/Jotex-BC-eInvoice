@@ -1,9 +1,9 @@
-codeunit 50301 "MyInvois TIN Validator"
+codeunit 50301 "eInvoice TIN Validator"
 {
     procedure ValidateTIN(var CustomerRec: Record Customer): Text
     var
-        MyInvoisSetup: Record "MyInvoisSetup";
-        TokenHelper: Codeunit "MyInvoisHelper";
+        MyInvoisSetup: Record "eInvoiceSetup";
+        TokenHelper: Codeunit "eInvoiceHelper";
         HttpClient: HttpClient;
         Response: HttpResponseMessage;
         JsonResponse: JsonObject;
@@ -13,11 +13,11 @@ codeunit 50301 "MyInvois TIN Validator"
         TaxpayerName, TaxpayerStatus : Text;
         TokenValue: JsonToken;
     begin
-        if CustomerRec."VAT Registration No." = '' then
-            Error('Customer does not have a TIN (VAT Registration No.).');
+        if CustomerRec."TIN No." = '' then
+            Error('Customer does not have a TIN No.');
 
-        if not MyInvoisSetup.Get('SETUP') then
-            Error('MyInvois Setup not found.');
+        if not MyInvoisSetup.Get('API SETUP') then
+            Error('eInvois API Setup not found.');
 
         Token := TokenHelper.GetAccessTokenFromSetup(MyInvoisSetup);
 

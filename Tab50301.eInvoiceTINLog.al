@@ -1,4 +1,4 @@
-table 50301 "MyInvois TIN Log"
+table 50301 "eInvoice TIN Log"
 {
     Caption = 'MyInvois TIN Log';
     DataClassification = CustomerContent;

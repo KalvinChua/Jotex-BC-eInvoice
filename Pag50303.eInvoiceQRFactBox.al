@@ -1,9 +1,9 @@
-page 50303 "MyInvois QR FactBox"
+page 50303 "eInvoice QR FactBox"
 {
     PageType = CardPart;
     SourceTable = "Sales Invoice Header";
     ApplicationArea = All;
-    Caption = 'MyInvois QR Code';
+    Caption = 'e-Invoice QR Code';
     Editable = false;
 
     layout
@@ -12,7 +12,7 @@ page 50303 "MyInvois QR FactBox"
         {
             group(QR)
             {
-                field("MyInvois QR Image"; Rec."MyInvois QR Image")
+                field("MyInvois QR Image"; Rec."eInvoice QR Image")
                 {
                     ApplicationArea = All;
                     ShowCaption = false;

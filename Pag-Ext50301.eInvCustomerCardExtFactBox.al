@@ -1,4 +1,4 @@
-pageextension 50301 MyInvCustomerCardExtFactBox extends "Customer Card"
+pageextension 50301 eInvCustomerCardExtFactBox extends "Customer Card"
 {
     layout
     {

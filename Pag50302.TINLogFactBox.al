@@ -1,9 +1,9 @@
 page 50302 "TIN Log FactBox"
 {
     PageType = ListPart;
-    SourceTable = "MyInvois TIN Log";
+    SourceTable = "eInvoice TIN Log";
     ApplicationArea = All;
-    Caption = 'TIN Validation History';
+    Caption = 'e-Invoice TIN Validation History';
     Editable = false;
 
     layout

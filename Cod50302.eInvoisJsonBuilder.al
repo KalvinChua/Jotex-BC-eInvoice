@@ -1,4 +1,4 @@
-codeunit 50302 "MyInvois Json Builder"
+codeunit 50302 "eInvois Json Builder"
 {
     procedure BuildInvoiceJson(SalesInvHeader: Record "Sales Invoice Header"): JsonObject
     var

@@ -1,8 +1,8 @@
-page 50300 MyInvoisSetupCard
+page 50300 eInvoiceSetupCard
 {
     PageType = Card;
-    SourceTable = MyInvoisSetup;
-    Caption = 'MyInvois Setup';
+    SourceTable = eInvoiceSetup;
+    Caption = 'e-Invoice Setup';
     UsageCategory = Administration;
     ApplicationArea = All;
 
@@ -38,7 +38,7 @@ page 50300 MyInvoisSetupCard
                 trigger OnAction()
                 var
                     Token: Text;
-                    MyInvoisHelper: Codeunit MyInvoisHelper;
+                    MyInvoisHelper: Codeunit eInvoiceHelper;
                 begin
                     Token := MyInvoisHelper.GetAccessTokenFromSetup(Rec);
                     Message('Access token retrieved: %1', CopyStr(Token, 1, 50) + '...');
@@ -49,11 +49,11 @@ page 50300 MyInvoisSetupCard
 
     trigger OnOpenPage()
     var
-        Setup: Record MyInvoisSetup;
+        Setup: Record eInvoiceSetup;
     begin
-        if not Setup.Get('SETUP') then begin
+        if not Setup.Get('API SETUP') then begin
             Setup.Init();
-            Setup."Primary Key" := 'SETUP';
+            Setup."Primary Key" := 'API SETUP';
             Setup.Insert();
         end;
     end;

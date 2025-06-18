@@ -1,9 +1,10 @@
 page 50301 "TIN Validation Log"
 {
     PageType = List;
-    SourceTable = "MyInvois TIN Log";
+    SourceTable = "eInvoice TIN Log";
     ApplicationArea = All;
     UsageCategory = Lists;
+    Caption = 'e-Invoice TIN Log';
 
     layout
     {

@@ -1,6 +1,6 @@
-codeunit 50300 MyInvoisHelper
+codeunit 50300 eInvoiceHelper
 {
-    procedure GetAccessTokenFromSetup(var SetupRec: Record MyInvoisSetup): Text
+    procedure GetAccessTokenFromSetup(var SetupRec: Record eInvoiceSetup): Text
     var
         Token: Text;
         ExpirySeconds: Integer;

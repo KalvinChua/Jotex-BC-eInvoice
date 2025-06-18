@@ -1,4 +1,4 @@
-pageextension 50305 MyInvPostedSalesAction extends "Posted Sales Invoice"
+pageextension 50305 eInvPostedSalesAction extends "Posted Sales Invoice"
 {
     actions
     {
@@ -6,13 +6,13 @@ pageextension 50305 MyInvPostedSalesAction extends "Posted Sales Invoice"
         {
             action(SubmitToMyInvois)
             {
-                Caption = 'Submit to MyInvois';
+                Caption = 'Submit e-Invoice';
                 ApplicationArea = All;
                 Image = SendTo;
 
                 trigger OnAction()
                 var
-                    Submitter: Codeunit "MyInvois Submitter";
+                    Submitter: Codeunit "eInvoice Submitter";
                     Msg: Text;
                 begin
                     Msg := Submitter.SubmitToMyInvois(Rec);

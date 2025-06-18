@@ -1,4 +1,4 @@
-tableextension 50300 MyInvCustomerExt extends Customer
+tableextension 50300 eInvCustomerExt extends Customer
 {
     fields
     {

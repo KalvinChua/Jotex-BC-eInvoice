@@ -1,9 +1,9 @@
-codeunit 50304 "MyInvois DocumentSubmitter"
+codeunit 50304 "eInvoice DocumentSubmitter"
 {
     procedure GenerateAndSubmitInvoice(SalesInvNo: Code[20]): Text
     var
         SalesInvHeader: Record "Sales Invoice Header";
-        JsonBuilder: Codeunit "MyInvois Json Builder";
+        JsonBuilder: Codeunit "eInvois Json Builder";
         InvoiceJson: JsonObject;
         InvoiceText, SubmitResponse : Text;
     begin
@@ -22,8 +22,8 @@ codeunit 50304 "MyInvois DocumentSubmitter"
 
     procedure SubmitSignedDocumentBatch(InternalId: Code[20]; SignedJsonText: Text): Text
     var
-        MyInvoisSetup: Record "MyInvoisSetup";
-        TokenHelper: Codeunit "MyInvoisHelper";
+        MyInvoisSetup: Record "eInvoiceSetup";
+        TokenHelper: Codeunit "eInvoiceHelper";
         SalesInvHeader: Record "Sales Invoice Header";
         HttpClient: HttpClient;
         RequestContent: HttpContent;
@@ -122,8 +122,8 @@ codeunit 50304 "MyInvois DocumentSubmitter"
         end;
 
         if SalesInvHeader.Get(InternalId) then begin
-            SalesInvHeader."MyInvois UUID" := Uuid;
-            SalesInvHeader."MyInvois Submission UID" := SubmissionUid;
+            SalesInvHeader."eInvoice UUID" := Uuid;
+            SalesInvHeader."eInvoice Submission UID" := SubmissionUid;
             SalesInvHeader.Modify();
         end;
 

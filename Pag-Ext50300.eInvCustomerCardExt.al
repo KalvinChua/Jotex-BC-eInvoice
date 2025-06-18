@@ -1,4 +1,4 @@
-pageextension 50304 MyInvCustomerCardExt extends "Customer Card"
+pageextension 50304 eInvCustomerCardExt extends "Customer Card"
 {
     actions
     {
@@ -6,13 +6,13 @@ pageextension 50304 MyInvCustomerCardExt extends "Customer Card"
         {
             action(ValidateTIN)
             {
-                Caption = 'Validate TIN (MyInvois)';
+                Caption = 'Validate TIN No.';
                 Image = Check;
                 ApplicationArea = All;
 
                 trigger OnAction()
                 var
-                    Validator: Codeunit "MyInvois TIN Validator";
+                    Validator: Codeunit "eInvoice TIN Validator";
                     Msg: Text;
                 begin
                     Msg := Validator.ValidateTIN(Rec);
