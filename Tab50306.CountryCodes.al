@@ -2,6 +2,7 @@ table 50306 "Country Codes"
 {
     Caption = 'Country Codes';
     DataClassification = CustomerContent;
+    LookupPageId = "Country Code List";
 
     fields
     {

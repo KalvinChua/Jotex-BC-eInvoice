@@ -2,6 +2,7 @@ table 50305 "State Codes"
 {
     Caption = 'State Codes';
     DataClassification = CustomerContent;
+    LookupPageId = "State Code List";
 
     fields
     {

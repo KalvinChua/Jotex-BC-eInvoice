@@ -12,8 +12,14 @@ page 50308 "Country Code List"
         {
             repeater(Group)
             {
-                field(Code; Rec.Code) { ApplicationArea = All; }
-                field(Country; Rec.Country) { ApplicationArea = All; }
+                field(Code; Rec.Code)
+                {
+                    ApplicationArea = All;
+                }
+                field(Country; Rec.Country)
+                {
+                    ApplicationArea = All;
+                }
             }
         }
     }
