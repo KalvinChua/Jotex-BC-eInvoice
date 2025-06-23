@@ -71,7 +71,6 @@ table 50311 "e-Invoice Company Info"
             var
                 MSIC: Record "MSIC Codes";
             begin
-                // Use SETRANGE instead of Get since 'Code' is not the primary key
                 MSIC.SetRange(Code, "MSIC Code");
                 if MSIC.FindFirst() then
                     "Business Activity Description" := MSIC.Description;
@@ -144,10 +143,11 @@ table 50311 "e-Invoice Company Info"
 
             trigger OnValidate()
             var
-                CountryRec: Record "Country Codes";
+                Country: Record "Country Codes";
             begin
-                if CountryRec.Get("Country Code") then
-                    "Country Name" := CountryRec.Country;
+                Country.SetRange(Code, "Country Code");
+                if Country.FindFirst() then
+                    "Country Name" := Country.Country;
             end;
         }
 

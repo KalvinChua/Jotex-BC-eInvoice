@@ -99,7 +99,7 @@ page 50313 "e-Invoice Company Info Card"
                 }
                 field("Country Name"; Rec."Country Name")
                 {
-                    Editable = true;
+                    Editable = false;
                 }
             }
 
