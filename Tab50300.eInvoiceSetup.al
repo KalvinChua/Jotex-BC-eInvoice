@@ -28,13 +28,6 @@ table 50300 eInvoiceSetup
             DataClassification = SystemMetadata;
             Editable = false;
         }
-
-        field(8; "Company Info Code"; Code[20])
-        {
-            Caption = 'Company Info Code';
-            TableRelation = "e-Invoice Company Info";
-            DataClassification = CustomerContent;
-        }
     }
 
     keys

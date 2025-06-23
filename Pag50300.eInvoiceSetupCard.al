@@ -45,26 +45,6 @@ page 50300 eInvoiceSetupCard
                     Message('Access token retrieved: %1', CopyStr(Token, 1, 50) + '...');
                 end;
             }
-            action(OpenCompanyInfo)
-            {
-                Caption = 'Open Company Info';
-                ApplicationArea = All;
-                Image = View;
-
-                trigger OnAction()
-                var
-                    CompanyInfoRec: Record "e-Invoice Company Info";
-                begin
-                    if Rec."Company Info Code" = '' then
-                        Error('No Company Info Code is set.');
-
-                    if CompanyInfoRec.Get(Rec."Company Info Code") then
-                        PAGE.Run(PAGE::"e-Invoice Company Info Card", CompanyInfoRec)
-                    else
-                        Error('The selected Company Info record was not found.');
-                end;
-            }
-
         }
     }
 
