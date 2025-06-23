@@ -31,7 +31,7 @@ tableextension 50300 eInvoiceCustomerExt extends Customer
         field(50305; "eInvoice ID Type"; Option)
         {
             Caption = 'eInvoice ID Type';
-            OptionMembers = " ",NRIC,BRN,PASSPORT,ARMY;
+            OptionMembers = NRIC,BRN,PASSPORT,ARMY;
             ToolTip = 'ID Type required for e-Invoice: NRIC, BRN, PASSPORT, or ARMY.';
         }
         field(50306; "eInvoice TIN No."; Text[150])

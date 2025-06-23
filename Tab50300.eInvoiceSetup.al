@@ -4,18 +4,9 @@ table 50300 eInvoiceSetup
 
     fields
     {
-        field(1; "Primary Key"; Code[10])
-        {
-            DataClassification = SystemMetadata;
-        }
-        field(2; "Client ID"; Text[100])
-        {
-            DataClassification = SystemMetadata;
-        }
-        field(3; "Client Secret"; Text[100])
-        {
-            DataClassification = SystemMetadata;
-        }
+        field(1; "Primary Key"; Code[10]) { DataClassification = SystemMetadata; }
+        field(2; "Client ID"; Text[100]) { DataClassification = SystemMetadata; }
+        field(3; "Client Secret"; Text[100]) { DataClassification = SystemMetadata; }
         field(4; "Environment"; Option)
         {
             OptionMembers = Preprod,Production;
@@ -33,9 +24,16 @@ table 50300 eInvoiceSetup
         }
         field(7; "Token Expiry (s)"; Integer)
         {
-            DataClassification = SystemMetadata;
             Caption = 'Token Expiry (Seconds)';
+            DataClassification = SystemMetadata;
             Editable = false;
+        }
+
+        field(8; "Company Info Code"; Code[20])
+        {
+            Caption = 'Company Info Code';
+            TableRelation = "e-Invoice Company Info";
+            DataClassification = CustomerContent;
         }
     }
 
