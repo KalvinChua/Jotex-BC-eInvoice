@@ -2,53 +2,55 @@ pageextension 50304 eInvCustomerCardExt extends "Customer Card"
 {
     layout
     {
-        addlast(Content)
+        addafter("Registration Number")
         {
-            group("e-Invoice Info")
+            field("e-Invoice TIN No."; Rec."e-Invoice TIN No.")
             {
-                Caption = 'e-Invoice Info';
+                ApplicationArea = All;
+                Editable = true;
+                Visible = true;
+            }
 
-                field("eInvoice TIN No."; Rec."eInvoice TIN No.")
-                {
-                    ApplicationArea = All;
-                    Editable = true;
-                }
+            field("e-Invoice ID Type"; Rec."e-Invoice ID Type")
+            {
+                ApplicationArea = All;
+                Editable = true;
+                Visible = true;
+            }
 
-                field("eInvoice ID Type"; Rec."eInvoice ID Type")
-                {
-                    ApplicationArea = All;
-                    Editable = true;
-                }
+            field("e-Invoice SST No."; Rec."e-Invoice SST No.")
+            {
+                ApplicationArea = All;
+                Editable = true;
+                Visible = true;
+            }
 
-                field("eInvoice SST No."; Rec."eInvoice SST No.")
-                {
-                    ApplicationArea = All;
-                    Editable = true;
-                }
+            field("e-Invoice State Code"; Rec."e-Invoice State Code")
+            {
+                ApplicationArea = All;
+                Editable = true;
+                Visible = true;
+            }
 
-                field("eInvoice State Code"; Rec."eInvoice State Code")
-                {
-                    ApplicationArea = All;
-                    Editable = true;
-                }
+            field("e-Invoice Country Code"; Rec."e-Invoice Country Code")
+            {
+                ApplicationArea = All;
+                Editable = true;
+                Visible = true;
+            }
 
-                field("eInvoice Country Code"; Rec."eInvoice Country Code")
-                {
-                    ApplicationArea = All;
-                    Editable = true;
-                }
+            field("Last Validated TIN Name"; Rec."Last Validated TIN Name")
+            {
+                ApplicationArea = All;
+                Editable = false;
+                Visible = true;
+            }
 
-                field("Last Validated TIN Name"; Rec."Last Validated TIN Name")
-                {
-                    ApplicationArea = All;
-                    Editable = false;
-                }
-
-                field("Last TIN Validation"; Rec."Last TIN Validation")
-                {
-                    ApplicationArea = All;
-                    Editable = false;
-                }
+            field("Last TIN Validation"; Rec."Last TIN Validation")
+            {
+                ApplicationArea = All;
+                Editable = false;
+                Visible = true;
             }
         }
     }

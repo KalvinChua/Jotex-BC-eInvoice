@@ -96,5 +96,9 @@ tableextension 50303 eInvCompanyInfoExt extends "Company Information"
             Editable = false;
             DataClassification = CustomerContent;
         }
+        field(50310; "e-Invoice TIN No."; Text[150])
+        {
+            Caption = 'e-Invoice TIN No.';
+        }
     }
 }

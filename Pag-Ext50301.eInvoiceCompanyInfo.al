@@ -4,6 +4,12 @@ pageextension 50301 "e-Invoice Company Info" extends "Company Information"
     {
         addafter("Registration No.")
         {
+            field("e-Invoice TIN No."; Rec."e-Invoice TIN No.")
+            {
+                ApplicationArea = All;
+                Visible = true;
+                Caption = 'e-Invoice TIN No.';
+            }
             field("ID Type"; Rec."ID Type")
             {
                 ApplicationArea = All;
