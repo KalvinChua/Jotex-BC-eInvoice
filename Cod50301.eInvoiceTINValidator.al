@@ -13,7 +13,7 @@ codeunit 50301 "eInvoice TIN Validator"
         TaxpayerName, TaxpayerStatus : Text;
         TokenValue: JsonToken;
     begin
-        if CustomerRec."TIN No." = '' then
+        if CustomerRec."e-Invoice TIN No." = '' then
             Error('Customer does not have a TIN No.');
 
         if not MyInvoisSetup.Get('API SETUP') then
