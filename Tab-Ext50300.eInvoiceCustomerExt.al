@@ -38,5 +38,10 @@ tableextension 50300 eInvoiceCustomerExt extends Customer
         {
             Caption = 'e-Invoice TIN No.';
         }
+        field(50307; "Requires e-Invoice"; Boolean)
+        {
+            Caption = 'Requires e-Invoice';
+            DataClassification = CustomerContent;
+        }
     }
 }

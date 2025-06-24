@@ -52,6 +52,11 @@ pageextension 50304 eInvCustomerCardExt extends "Customer Card"
                 Editable = false;
                 Visible = true;
             }
+            field("Requires e-Invoice"; Rec."Requires e-Invoice")
+            {
+                ApplicationArea = Suite;
+                ToolTip = 'Specifies if this customer requires e-Invoice submission';
+            }
         }
     }
 

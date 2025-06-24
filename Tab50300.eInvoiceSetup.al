@@ -30,10 +30,10 @@ table 50300 eInvoiceSetup
         }
         field(8; "eInvoice Version"; Code[10])
         {
-            DataClassification = CustomerContent;
+            DataClassification = SystemMetadata;
             Caption = 'e-Invoice Version';
             TableRelation = "eInvoice Version".Code;
-            ValidateTableRelation = true;
+            Editable = true;
         }
 
     }
