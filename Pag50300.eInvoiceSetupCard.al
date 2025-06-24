@@ -15,6 +15,12 @@ page 50300 eInvoiceSetupCard
                 field("Client ID"; Rec."Client ID") { ApplicationArea = All; }
                 field("Client Secret"; Rec."Client Secret") { ApplicationArea = All; }
                 field("Environment"; Rec.Environment) { ApplicationArea = All; }
+                field("eInvoice Version"; Rec."eInvoice Version")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the e-Invoice version to use for submission to LHDN (e.g. 1.0 or 1.1).';
+                }
+
             }
 
             group("Token Info")

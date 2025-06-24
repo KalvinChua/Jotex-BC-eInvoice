@@ -28,6 +28,14 @@ table 50300 eInvoiceSetup
             DataClassification = SystemMetadata;
             Editable = false;
         }
+        field(8; "eInvoice Version"; Code[10])
+        {
+            DataClassification = CustomerContent;
+            Caption = 'e-Invoice Version';
+            TableRelation = "eInvoice Version".Code;
+            ValidateTableRelation = true;
+        }
+
     }
 
     keys
