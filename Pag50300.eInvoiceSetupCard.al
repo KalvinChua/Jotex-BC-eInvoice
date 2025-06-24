@@ -12,9 +12,18 @@ page 50300 eInvoiceSetupCard
         {
             group("API Configuration")
             {
-                field("Client ID"; Rec."Client ID") { ApplicationArea = All; }
-                field("Client Secret"; Rec."Client Secret") { ApplicationArea = All; }
-                field("Environment"; Rec.Environment) { ApplicationArea = All; }
+                field("Client ID"; Rec."Client ID")
+                {
+                    ApplicationArea = All;
+                }
+                field("Client Secret"; Rec."Client Secret")
+                {
+                    ApplicationArea = All;
+                }
+                field("Environment"; Rec.Environment)
+                {
+                    ApplicationArea = All;
+                }
                 field("eInvoice Version"; Rec."eInvoice Version")
                 {
                     ApplicationArea = All;
@@ -25,8 +34,16 @@ page 50300 eInvoiceSetupCard
 
             group("Token Info")
             {
-                field("Last Token"; Rec."Last Token") { ApplicationArea = All; Editable = false; }
-                field("Token Timestamp"; Rec."Token Timestamp") { ApplicationArea = All; Editable = false; }
+                field("Last Token"; Rec."Last Token")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
+                field("Token Timestamp"; Rec."Token Timestamp")
+                {
+                    ApplicationArea = All;
+                    Editable = false;
+                }
             }
         }
     }
@@ -58,9 +75,9 @@ page 50300 eInvoiceSetupCard
     var
         Setup: Record eInvoiceSetup;
     begin
-        if not Setup.Get('API SETUP') then begin
+        if not Setup.Get('SETUP') then begin
             Setup.Init();
-            Setup."Primary Key" := 'API SETUP';
+            Setup."Primary Key" := 'SETUP';
             Setup.Insert();
         end;
     end;

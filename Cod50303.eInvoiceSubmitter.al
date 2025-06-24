@@ -22,8 +22,8 @@ codeunit 50303 "eInvoice Submitter"
         QRResponse: HttpResponseMessage;
         QRStream: InStream;
     begin
-        if not MyInvoisSetup.Get('API SETUP') then
-            Error('API Setup not found.');
+        if not MyInvoisSetup.Get('SETUP') then
+            Error('Setup not found.');
 
         // ✅ Get Access Token
         Token := MyInvoisHelper.GetAccessTokenFromSetup(MyInvoisSetup);

@@ -27,6 +27,11 @@ pageextension 50307 eInvSalesInvoiceExt extends "Sales Invoice"
                 ApplicationArea = All;
                 ToolTip = 'Specifies the Payment Mode';
             }
+            field("eInvoice Currency Code"; Rec."eInvoice Currency Code")
+            {
+                ApplicationArea = All;
+                ToolTip = 'Specifies the Currency Code';
+            }
         }
     }
 }
