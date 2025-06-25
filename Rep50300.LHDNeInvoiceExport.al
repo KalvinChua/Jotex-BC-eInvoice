@@ -79,7 +79,7 @@ report 50300 "LHDN e-Invoice Export"
                 // Basic invoice information
                 AddExcelColumn(RowNo, 1, "No."); // eInvoiceNumber
                 AddExcelColumn(RowNo, 2, SalesInvHeader."eInvoice Document Type"); // eInvoiceTypeCode
-                AddExcelColumn(RowNo, 3, '1.0'); // eInvoiceVersion
+                AddExcelColumn(RowNo, 3, '1.1'); // eInvoiceVersion
                 AddExcelColumn(RowNo, 4, InvDateTime); // IssuanceDateTime
                 AddExcelColumn(RowNo, 5, GLSetup."LCY Code"); // CurrencyCode (use LCY if blank)
                 AddExcelColumn(RowNo, 6, "Currency Factor"); // CurrencyExchangeRate (actual rate)

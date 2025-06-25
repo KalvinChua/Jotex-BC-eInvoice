@@ -29,5 +29,17 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
             TableRelation = eInvoiceTypes.Code;
             DataClassification = ToBeClassified;
         }
+        field(50307; "eInvoice Payment Mode"; Code[20])
+        {
+            Caption = 'e-Invoice Payment Mode';
+            TableRelation = "Payment Modes".Code;
+            DataClassification = ToBeClassified;
+        }
+        field(50308; "eInvoice Currency Code"; Code[20])
+        {
+            Caption = 'e-Invoice Currency Code';
+            TableRelation = "Currency Codes".Code;
+            DataClassification = ToBeClassified;
+        }
     }
 }
