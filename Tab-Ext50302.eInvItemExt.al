@@ -14,5 +14,11 @@ tableextension 50302 eInvItemExt extends Item
             ToolTip = 'Mandatory for e-Invoice submission. Use e-Invoice Classification.';
             TableRelation = "eInvoiceClassification".Code;
         }
+        field(50302; "e-Invoice UOM"; Code[20])
+        {
+            Caption = 'e-Invoice UOM';
+            ToolTip = 'Mandatory for e-Invoice submission. Use e-Invoice Unit of Measure.';
+            TableRelation = "eInvoiceUOM".Code;
+        }
     }
 }
