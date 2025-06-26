@@ -18,6 +18,27 @@ codeunit 50306 "eInv Field Population"
         CopyEInvoiceFieldsFromItem(Rec);
     end;
 
+    [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterInsertEvent', '', false, false)]
+    local procedure SetDefaultEInvoiceValuesOnInsert(var Rec: Record "Sales Header"; RunTrigger: Boolean)
+    begin
+        if Rec.IsTemporary then
+            exit;
+
+        // Set default document type for invoices
+        if Rec."Document Type" = Rec."Document Type"::Invoice then
+            Rec."eInvoice Document Type" := '01'; // Standard invoice code
+    end;
+
+    [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Sell-to Customer No.', false, false)]
+    local procedure SetDefaultEInvoiceValuesOnCustomerChange(var Rec: Record "Sales Header"; var xRec: Record "Sales Header"; CurrFieldNo: Integer)
+    begin
+        // For invoices, always use '01' unless already set
+        if (Rec."Document Type" = Rec."Document Type"::Invoice) and
+           (Rec."eInvoice Document Type" = '')
+        then
+            Rec."eInvoice Document Type" := '01';
+    end;
+
     local procedure CopyEInvoiceFieldsFromItem(var SalesLine: Record "Sales Line")
     var
         Item: Record Item;
@@ -31,7 +52,7 @@ codeunit 50306 "eInv Field Population"
     end;
 
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforeSalesInvLineInsert', '', false, false)]
-    local procedure CopyToPostedInvoiceLine(
+    local procedure CopyLineFieldsToPostedInvoice(
         var SalesInvLine: Record "Sales Invoice Line";
         SalesLine: Record "Sales Line";
         SalesInvHeader: Record "Sales Invoice Header";
@@ -40,5 +61,28 @@ codeunit 50306 "eInv Field Population"
         SalesInvLine."e-Invoice Tax Type" := SalesLine."e-Invoice Tax Type";
         SalesInvLine."e-Invoice Classification" := SalesLine."e-Invoice Classification";
         SalesInvLine."e-Invoice UOM" := SalesLine."e-Invoice UOM";
+    end;
+
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterPostSalesDoc', '', false, false)]
+    local procedure CopyHeaderFieldsToPostedInvoice(
+        var SalesHeader: Record "Sales Header";
+        var GenJnlPostLine: Codeunit "Gen. Jnl.-Post Line";
+        SalesShptHdrNo: Code[20];
+        RetRcpHdrNo: Code[20];
+        SalesInvHdrNo: Code[20];
+        SalesCrMemoHdrNo: Code[20])
+    var
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        // Only process invoices (skip credit memos)
+        if SalesInvHdrNo = '' then
+            exit;
+
+        if SalesInvoiceHeader.Get(SalesInvHdrNo) then begin
+            SalesInvoiceHeader."eInvoice Document Type" := SalesHeader."eInvoice Document Type";
+            SalesInvoiceHeader."eInvoice Payment Mode" := SalesHeader."eInvoice Payment Mode";
+            SalesInvoiceHeader."eInvoice Currency Code" := SalesHeader."eInvoice Currency Code";
+            SalesInvoiceHeader.Modify(true);
+        end;
     end;
 }
