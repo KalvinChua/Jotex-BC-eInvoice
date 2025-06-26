@@ -14,5 +14,11 @@ tableextension 50307 eInvSalesLineExt extends "Sales Line"
             DataClassification = ToBeClassified;
             TableRelation = eInvoiceUOM.Code;
         }
+        field(50302; "e-Invoice Tax Type"; Code[20])
+        {
+            Caption = 'e-Invoice Tax Type';
+            DataClassification = ToBeClassified;
+            TableRelation = "e-Invoice Tax Types".Code;
+        }
     }
 }

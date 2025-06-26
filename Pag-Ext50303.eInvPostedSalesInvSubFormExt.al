@@ -10,6 +10,12 @@ pageextension 50303 eInvPostedSalesInvSubFormExt extends "Posted Sales Invoice S
                 Visible = true;
                 ToolTip = 'Classification for Item based on LHDN requirement.';
             }
+            field("e-Invoice Tax Type"; Rec."e-Invoice Tax Type")
+            {
+                ApplicationArea = All;
+                Visible = true;
+                ToolTip = 'Tax Type for Item based on LHDN requirement.';
+            }
             field("e-Invoice UOM"; Rec."e-Invoice UOM")
             {
                 ApplicationArea = All;
