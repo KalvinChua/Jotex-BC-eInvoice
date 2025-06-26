@@ -41,12 +41,13 @@ report 50300 "LHDN e-Invoice Export"
                 GLSetup: Record "General Ledger Setup";
                 CustBankAccount: Record "Customer Bank Account";
                 CompanyBankAccount: Record "Bank Account";
+                SalesInvLineLocal: Record "Sales Invoice Line"; // For totals
             begin
                 RowNo += 1;
                 TotalTaxAmount := 0;
                 TotalDiscountAmount := 0;
 
-                // Get related records with error handling
+                // Get related records
                 if not CompanyInfo.Get() then
                     Error('Company Information must be set up for e-Invoice export');
 
@@ -64,13 +65,25 @@ report 50300 "LHDN e-Invoice Export"
 
                 GLSetup.Get();
 
-                // Try to get bank accounts
                 if not CompanyBankAccount.Get(CompanyInfo."Bank Account No.") then
                     CompanyBankAccount.Init();
 
                 CustBankAccount.SetRange("Customer No.", "Sell-to Customer No.");
                 if not CustBankAccount.FindFirst() then
                     CustBankAccount.Init();
+
+                // 🔁 Manual line total calculation loop
+                SalesInvLineLocal.SetRange("Document No.", "No.");
+                SalesInvLineLocal.SetFilter(Type, '<>%1', SalesInvLineLocal.Type::" ");
+                if SalesInvLineLocal.FindSet() then
+                    repeat
+                        if SalesInvLineLocal."Line Amount" <> 0 then begin
+                            if SalesInvLineLocal."VAT Calculation Type" <> SalesInvLineLocal."VAT Calculation Type"::"Full VAT" then
+                                TotalTaxAmount += SalesInvLineLocal."Amount Including VAT" - SalesInvLineLocal.Amount;
+
+                            TotalDiscountAmount += SalesInvLineLocal."Inv. Discount Amount" + SalesInvLineLocal."Line Discount Amount";
+                        end;
+                    until SalesInvLineLocal.Next() = 0;
 
                 // Format date/time in ISO 8601 with Malaysia timezone
                 InvDateTime := Format("Posting Date", 0, '<Year4>-<Month,2>-<Day,2>') + 'T' +
