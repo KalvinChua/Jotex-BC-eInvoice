@@ -25,6 +25,12 @@ tableextension 50305 eInvSalesHeader extends "Sales Header"
             Caption = 'e-Invoice Version Code';
             TableRelation = "eInvoice Version".Code;
             DataClassification = ToBeClassified;
+            InitValue = '1.1';  // Default value
         }
     }
+    trigger OnInsert()
+    begin
+        if "eInvoice Version Code" = '' then
+            "eInvoice Version Code" := '1.1';
+    end;
 }
