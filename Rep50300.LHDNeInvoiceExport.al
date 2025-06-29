@@ -73,15 +73,14 @@ report 50300 "LHDN e-Invoice Export"
                     until SalesInvLineLocal.Next() = 0;
 
                 // Format date/time in ISO 8601 with Malaysia timezone
-                InvDateTime := Format("Posting Date", 0, '<Year4>-<Month,2>-<Day,2>') + 'T' +
-                              Format(Time, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>') + '+08:00';
+                InvDateTime := Format("Posting Date") + '  ' + Format(Time);
 
                 // Basic invoice information
                 AddExcelColumn(RowNo, 1, "No."); // eInvoiceNumber
                 AddExcelColumn(RowNo, 2, "eInvoice Document Type"); // eInvoiceTypeCode
                 AddExcelColumn(RowNo, 3, "eInvoice Version Code"); // eInvoiceVersion
                 AddExcelColumn(RowNo, 4, InvDateTime); // IssuanceDateTime
-                AddExcelColumn(RowNo, 5, GLSetup."LCY Code"); // CurrencyCode
+                AddExcelColumn(RowNo, 5, "Currency Code"); // CurrencyCode
                 AddExcelColumn(RowNo, 6, "Currency Factor"); // CurrencyExchangeRate
 
                 // Supplier information
@@ -180,6 +179,60 @@ report 50300 "LHDN e-Invoice Export"
                 InitializeExcelHeaders();
             end;
         }
+
+        dataitem(SalesInvLine; "Sales Invoice Line")
+        {
+            DataItemLink = "Document No." = field("No.");
+            DataItemLinkReference = SalesInvHeader;
+            DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
+
+            trigger OnAfterGetRecord()
+            var
+                Item: Record Item;
+                VATPostingSetup: Record "VAT Posting Setup";
+                CountryRegion: Record "Country/Region";
+            begin
+                // Only process lines for invoices that were included in the first sheet
+                if not ExcelBuffer.Get(RowNo, 1) then
+                    CurrReport.Skip();
+
+                LineRowNo += 1;
+
+                // Get related item information if available
+                if Type = Type::Item then
+                    if not Item.Get("No.") then
+                        Clear(Item);
+
+                // Get VAT information
+                if not VATPostingSetup.Get("VAT Bus. Posting Group", "VAT Prod. Posting Group") then
+                    VATPostingSetup.Init();
+
+                // Get country of origin if available
+                // if (Type = Type::Item) and (Item."Country/Region of Origin Code" <> '') then
+                //     if not CountryRegion.Get(Item."Country/Region of Origin Code") then
+                //         Clear(CountryRegion);
+
+                // Add line details to the DocumentLineItems sheet
+                AddLineExcelColumn(LineRowNo, 1, SalesInvHeader."No."); // eInvoiceNumber
+                AddLineExcelColumn(LineRowNo, 2, "Line No."); // ID
+                AddLineExcelColumn(LineRowNo, 3, SalesInvLine."e-Invoice Classification"); // Classification
+                AddLineExcelColumn(LineRowNo, 4, Description); // DescriptionProductService
+                AddLineExcelColumn(LineRowNo, 5, "Unit Price"); // UnitPrice
+                AddLineExcelColumn(LineRowNo, 6, Quantity); // Quantity
+                AddLineExcelColumn(LineRowNo, 7, SalesInvLine."e-Invoice UOM"); // UnitOfMeasurement
+                AddLineExcelColumn(LineRowNo, 8, "Line Amount"); // Subtotal
+                AddLineExcelColumn(LineRowNo, 9, SalesInvLine."Amount Including VAT" - SalesInvLine.Amount); // TotalTaxAmount
+                AddLineExcelColumn(LineRowNo, 10, GetLineAmountExclVAT()); // TotalExcludingTax
+                AddLineExcelColumn(LineRowNo, 11, ''); // ProductTariffCode
+                AddLineExcelColumn(LineRowNo, 12, ''); // CountryofOrigin
+            end;
+
+            trigger OnPreDataItem()
+            begin
+                LineRowNo := 1; // Reset counter for each invoice
+                InitializeLineExcelHeaders();
+            end;
+        }
     }
 
     requestpage
@@ -214,6 +267,7 @@ report 50300 "LHDN e-Invoice Export"
     var
         ExcelBuffer: Record "Excel Buffer" temporary;
         RowNo: Integer;
+        LineRowNo: Integer;
         InvDateTime: Text;
         TotalTaxAmount: Decimal;
         TotalDiscountAmount: Decimal;
@@ -395,11 +449,53 @@ report 50300 "LHDN e-Invoice Export"
         ColumnNo += 1;
     end;
 
+    local procedure InitializeLineExcelHeaders()
+    var
+        ColumnNo: Integer;
+    begin
+        ColumnNo := 1;
+
+        // Add all columns for the DocumentLineItems sheet
+        AddLineHeaderColumn(ColumnNo, 'eInvoiceNumber');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'ID');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'Classification');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'DescriptionProductService');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'UnitPrice');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'Quantity');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'UnitOfMeasurement');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'Subtotal');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'TotalTaxAmount');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'TotalExcludingTax');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'ProductTariffCode');
+        ColumnNo += 1;
+        AddLineHeaderColumn(ColumnNo, 'CountryofOrigin');
+        ColumnNo += 1;
+    end;
+
     local procedure AddHeaderColumn(ColumnNo: Integer; ColumnName: Text)
     begin
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", RowNo);
         ExcelBuffer.Validate("Column No.", ColumnNo);
+        ExcelBuffer.Validate("Cell Value as Text", ColumnName);
+        ExcelBuffer.Insert();
+    end;
+
+    local procedure AddLineHeaderColumn(ColumnNo: Integer; ColumnName: Text)
+    begin
+        ExcelBuffer.Init();
+        ExcelBuffer.Validate("Row No.", LineRowNo);
+        ExcelBuffer.Validate("Column No.", ColumnNo + 100); // Use column numbers >100 for the second sheet
         ExcelBuffer.Validate("Cell Value as Text", ColumnName);
         ExcelBuffer.Insert();
     end;
@@ -421,7 +517,38 @@ report 50300 "LHDN e-Invoice Export"
         ExcelBuffer.Insert();
     end;
 
+    local procedure AddLineExcelColumn(Row: Integer; Column: Integer; Value: Variant)
+    begin
+        if (not IncludeAllFields) and (Format(Value) = '') then
+            exit;
+
+        // Clear any existing entry first
+        if ExcelBuffer.Get(Row, Column + 100) then
+            ExcelBuffer.Delete();
+
+        ExcelBuffer.Init();
+        ExcelBuffer.Validate("Row No.", Row);
+        ExcelBuffer.Validate("Column No.", Column + 100); // Use column numbers >100 for the second sheet
+
+        // Force text format for code fields
+        if Column in [1, 2, 3, 7, 11, 12] then
+            ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
+
+        // Format numeric values with 2 decimal places
+        if Column in [5, 8, 9, 10] then
+            ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, '<Precision,2><Standard Format,2>'))
+        else
+            ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));
+
+        if not ExcelBuffer.Insert() then
+            ExcelBuffer.Modify();
+    end;
+
     trigger OnPostReport()
+    var
+        TempSalesInvHeader: Record "Sales Invoice Header";
+        TempSalesInvLine: Record "Sales Invoice Line";
+        LineRowCounter: Integer;
     begin
         if ExcelBuffer.IsEmpty() then
             Error('No data to export.');
@@ -429,8 +556,52 @@ report 50300 "LHDN e-Invoice Export"
         if FileName = '' then
             FileName := 'LHDN_eInvoice_Export_' + Format(Today, 0, '<Year4><Month,2><Day,2>') + '.xlsx';
 
-        ExcelBuffer.CreateNewBook('LHDN e-Invoice');
+        // Create new workbook
+        ExcelBuffer.CreateNewBook('LHDN Export');
+
+        // Write first sheet (Documents)
         ExcelBuffer.WriteSheet('Documents', CompanyName, UserId);
+
+        // Only proceed with second sheet if we have line items
+        if LineRowNo > 1 then begin
+            // Clear buffer for second sheet
+            ExcelBuffer.DeleteAll();
+
+            // Reinitialize line headers
+            LineRowCounter := 1;
+            InitializeLineExcelHeaders();
+
+            // Process all filtered invoice headers
+            TempSalesInvHeader.CopyFilters(SalesInvHeader);
+            if TempSalesInvHeader.FindSet() then
+                repeat
+                    // Process lines for each invoice
+                    TempSalesInvLine.Reset();
+                    TempSalesInvLine.SetRange("Document No.", TempSalesInvHeader."No.");
+                    if TempSalesInvLine.FindSet() then
+                        repeat
+                            LineRowCounter += 1;
+
+                            // Add line details to the DocumentLineItems sheet
+                            AddLineExcelColumn(LineRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
+                            AddLineExcelColumn(LineRowCounter, 2, TempSalesInvLine."Line No."); // ID
+                            AddLineExcelColumn(LineRowCounter, 3, TempSalesInvLine."e-Invoice Classification"); // Classification
+                            AddLineExcelColumn(LineRowCounter, 4, TempSalesInvLine.Description); // DescriptionProductService
+                            AddLineExcelColumn(LineRowCounter, 5, TempSalesInvLine."Unit Price"); // UnitPrice
+                            AddLineExcelColumn(LineRowCounter, 6, TempSalesInvLine.Quantity); // Quantity
+                            AddLineExcelColumn(LineRowCounter, 7, TempSalesInvLine."e-Invoice UOM"); // UnitOfMeasurement
+                            AddLineExcelColumn(LineRowCounter, 8, TempSalesInvLine."Line Amount"); // Subtotal
+                            AddLineExcelColumn(LineRowCounter, 9, TempSalesInvLine."Amount Including VAT" - TempSalesInvLine.Amount); // TotalTaxAmount
+                            AddLineExcelColumn(LineRowCounter, 10, TempSalesInvLine.GetLineAmountExclVAT()); // TotalExcludingTax
+                            AddLineExcelColumn(LineRowCounter, 11, ''); // ProductTariffCode
+                            AddLineExcelColumn(LineRowCounter, 12, ''); // CountryofOrigin
+                        until TempSalesInvLine.Next() = 0;
+                until TempSalesInvHeader.Next() = 0;
+
+            // Write second sheet
+            ExcelBuffer.WriteSheet('DocumentLineItems', CompanyName, UserId);
+        end;
+
         ExcelBuffer.CloseBook();
         ExcelBuffer.SetFriendlyFilename(FileName);
         ExcelBuffer.OpenExcel();
@@ -443,5 +614,6 @@ report 50300 "LHDN e-Invoice Export"
         TotalDiscountAmount := 0;
         TotalExcludingTax := 0;
         TotalIncludingTax := 0;
+        LineRowNo := 1;
     end;
 }
