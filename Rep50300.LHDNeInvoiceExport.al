@@ -131,13 +131,13 @@ report 50300 "LHDN e-Invoice Export"
 
                 // Billing
                 AddExcelColumn(RowNo, 46, ''); // FrequencyBilling
-                AddExcelColumn(RowNo, 47, Format("Posting Date", 0, '<Year4>-<Month,2>-<Day,2>')); // BillingPeriod.StartDate
-                AddExcelColumn(RowNo, 48, Format("Posting Date", 0, '<Year4>-<Month,2>-<Day,2>')); // BillingPeriod.EndDate
+                AddExcelColumn(RowNo, 47, ''); // BillingPeriod.StartDate
+                AddExcelColumn(RowNo, 48, ''); // BillingPeriod.EndDate
 
                 // Payment
-                AddExcelColumn(RowNo, 49, PaymentModes.Code); // PaymentMode
-                AddExcelColumn(RowNo, 50, CompanyBankAccount."Bank Account No."); // SupplierBankAccountNumber
-                AddExcelColumn(RowNo, 51, PaymentTerms.Code); // PaymentTerms
+                AddExcelColumn(RowNo, 49, ''); // PaymentMode
+                AddExcelColumn(RowNo, 50, ''); // SupplierBankAccountNumber
+                AddExcelColumn(RowNo, 51, ''); // PaymentTerms
 
                 // Prepayment
                 AddExcelColumn(RowNo, 52, ''); // PrePaymentAmount
@@ -146,27 +146,27 @@ report 50300 "LHDN e-Invoice Export"
                 AddExcelColumn(RowNo, 55, ''); // PrePaymentReferenceNumber
 
                 // Reference & Shipping
-                AddExcelColumn(RowNo, 56, "External Document No."); // BillReferenceNumber
-                AddExcelColumn(RowNo, 57, "Ship-to Name"); // ShippingRecipientName
+                AddExcelColumn(RowNo, 56, ''); // BillReferenceNumber
+                AddExcelColumn(RowNo, 57, ''); // ShippingRecipientName
                 AddExcelColumn(RowNo, 58, ''); // ShippingRecipientAddress.Address.AddressLine0
-                AddExcelColumn(RowNo, 59, "Ship-to Address"); // ShippingRecipientAddress.Address.AddressLine1
-                AddExcelColumn(RowNo, 60, "Ship-to Address 2"); // ShippingRecipientAddress.Address.AddressLine2
-                AddExcelColumn(RowNo, 61, "Ship-to Post Code"); // ShippingRecipientAddress.Address.PostalZone
-                AddExcelColumn(RowNo, 62, "Ship-to City"); // ShippingRecipientAddress.Address.CityName
-                AddExcelColumn(RowNo, 63, "Ship-to County"); // ShippingRecipientAddress.Address.State
-                AddExcelColumn(RowNo, 64, "Ship-to Country/Region Code"); // ShippingRecipientAddress.Address.CountryCode
-                AddExcelColumn(RowNo, 65, Customer."e-Invoice TIN No."); // ShippingRecipientTIN
+                AddExcelColumn(RowNo, 59, ''); // ShippingRecipientAddress.Address.AddressLine1
+                AddExcelColumn(RowNo, 60, ''); // ShippingRecipientAddress.Address.AddressLine2
+                AddExcelColumn(RowNo, 61, ''); // ShippingRecipientAddress.Address.PostalZone
+                AddExcelColumn(RowNo, 62, ''); // ShippingRecipientAddress.Address.CityName
+                AddExcelColumn(RowNo, 63, ''); // ShippingRecipientAddress.Address.State
+                AddExcelColumn(RowNo, 64, ''); // ShippingRecipientAddress.Address.CountryCode
+                AddExcelColumn(RowNo, 65, ''); // ShippingRecipientTIN
                 AddExcelColumn(RowNo, 66, ''); // ShippingRecipientRegistrationNumber.Type
-                AddExcelColumn(RowNo, 67, Customer."VAT Registration No."); // ShippingRecipientRegistrationNumber.Number
+                AddExcelColumn(RowNo, 67, ''); // ShippingRecipientRegistrationNumber.Number
 
                 // Additional
-                AddExcelColumn(RowNo, 68, "Transaction Specification"); // Incoterms
+                AddExcelColumn(RowNo, 68, ''); // Incoterms
                 AddExcelColumn(RowNo, 69, ''); // FreeTradeAgreement
                 AddExcelColumn(RowNo, 70, ''); // AuthorisationNumberCertifiedExporter
                 AddExcelColumn(RowNo, 71, ''); // ReferenceNumberCustomsFormNo2
                 AddExcelColumn(RowNo, 72, ''); // DetailsOtherCharges.eInvoiceNumber
-                AddExcelColumn(RowNo, 73, 0); // DetailsOtherCharges.Amount
-                AddExcelColumn(RowNo, 74, "Payment Reference"); // DetailsOtherCharges.Description
+                AddExcelColumn(RowNo, 73, ''); // DetailsOtherCharges.Amount
+                AddExcelColumn(RowNo, 74, ''); // DetailsOtherCharges.Description
             end;
 
             trigger OnPreDataItem()
@@ -414,7 +414,7 @@ report 50300 "LHDN e-Invoice Export"
         ExcelBuffer.Validate("Column No.", Column);
 
         // Force text format for ID, code, and numeric fields that should be treated as text
-        if Column in [2, 10, 19, 21, 27, 33, 35] then
+        if Column in [2, 10, 19, 21, 27, 33, 35, 49] then
             ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
         ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));
