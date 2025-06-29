@@ -29,6 +29,8 @@ codeunit 50306 "eInv Field Population"
         // Set default document type for invoices
         if Rec."Document Type" = Rec."Document Type"::Invoice then
             Rec."eInvoice Document Type" := '01'; // Standard invoice code
+        if Rec."Document Type" = Rec."Document Type"::Order then
+            Rec."eInvoice Document Type" := '01'; // Standard invoice code
     end;
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Sell-to Customer No.', false, false)]
