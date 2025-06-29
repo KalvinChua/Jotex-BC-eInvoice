@@ -20,5 +20,11 @@ tableextension 50305 eInvSalesHeader extends "Sales Header"
             TableRelation = "Currency Codes".Code;
             DataClassification = ToBeClassified;
         }
+        field(50303; "eInvoice Version Code"; Code[20])
+        {
+            Caption = 'e-Invoice Version Code';
+            TableRelation = "eInvoice Version".Code;
+            DataClassification = ToBeClassified;
+        }
     }
 }

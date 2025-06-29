@@ -32,6 +32,12 @@ pageextension 50307 "eInv Sales Invoice Ext" extends "Sales Invoice"
                     ToolTip = 'Specifies the currency code for e-Invoice reporting';
                     Importance = Additional;
                 }
+                field("eInvoice Version Code"; Rec."eInvoice Version Code")
+                {
+                    ApplicationArea = Suite;
+                    ToolTip = 'Specifies version code for e-Invoice reporting';
+                    Importance = Additional;
+                }
             }
         }
     }

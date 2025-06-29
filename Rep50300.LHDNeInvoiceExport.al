@@ -13,39 +13,23 @@ report 50300 "LHDN e-Invoice Export"
             RequestFilterFields = "No.", "Posting Date", "Sell-to Customer No.";
             DataItemTableView = SORTING("Posting Date");
 
-            dataitem(SalesInvLine; "Sales Invoice Line")
-            {
-                DataItemLink = "Document No." = field("No.");
-                DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(Item | "G/L Account" | Resource));
-
-                trigger OnAfterGetRecord()
-                begin
-                    // Calculate line-level tax amounts (only for taxable lines)
-                    if "Line Amount" <> 0 then begin
-                        if "VAT Calculation Type" <> "VAT Calculation Type"::"Full VAT" then
-                            TotalTaxAmount += "Amount Including VAT" - Amount;
-
-                        // Calculate total discount amount
-                        TotalDiscountAmount += "Inv. Discount Amount" + "Line Discount Amount";
-                    end;
-                end;
-            }
-
             trigger OnAfterGetRecord()
             var
                 CompanyInfo: Record "Company Information";
                 Customer: Record Customer;
                 PaymentTerms: Record "Payment Terms";
-                PaymentMethod: Record "Payment Method";
+                PaymentModes: Record "Payment Modes";
                 CountryRegion: Record "Country/Region";
                 GLSetup: Record "General Ledger Setup";
                 CustBankAccount: Record "Customer Bank Account";
                 CompanyBankAccount: Record "Bank Account";
-                SalesInvLineLocal: Record "Sales Invoice Line"; // For totals
+                SalesInvLineLocal: Record "Sales Invoice Line";
             begin
                 RowNo += 1;
                 TotalTaxAmount := 0;
                 TotalDiscountAmount := 0;
+                TotalExcludingTax := 0;
+                TotalIncludingTax := 0;
 
                 // Get related records
                 if not CompanyInfo.Get() then
@@ -57,8 +41,8 @@ report 50300 "LHDN e-Invoice Export"
                 if not PaymentTerms.Get("Payment Terms Code") then
                     PaymentTerms.Init();
 
-                if not PaymentMethod.Get("Payment Method Code") then
-                    PaymentMethod.Init();
+                if not PaymentModes.Get("eInvoice Payment Mode") then
+                    PaymentModes.Init();
 
                 if not CountryRegion.Get(CompanyInfo."Country/Region Code") then
                     CountryRegion.Init();
@@ -72,12 +56,15 @@ report 50300 "LHDN e-Invoice Export"
                 if not CustBankAccount.FindFirst() then
                     CustBankAccount.Init();
 
-                // 🔁 Manual line total calculation loop
+                // Calculate totals from invoice lines
                 SalesInvLineLocal.SetRange("Document No.", "No.");
                 SalesInvLineLocal.SetFilter(Type, '<>%1', SalesInvLineLocal.Type::" ");
                 if SalesInvLineLocal.FindSet() then
                     repeat
                         if SalesInvLineLocal."Line Amount" <> 0 then begin
+                            TotalExcludingTax += SalesInvLineLocal.Amount;
+                            TotalIncludingTax += SalesInvLineLocal."Amount Including VAT";
+
                             if SalesInvLineLocal."VAT Calculation Type" <> SalesInvLineLocal."VAT Calculation Type"::"Full VAT" then
                                 TotalTaxAmount += SalesInvLineLocal."Amount Including VAT" - SalesInvLineLocal.Amount;
 
@@ -91,55 +78,55 @@ report 50300 "LHDN e-Invoice Export"
 
                 // Basic invoice information
                 AddExcelColumn(RowNo, 1, "No."); // eInvoiceNumber
-                AddExcelColumn(RowNo, 2, SalesInvHeader."eInvoice Document Type"); // eInvoiceTypeCode
-                AddExcelColumn(RowNo, 3, '1.0'); // eInvoiceVersion
+                AddExcelColumn(RowNo, 2, "eInvoice Document Type"); // eInvoiceTypeCode
+                AddExcelColumn(RowNo, 3, "eInvoice Version Code"); // eInvoiceVersion
                 AddExcelColumn(RowNo, 4, InvDateTime); // IssuanceDateTime
-                AddExcelColumn(RowNo, 5, GLSetup."LCY Code"); // CurrencyCode (use LCY if blank)
-                AddExcelColumn(RowNo, 6, "Currency Factor"); // CurrencyExchangeRate (actual rate)
+                AddExcelColumn(RowNo, 5, GLSetup."LCY Code"); // CurrencyCode
+                AddExcelColumn(RowNo, 6, "Currency Factor"); // CurrencyExchangeRate
 
-                // Supplier information (Company Information)
-                AddExcelColumn(RowNo, 7, CompanyInfo."e-Invoice TIN No."); // Supplier.TIN
-                AddExcelColumn(RowNo, 8, CompanyInfo.Name); // Supplier.Name
-                AddExcelColumn(RowNo, 9, CompanyInfo."ID Type"); // Supplier.IDType (default to Registration)
-                AddExcelColumn(RowNo, 10, CompanyInfo."ID No."); // Supplier.IDNo
-                AddExcelColumn(RowNo, 11, CompanyInfo."VAT Registration No."); // Supplier.SST.No
-                AddExcelColumn(RowNo, 12, CompanyInfo."TTX No."); // Supplier.TTX.No
-                AddExcelColumn(RowNo, 13, CompanyInfo."e-Invoice Email"); // Supplier.Email
-                AddExcelColumn(RowNo, 14, CompanyInfo."MSIC Code"); // Supplier.MSIC.Code
-                AddExcelColumn(RowNo, 15, CompanyInfo."Business Activity Description"); // Supplier.BusinessActivityDescription
-                AddExcelColumn(RowNo, 16, CompanyInfo.Address); // Supplier.Address.AddressLine0
-                AddExcelColumn(RowNo, 17, CompanyInfo."Address 2"); // Supplier.Address.AddressLine1
-                AddExcelColumn(RowNo, 18, ''); // Supplier.Address.AddressLine2
-                AddExcelColumn(RowNo, 19, CompanyInfo."Post Code"); // Supplier.Address.PostalZone
-                AddExcelColumn(RowNo, 20, CompanyInfo.City); // Supplier.Address.CityName
-                AddExcelColumn(RowNo, 21, CompanyInfo."e-Invoice State Code"); // Supplier.Address.State
-                AddExcelColumn(RowNo, 22, CompanyInfo."e-Invoice Country Code"); // Supplier.Address.CountryCode
-                AddExcelColumn(RowNo, 23, CompanyInfo."Phone No."); // Supplier.ContactNumber
+                // Supplier information
+                AddExcelColumn(RowNo, 7, CompanyInfo."e-Invoice TIN No.");
+                AddExcelColumn(RowNo, 8, CompanyInfo.Name);
+                AddExcelColumn(RowNo, 9, Format(CompanyInfo."ID Type"));
+                AddExcelColumn(RowNo, 10, CompanyInfo."ID No.");
+                AddExcelColumn(RowNo, 11, CompanyInfo."VAT Registration No.");
+                AddExcelColumn(RowNo, 12, CompanyInfo."TTX No.");
+                AddExcelColumn(RowNo, 13, CompanyInfo."e-Invoice Email");
+                AddExcelColumn(RowNo, 14, CompanyInfo."MSIC Code");
+                AddExcelColumn(RowNo, 15, CompanyInfo."Business Activity Description");
+                AddExcelColumn(RowNo, 16, CompanyInfo.Address);
+                AddExcelColumn(RowNo, 17, CompanyInfo."Address 2");
+                AddExcelColumn(RowNo, 18, '');
+                AddExcelColumn(RowNo, 19, CompanyInfo."Post Code");
+                AddExcelColumn(RowNo, 20, CompanyInfo.City);
+                AddExcelColumn(RowNo, 21, CompanyInfo."e-Invoice State Code");
+                AddExcelColumn(RowNo, 22, CompanyInfo."e-Invoice Country Code");
+                AddExcelColumn(RowNo, 23, CompanyInfo."Phone No.");
 
-                // Buyer information (Customer)
-                AddExcelColumn(RowNo, 24, Customer."e-Invoice TIN No."); // Buyer.TIN
-                AddExcelColumn(RowNo, 25, Customer.Name); // Buyer.Name
-                AddExcelColumn(RowNo, 26, Customer."e-Invoice ID Type"); // Buyer.IDType
-                AddExcelColumn(RowNo, 27, Customer."e-Invoice SST No."); // Buyer.IDNo
-                AddExcelColumn(RowNo, 28, Customer."VAT Registration No."); // Buyer.SST.No
-                AddExcelColumn(RowNo, 29, Customer."E-Mail"); // Buyer.Email
-                AddExcelColumn(RowNo, 30, Customer.Address); // Buyer.Address.AddressLine0
-                AddExcelColumn(RowNo, 31, Customer."Address 2"); // Buyer.Address.AddressLine1
-                AddExcelColumn(RowNo, 32, ''); // Buyer.Address.AddressLine2
-                AddExcelColumn(RowNo, 33, Customer."Post Code"); // Buyer.Address.PostalZone
-                AddExcelColumn(RowNo, 34, Customer.City); // Buyer.Address.CityName
-                AddExcelColumn(RowNo, 35, Customer."e-Invoice State Code"); // Buyer.Address.State
-                AddExcelColumn(RowNo, 36, Customer."e-Invoice Country Code"); // Buyer.Address.CountryCode
-                AddExcelColumn(RowNo, 37, Customer."Phone No."); // Buyer.ContactNumber
+                // Buyer information
+                AddExcelColumn(RowNo, 24, Customer."e-Invoice TIN No.");
+                AddExcelColumn(RowNo, 25, Customer.Name);
+                AddExcelColumn(RowNo, 26, Format(Customer."e-Invoice ID Type"));
+                AddExcelColumn(RowNo, 27, Customer."e-Invoice SST No.");
+                AddExcelColumn(RowNo, 28, Customer."VAT Registration No.");
+                AddExcelColumn(RowNo, 29, Customer."E-Mail");
+                AddExcelColumn(RowNo, 30, Customer.Address);
+                AddExcelColumn(RowNo, 31, Customer."Address 2");
+                AddExcelColumn(RowNo, 32, '');
+                AddExcelColumn(RowNo, 33, Customer."Post Code");
+                AddExcelColumn(RowNo, 34, Customer.City);
+                AddExcelColumn(RowNo, 35, Customer."e-Invoice State Code");
+                AddExcelColumn(RowNo, 36, Customer."e-Invoice Country Code");
+                AddExcelColumn(RowNo, 37, Customer."Phone No.");
 
-                // Totals (with proper rounding)
-                AddExcelColumn(RowNo, 38, Round(Amount, 0.01)); // TotalExcludingTax
-                AddExcelColumn(RowNo, 39, Round("Amount Including VAT", 0.01)); // TotalIncludingTax
-                AddExcelColumn(RowNo, 40, Round("Amount Including VAT", 0.01)); // TotalPayableAmount
-                AddExcelColumn(RowNo, 41, Round(Amount, 0.01)); // TotalNetAmount
+                // Totals
+                AddExcelColumn(RowNo, 38, Round(TotalExcludingTax, 0.01)); // TotalExcludingTax
+                AddExcelColumn(RowNo, 39, Round(TotalIncludingTax, 0.01)); // TotalIncludingTax
+                AddExcelColumn(RowNo, 40, Round(TotalIncludingTax, 0.01)); // TotalPayableAmount
+                AddExcelColumn(RowNo, 41, ''); // TotalNetAmount
                 AddExcelColumn(RowNo, 42, Round(TotalDiscountAmount, 0.01)); // TotalDiscountValue
-                AddExcelColumn(RowNo, 43, 0); // TotalChargeAmount
-                AddExcelColumn(RowNo, 44, Round("Amount Including VAT" - Amount - TotalTaxAmount, 0.01)); // TotalRoundingAmount
+                AddExcelColumn(RowNo, 43, ''); // TotalChargeAmount
+                AddExcelColumn(RowNo, 44, ''); // TotalRoundingAmount
                 AddExcelColumn(RowNo, 45, Round(TotalTaxAmount, 0.01)); // TotalTaxAmount
 
                 // Billing
@@ -148,7 +135,7 @@ report 50300 "LHDN e-Invoice Export"
                 AddExcelColumn(RowNo, 48, Format("Posting Date", 0, '<Year4>-<Month,2>-<Day,2>')); // BillingPeriod.EndDate
 
                 // Payment
-                AddExcelColumn(RowNo, 49, PaymentMethod.Code); // PaymentMode
+                AddExcelColumn(RowNo, 49, PaymentModes.Code); // PaymentMode
                 AddExcelColumn(RowNo, 50, CompanyBankAccount."Bank Account No."); // SupplierBankAccountNumber
                 AddExcelColumn(RowNo, 51, PaymentTerms.Code); // PaymentTerms
 
@@ -157,7 +144,6 @@ report 50300 "LHDN e-Invoice Export"
                 AddExcelColumn(RowNo, 53, ''); // PrePaymentDate
                 AddExcelColumn(RowNo, 54, ''); // PrePaymentTime
                 AddExcelColumn(RowNo, 55, ''); // PrePaymentReferenceNumber
-
 
                 // Reference & Shipping
                 AddExcelColumn(RowNo, 56, "External Document No."); // BillReferenceNumber
@@ -231,8 +217,10 @@ report 50300 "LHDN e-Invoice Export"
         InvDateTime: Text;
         TotalTaxAmount: Decimal;
         TotalDiscountAmount: Decimal;
-        FileName: Text; // ✅ For download name
-        IncludeAllFields: Boolean; // ✅ From requestpage
+        TotalExcludingTax: Decimal;
+        TotalIncludingTax: Decimal;
+        FileName: Text;
+        IncludeAllFields: Boolean;
 
     local procedure InitializeExcelHeaders()
     var
@@ -417,23 +405,19 @@ report 50300 "LHDN e-Invoice Export"
     end;
 
     local procedure AddExcelColumn(Row: Integer; Column: Integer; Value: Variant)
-    var
-        CellValue: Text;
     begin
         if (not IncludeAllFields) and (Format(Value) = '') then
             exit;
-
-        CellValue := Format(Value, 0, 9);
 
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", Row);
         ExcelBuffer.Validate("Column No.", Column);
 
-        if Value.IsDecimal() or Value.IsInteger() then
-            ExcelBuffer.Validate("Cell Value as Text", Value)
-        else
-            ExcelBuffer.Validate("Cell Value as Text", CellValue);
+        // Force text format for ID, code, and numeric fields that should be treated as text
+        if Column in [2, 10, 19, 21, 27, 33, 35] then
+            ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
+        ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));
         ExcelBuffer.Insert();
     end;
 
@@ -457,5 +441,7 @@ report 50300 "LHDN e-Invoice Export"
         // Initialize global variables
         TotalTaxAmount := 0;
         TotalDiscountAmount := 0;
+        TotalExcludingTax := 0;
+        TotalIncludingTax := 0;
     end;
 }

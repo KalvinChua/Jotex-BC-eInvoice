@@ -34,6 +34,11 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the Currency Code';
                 }
+                field("eInvoice Version Code"; Rec."eInvoice Version Code")
+                {
+                    ApplicationArea = Suite;
+                    ToolTip = 'Specifies version code for e-Invoice reporting';
+                }
             }
         }
     }

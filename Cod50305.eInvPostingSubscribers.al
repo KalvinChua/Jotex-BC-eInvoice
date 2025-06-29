@@ -24,6 +24,7 @@ codeunit 50305 "eInv Posting Subscribers"
             SalesInvoiceHeader."eInvoice Document Type" := SalesHeader."eInvoice Document Type";
             SalesInvoiceHeader."eInvoice Payment Mode" := SalesHeader."eInvoice Payment Mode";
             SalesInvoiceHeader."eInvoice Currency Code" := SalesHeader."eInvoice Currency Code";
+            SalesInvoiceHeader."eInvoice Version Code" := SalesHeader."eInvoice Version Code";
 
             // Force the modification and commit immediately
             if not SalesInvoiceHeader.Modify(true) then begin

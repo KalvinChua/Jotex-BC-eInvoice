@@ -1,5 +1,7 @@
 codeunit 50306 "eInv Field Population"
 {
+    Permissions = tabledata "Sales Invoice Header" = M;
+
     [EventSubscriber(ObjectType::Table, Database::"Sales Line", 'OnAfterValidateEvent', 'Type', false, false)]
     local procedure CopyFromItemOnTypeChange(var Rec: Record "Sales Line"; var xRec: Record "Sales Line"; CurrFieldNo: Integer)
     begin
@@ -82,6 +84,7 @@ codeunit 50306 "eInv Field Population"
             SalesInvoiceHeader."eInvoice Document Type" := SalesHeader."eInvoice Document Type";
             SalesInvoiceHeader."eInvoice Payment Mode" := SalesHeader."eInvoice Payment Mode";
             SalesInvoiceHeader."eInvoice Currency Code" := SalesHeader."eInvoice Currency Code";
+            SalesInvoiceHeader."eInvoice Version Code" := SalesHeader."eInvoice Version Code";
             SalesInvoiceHeader.Modify(true);
         end;
     end;
