@@ -12,7 +12,7 @@ pageextension 50307 "eInv Sales Invoice Ext" extends "Sales Invoice"
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies the e-Invoice document type as required by tax authorities';
                     Importance = Promoted;
-                    Editable = false;
+                    Editable = true;
 
                     trigger OnValidate()
                     begin
