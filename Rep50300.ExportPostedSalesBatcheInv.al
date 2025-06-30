@@ -3,7 +3,7 @@ report 50300 "LHDN e-Invoice Export"
     UsageCategory = Administration;
     ApplicationArea = All;
     ProcessingOnly = true;
-    Caption = 'Export e-Invoices for LHDN';
+    Caption = 'Export Batch e-Invoices for Posted Sales Invoice';
     DefaultLayout = RDLC;
 
     dataset
@@ -554,7 +554,7 @@ report 50300 "LHDN e-Invoice Export"
             Error('No data to export.');
 
         if FileName = '' then
-            FileName := 'LHDN_eInvoice_Export_' + Format(Today, 0, '<Year4><Month,2><Day,2>') + '.xlsx';
+            FileName := 'LHDN_Posted_Sales_Invoice_Batch_' + Format(Today, 0, '<Year4><Month,2><Day,2>') + '.xlsx';
 
         // Create new workbook
         ExcelBuffer.CreateNewBook('LHDN Export');

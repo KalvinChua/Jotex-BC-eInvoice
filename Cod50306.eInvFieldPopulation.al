@@ -31,6 +31,10 @@ codeunit 50306 "eInv Field Population"
             Rec."eInvoice Document Type" := '01'; // Standard invoice code
         if Rec."Document Type" = Rec."Document Type"::Order then
             Rec."eInvoice Document Type" := '01'; // Standard invoice code
+        if Rec."Document Type" = Rec."Document Type"::"Credit Memo" then
+            Rec."eInvoice Document Type" := '02'; // Credit Note code
+        if Rec."Document Type" = Rec."Document Type"::"Return Order" then
+            Rec."eInvoice Document Type" := '04'; // Credit Note code
     end;
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Sell-to Customer No.', false, false)]
@@ -41,6 +45,18 @@ codeunit 50306 "eInv Field Population"
            (Rec."eInvoice Document Type" = '')
         then
             Rec."eInvoice Document Type" := '01';
+        if (Rec."Document Type" = Rec."Document Type"::Order) and
+           (Rec."eInvoice Document Type" = '')
+        then
+            Rec."eInvoice Document Type" := '01';
+        if (Rec."Document Type" = Rec."Document Type"::"Credit Memo") and
+           (Rec."eInvoice Document Type" = '')
+        then
+            Rec."eInvoice Document Type" := '02';
+        if (Rec."Document Type" = Rec."Document Type"::"Return Order") and
+           (Rec."eInvoice Document Type" = '')
+        then
+            Rec."eInvoice Document Type" := '02';
     end;
 
     local procedure CopyEInvoiceFieldsFromItem(var SalesLine: Record "Sales Line")
