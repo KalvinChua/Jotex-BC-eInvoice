@@ -31,6 +31,7 @@ report 50300 "LHDN e-Invoice Export"
                 TotalExcludingTax := 0;
                 TotalIncludingTax := 0;
 
+                // Get related records
                 if not CompanyInfo.Get() then
                     Error('Company Information must be set up for e-Invoice export');
 
@@ -55,6 +56,7 @@ report 50300 "LHDN e-Invoice Export"
                 if not CustBankAccount.FindFirst() then
                     CustBankAccount.Init();
 
+                // Calculate totals from invoice lines
                 SalesInvLineLocal.SetRange("Document No.", "No.");
                 SalesInvLineLocal.SetFilter(Type, '<>%1', SalesInvLineLocal.Type::" ");
                 if SalesInvLineLocal.FindSet() then
@@ -70,15 +72,16 @@ report 50300 "LHDN e-Invoice Export"
                         end;
                     until SalesInvLineLocal.Next() = 0;
 
+                // Format date/time in ISO 8601 with Malaysia timezone
                 InvDateTime := Format("Posting Date") + '  ' + Format(Time);
 
                 // Basic invoice information
-                AddExcelColumn(RowNo, 1, "No.");
-                AddExcelColumn(RowNo, 2, "eInvoice Document Type");
-                AddExcelColumn(RowNo, 3, "eInvoice Version Code");
-                AddExcelColumn(RowNo, 4, InvDateTime);
-                AddExcelColumn(RowNo, 5, "Currency Code");
-                AddExcelColumn(RowNo, 6, "Currency Factor");
+                AddExcelColumn(RowNo, 1, "No."); // eInvoiceNumber
+                AddExcelColumn(RowNo, 2, "eInvoice Document Type"); // eInvoiceTypeCode
+                AddExcelColumn(RowNo, 3, "eInvoice Version Code"); // eInvoiceVersion
+                AddExcelColumn(RowNo, 4, InvDateTime); // IssuanceDateTime
+                AddExcelColumn(RowNo, 5, "Currency Code"); // CurrencyCode
+                AddExcelColumn(RowNo, 6, "Currency Factor"); // CurrencyExchangeRate
 
                 // Supplier information
                 AddExcelColumn(RowNo, 7, CompanyInfo."e-Invoice TIN No.");
@@ -116,53 +119,53 @@ report 50300 "LHDN e-Invoice Export"
                 AddExcelColumn(RowNo, 37, Customer."Phone No.");
 
                 // Totals
-                AddExcelColumn(RowNo, 38, Round(TotalExcludingTax, 0.01));
-                AddExcelColumn(RowNo, 39, Round(TotalIncludingTax, 0.01));
-                AddExcelColumn(RowNo, 40, Round(TotalIncludingTax, 0.01));
-                AddExcelColumn(RowNo, 41, '');
-                AddExcelColumn(RowNo, 42, Round(TotalDiscountAmount, 0.01));
-                AddExcelColumn(RowNo, 43, '');
-                AddExcelColumn(RowNo, 44, '');
-                AddExcelColumn(RowNo, 45, Round(TotalTaxAmount, 0.01));
+                AddExcelColumn(RowNo, 38, Round(TotalExcludingTax, 0.01)); // TotalExcludingTax
+                AddExcelColumn(RowNo, 39, Round(TotalIncludingTax, 0.01)); // TotalIncludingTax
+                AddExcelColumn(RowNo, 40, Round(TotalIncludingTax, 0.01)); // TotalPayableAmount
+                AddExcelColumn(RowNo, 41, ''); // TotalNetAmount
+                AddExcelColumn(RowNo, 42, Round(TotalDiscountAmount, 0.01)); // TotalDiscountValue
+                AddExcelColumn(RowNo, 43, ''); // TotalChargeAmount
+                AddExcelColumn(RowNo, 44, ''); // TotalRoundingAmount
+                AddExcelColumn(RowNo, 45, Round(TotalTaxAmount, 0.01)); // TotalTaxAmount
 
                 // Billing
-                AddExcelColumn(RowNo, 46, '');
-                AddExcelColumn(RowNo, 47, '');
-                AddExcelColumn(RowNo, 48, '');
+                AddExcelColumn(RowNo, 46, ''); // FrequencyBilling
+                AddExcelColumn(RowNo, 47, ''); // BillingPeriod.StartDate
+                AddExcelColumn(RowNo, 48, ''); // BillingPeriod.EndDate
 
                 // Payment
-                AddExcelColumn(RowNo, 49, '');
-                AddExcelColumn(RowNo, 50, '');
-                AddExcelColumn(RowNo, 51, '');
+                AddExcelColumn(RowNo, 49, ''); // PaymentMode
+                AddExcelColumn(RowNo, 50, ''); // SupplierBankAccountNumber
+                AddExcelColumn(RowNo, 51, ''); // PaymentTerms
 
                 // Prepayment
-                AddExcelColumn(RowNo, 52, '');
-                AddExcelColumn(RowNo, 53, '');
-                AddExcelColumn(RowNo, 54, '');
-                AddExcelColumn(RowNo, 55, '');
+                AddExcelColumn(RowNo, 52, ''); // PrePaymentAmount
+                AddExcelColumn(RowNo, 53, ''); // PrePaymentDate
+                AddExcelColumn(RowNo, 54, ''); // PrePaymentTime
+                AddExcelColumn(RowNo, 55, ''); // PrePaymentReferenceNumber
 
                 // Reference & Shipping
-                AddExcelColumn(RowNo, 56, '');
-                AddExcelColumn(RowNo, 57, '');
-                AddExcelColumn(RowNo, 58, '');
-                AddExcelColumn(RowNo, 59, '');
-                AddExcelColumn(RowNo, 60, '');
-                AddExcelColumn(RowNo, 61, '');
-                AddExcelColumn(RowNo, 62, '');
-                AddExcelColumn(RowNo, 63, '');
-                AddExcelColumn(RowNo, 64, '');
-                AddExcelColumn(RowNo, 65, '');
-                AddExcelColumn(RowNo, 66, '');
-                AddExcelColumn(RowNo, 67, '');
+                AddExcelColumn(RowNo, 56, ''); // BillReferenceNumber
+                AddExcelColumn(RowNo, 57, ''); // ShippingRecipientName
+                AddExcelColumn(RowNo, 58, ''); // ShippingRecipientAddress.Address.AddressLine0
+                AddExcelColumn(RowNo, 59, ''); // ShippingRecipientAddress.Address.AddressLine1
+                AddExcelColumn(RowNo, 60, ''); // ShippingRecipientAddress.Address.AddressLine2
+                AddExcelColumn(RowNo, 61, ''); // ShippingRecipientAddress.Address.PostalZone
+                AddExcelColumn(RowNo, 62, ''); // ShippingRecipientAddress.Address.CityName
+                AddExcelColumn(RowNo, 63, ''); // ShippingRecipientAddress.Address.State
+                AddExcelColumn(RowNo, 64, ''); // ShippingRecipientAddress.Address.CountryCode
+                AddExcelColumn(RowNo, 65, ''); // ShippingRecipientTIN
+                AddExcelColumn(RowNo, 66, ''); // ShippingRecipientRegistrationNumber.Type
+                AddExcelColumn(RowNo, 67, ''); // ShippingRecipientRegistrationNumber.Number
 
                 // Additional
-                AddExcelColumn(RowNo, 68, '');
-                AddExcelColumn(RowNo, 69, '');
-                AddExcelColumn(RowNo, 70, '');
-                AddExcelColumn(RowNo, 71, '');
-                AddExcelColumn(RowNo, 72, '');
-                AddExcelColumn(RowNo, 73, '');
-                AddExcelColumn(RowNo, 74, '');
+                AddExcelColumn(RowNo, 68, ''); // Incoterms
+                AddExcelColumn(RowNo, 69, ''); // FreeTradeAgreement
+                AddExcelColumn(RowNo, 70, ''); // AuthorisationNumberCertifiedExporter
+                AddExcelColumn(RowNo, 71, ''); // ReferenceNumberCustomsFormNo2
+                AddExcelColumn(RowNo, 72, ''); // DetailsOtherCharges.eInvoiceNumber
+                AddExcelColumn(RowNo, 73, ''); // DetailsOtherCharges.Amount
+                AddExcelColumn(RowNo, 74, ''); // DetailsOtherCharges.Description
             end;
 
             trigger OnPreDataItem()
@@ -170,6 +173,7 @@ report 50300 "LHDN e-Invoice Export"
                 if GetFilters = '' then
                     Error('Please specify filters for the report');
 
+                // Initialize Excel headers
                 RowNo := 1;
                 ExcelBuffer.DeleteAll();
                 InitializeExcelHeaders();
@@ -186,67 +190,88 @@ report 50300 "LHDN e-Invoice Export"
             var
                 Item: Record Item;
                 VATPostingSetup: Record "VAT Posting Setup";
-                TaxAmount: Decimal;
-                PerUnitAmount: Decimal;
+                CountryRegion: Record "Country/Region";
             begin
+                // Only process lines for invoices that were included in the first sheet
                 if not ExcelBuffer.Get(RowNo, 1) then
                     CurrReport.Skip();
 
                 LineRowNo += 1;
                 ClassificationRowNo += 1;
-                TaxRowNo += 1;
 
+                // Get related item information if available
                 if Type = Type::Item then
                     if not Item.Get("No.") then
                         Clear(Item);
 
+                // Get VAT information
                 if not VATPostingSetup.Get("VAT Bus. Posting Group", "VAT Prod. Posting Group") then
                     VATPostingSetup.Init();
 
-                // DocumentLineItems sheet
-                AddLineExcelColumn(LineRowNo, 1, SalesInvHeader."No.");
-                AddLineExcelColumn(LineRowNo, 2, "Line No.");
-                AddLineExcelColumn(LineRowNo, 3, "e-Invoice Classification");
-                AddLineExcelColumn(LineRowNo, 4, Description);
-                AddLineExcelColumn(LineRowNo, 5, "Unit Price");
-                AddLineExcelColumn(LineRowNo, 6, Quantity);
-                AddLineExcelColumn(LineRowNo, 7, "e-Invoice UOM");
-                AddLineExcelColumn(LineRowNo, 8, "Line Amount");
-                AddLineExcelColumn(LineRowNo, 9, "Amount Including VAT" - Amount);
-                AddLineExcelColumn(LineRowNo, 10, GetLineAmountExclVAT());
-                AddLineExcelColumn(LineRowNo, 11, '');
-                AddLineExcelColumn(LineRowNo, 12, '');
+                // Add line details to the DocumentLineItems sheet
+                AddLineExcelColumn(LineRowNo, 1, SalesInvHeader."No."); // eInvoiceNumber
+                AddLineExcelColumn(LineRowNo, 2, "Line No."); // ID
+                AddLineExcelColumn(LineRowNo, 3, "e-Invoice Classification"); // Classification
+                AddLineExcelColumn(LineRowNo, 4, Description); // DescriptionProductService
+                AddLineExcelColumn(LineRowNo, 5, "Unit Price"); // UnitPrice
+                AddLineExcelColumn(LineRowNo, 6, Quantity); // Quantity
+                AddLineExcelColumn(LineRowNo, 7, "e-Invoice UOM"); // UnitOfMeasurement
+                AddLineExcelColumn(LineRowNo, 8, "Line Amount"); // Subtotal
+                AddLineExcelColumn(LineRowNo, 9, "Amount Including VAT" - Amount); // TotalTaxAmount
+                AddLineExcelColumn(LineRowNo, 10, GetLineAmountExclVAT()); // TotalExcludingTax
+                AddLineExcelColumn(LineRowNo, 11, ''); // ProductTariffCode
+                AddLineExcelColumn(LineRowNo, 12, ''); // CountryofOrigin
 
-                // LineItemsAddClassification sheet
-                AddClassificationExcelColumn(ClassificationRowNo, 1, SalesInvHeader."No.");
-                AddClassificationExcelColumn(ClassificationRowNo, 2, "Line No.");
-                AddClassificationExcelColumn(ClassificationRowNo, 3, "e-Invoice Classification");
+                // Add line details to the LineItemsAddClassification sheet
+                AddClassificationExcelColumn(ClassificationRowNo, 1, SalesInvHeader."No."); // eInvoiceNumber
+                AddClassificationExcelColumn(ClassificationRowNo, 2, "Line No."); // LineItem.ID
+                AddClassificationExcelColumn(ClassificationRowNo, 3, "e-Invoice Classification"); // ClassificationCode
+            end;
 
-                // LineItemTaxes sheet
-                if "VAT %" <> 0 then begin
-                    TaxAmount := "Amount Including VAT" - Amount;
-                    PerUnitAmount := (Quantity <> 0) ? TaxAmount / Quantity : 0;
+            trigger OnPreDataItem()
+            begin
+                LineRowNo := 1; // Reset counter for each invoice
+                ClassificationRowNo := 1; // Reset counter for each invoice
+                InitializeLineExcelHeaders();
+                InitializeClassificationExcelHeaders();
+            end;
+        }
 
-                    AddTaxExcelColumn(TaxRowNo, 1, SalesInvHeader."No.");
-                    AddTaxExcelColumn(TaxRowNo, 2, "Line No.");
-                    AddTaxExcelColumn(TaxRowNo, 3, 'SST');
-                    AddTaxExcelColumn(TaxRowNo, 4, "VAT %");
-                    AddTaxExcelColumn(TaxRowNo, 5, TaxAmount);
-                    AddTaxExcelColumn(TaxRowNo, 6, PerUnitAmount);
-                    AddTaxExcelColumn(TaxRowNo, 7, "Unit of Measure Code");
-                    AddTaxExcelColumn(TaxRowNo, 8, 0);
-                    AddTaxExcelColumn(TaxRowNo, 9, '');
-                    AddTaxExcelColumn(TaxRowNo, 10, Amount);
+        dataitem(SalesInvLineTax; "Sales Invoice Line")
+        {
+            DataItemLink = "Document No." = field("No.");
+            DataItemLinkReference = SalesInvHeader;
+            DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
+
+            trigger OnAfterGetRecord()
+            var
+                VATPostingSetup: Record "VAT Posting Setup";
+            begin
+                // Only process lines for invoices that were included in the main sheet
+                if not ExcelBuffer.Get(RowNo, 1) then
+                    CurrReport.Skip();
+
+                TaxRowNo += 1;
+
+                // Get VAT information
+                if VATPostingSetup.Get("VAT Bus. Posting Group", "VAT Prod. Posting Group") then begin
+                    // Add tax details to the LineItemTaxes sheet
+                    AddTaxExcelColumn(TaxRowNo, 1, SalesInvHeader."No."); // eInvoiceNumber
+                    AddTaxExcelColumn(TaxRowNo, 2, "Line No."); // LineItem.ID
+                    AddTaxExcelColumn(TaxRowNo, 3, VATPostingSetup."VAT Identifier"); // TaxType
+                    AddTaxExcelColumn(TaxRowNo, 4, "VAT %"); // TaxRate
+                    AddTaxExcelColumn(TaxRowNo, 5, "Amount Including VAT" - Amount); // TaxAmount
+                    AddTaxExcelColumn(TaxRowNo, 6, ''); // PerUnitAmount
+                    AddTaxExcelColumn(TaxRowNo, 7, ''); // BaseUnitMeasure
+                    AddTaxExcelColumn(TaxRowNo, 8, ''); // AmountTaxExempted
+                    AddTaxExcelColumn(TaxRowNo, 9, ''); // DetailsTaxExemption
+                    AddTaxExcelColumn(TaxRowNo, 10, ''); // TaxableAmount
                 end;
             end;
 
             trigger OnPreDataItem()
             begin
-                LineRowNo := 1;
-                ClassificationRowNo := 1;
-                TaxRowNo := 1;
-                InitializeLineExcelHeaders();
-                InitializeClassificationExcelHeaders();
+                TaxRowNo := 1; // Reset counter for each invoice
                 InitializeTaxExcelHeaders();
             end;
         }
@@ -283,6 +308,7 @@ report 50300 "LHDN e-Invoice Export"
 
     var
         ExcelBuffer: Record "Excel Buffer" temporary;
+        VATPostingSetup: Record "VAT Posting Setup";
         RowNo: Integer;
         LineRowNo: Integer;
         ClassificationRowNo: Integer;
@@ -558,7 +584,7 @@ report 50300 "LHDN e-Invoice Export"
     begin
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", LineRowNo);
-        ExcelBuffer.Validate("Column No.", ColumnNo + 100);
+        ExcelBuffer.Validate("Column No.", ColumnNo + 100); // Use column numbers >100 for the second sheet
         ExcelBuffer.Validate("Cell Value as Text", ColumnName);
         ExcelBuffer.Insert();
     end;
@@ -567,7 +593,7 @@ report 50300 "LHDN e-Invoice Export"
     begin
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", ClassificationRowNo);
-        ExcelBuffer.Validate("Column No.", ColumnNo + 200);
+        ExcelBuffer.Validate("Column No.", ColumnNo + 200); // Use column numbers >200 for the third sheet
         ExcelBuffer.Validate("Cell Value as Text", ColumnName);
         ExcelBuffer.Insert();
     end;
@@ -576,7 +602,7 @@ report 50300 "LHDN e-Invoice Export"
     begin
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", TaxRowNo);
-        ExcelBuffer.Validate("Column No.", ColumnNo + 300);
+        ExcelBuffer.Validate("Column No.", ColumnNo + 300); // Use column numbers >300 for the fourth sheet
         ExcelBuffer.Validate("Cell Value as Text", ColumnName);
         ExcelBuffer.Insert();
     end;
@@ -590,6 +616,7 @@ report 50300 "LHDN e-Invoice Export"
         ExcelBuffer.Validate("Row No.", Row);
         ExcelBuffer.Validate("Column No.", Column);
 
+        // Force text format for ID, code, and numeric fields that should be treated as text
         if Column in [2, 10, 19, 21, 27, 33, 35, 49] then
             ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
@@ -602,16 +629,19 @@ report 50300 "LHDN e-Invoice Export"
         if (not IncludeAllFields) and (Format(Value) = '') then
             exit;
 
+        // Clear any existing entry first
         if ExcelBuffer.Get(Row, Column + 100) then
             ExcelBuffer.Delete();
 
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", Row);
-        ExcelBuffer.Validate("Column No.", Column + 100);
+        ExcelBuffer.Validate("Column No.", Column + 100); // Use column numbers >100 for the second sheet
 
+        // Force text format for code fields
         if Column in [1, 2, 3, 7, 11, 12] then
             ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
+        // Format numeric values with 2 decimal places
         if Column in [5, 8, 9, 10] then
             ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, '<Precision,2><Standard Format,2>'))
         else
@@ -626,12 +656,13 @@ report 50300 "LHDN e-Invoice Export"
         if (not IncludeAllFields) and (Format(Value) = '') then
             exit;
 
+        // Clear any existing entry first
         if ExcelBuffer.Get(Row, Column + 200) then
             ExcelBuffer.Delete();
 
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", Row);
-        ExcelBuffer.Validate("Column No.", Column + 200);
+        ExcelBuffer.Validate("Column No.", Column + 200); // Use column numbers >200 for the third sheet
         ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
         ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));
 
@@ -644,13 +675,19 @@ report 50300 "LHDN e-Invoice Export"
         if (not IncludeAllFields) and (Format(Value) = '') then
             exit;
 
+        // Clear any existing entry first
         if ExcelBuffer.Get(Row, Column + 300) then
             ExcelBuffer.Delete();
 
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", Row);
-        ExcelBuffer.Validate("Column No.", Column + 300);
+        ExcelBuffer.Validate("Column No.", Column + 300); // Use column numbers >300 for the fourth sheet
 
+        // Force text format for code fields
+        if Column in [1, 2, 3, 7, 9] then
+            ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
+
+        // Format numeric values with 2 decimal places
         if Column in [4, 5, 6, 8, 10] then
             ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, '<Precision,2><Standard Format,2>'))
         else
@@ -664,11 +701,10 @@ report 50300 "LHDN e-Invoice Export"
     var
         TempSalesInvHeader: Record "Sales Invoice Header";
         TempSalesInvLine: Record "Sales Invoice Line";
+        TempSalesInvLineTax: Record "Sales Invoice Line";
         LineRowCounter: Integer;
         ClassificationRowCounter: Integer;
         TaxRowCounter: Integer;
-        TaxAmount: Decimal;
-        PerUnitAmount: Decimal;
     begin
         if ExcelBuffer.IsEmpty() then
             Error('No data to export.');
@@ -684,93 +720,113 @@ report 50300 "LHDN e-Invoice Export"
 
         // Process second sheet (DocumentLineItems) if we have line items
         if LineRowNo > 1 then begin
+            // Clear buffer for second sheet
             ExcelBuffer.DeleteAll();
+
+            // Reinitialize line headers
             LineRowCounter := 1;
             InitializeLineExcelHeaders();
 
+            // Process all filtered invoice headers
             TempSalesInvHeader.CopyFilters(SalesInvHeader);
             if TempSalesInvHeader.FindSet() then
                 repeat
+                    // Process lines for each invoice
                     TempSalesInvLine.Reset();
                     TempSalesInvLine.SetRange("Document No.", TempSalesInvHeader."No.");
                     if TempSalesInvLine.FindSet() then
                         repeat
                             LineRowCounter += 1;
 
-                            AddLineExcelColumn(LineRowCounter, 1, TempSalesInvHeader."No.");
-                            AddLineExcelColumn(LineRowCounter, 2, TempSalesInvLine."Line No.");
-                            AddLineExcelColumn(LineRowCounter, 3, TempSalesInvLine."e-Invoice Classification");
-                            AddLineExcelColumn(LineRowCounter, 4, TempSalesInvLine.Description);
-                            AddLineExcelColumn(LineRowCounter, 5, TempSalesInvLine."Unit Price");
-                            AddLineExcelColumn(LineRowCounter, 6, TempSalesInvLine.Quantity);
-                            AddLineExcelColumn(LineRowCounter, 7, TempSalesInvLine."e-Invoice UOM");
-                            AddLineExcelColumn(LineRowCounter, 8, TempSalesInvLine."Line Amount");
-                            AddLineExcelColumn(LineRowCounter, 9, TempSalesInvLine."Amount Including VAT" - TempSalesInvLine.Amount);
-                            AddLineExcelColumn(LineRowNo, 10, GetLineAmountExclVAT(SalesInvLine));
-                            AddLineExcelColumn(LineRowCounter, 11, '');
-                            AddLineExcelColumn(LineRowCounter, 12, '');
+                            // Add line details to the DocumentLineItems sheet
+                            AddLineExcelColumn(LineRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
+                            AddLineExcelColumn(LineRowCounter, 2, TempSalesInvLine."Line No."); // ID
+                            AddLineExcelColumn(LineRowCounter, 3, TempSalesInvLine."e-Invoice Classification"); // Classification
+                            AddLineExcelColumn(LineRowCounter, 4, TempSalesInvLine.Description); // DescriptionProductService
+                            AddLineExcelColumn(LineRowCounter, 5, TempSalesInvLine."Unit Price"); // UnitPrice
+                            AddLineExcelColumn(LineRowCounter, 6, TempSalesInvLine.Quantity); // Quantity
+                            AddLineExcelColumn(LineRowCounter, 7, TempSalesInvLine."e-Invoice UOM"); // UnitOfMeasurement
+                            AddLineExcelColumn(LineRowCounter, 8, TempSalesInvLine."Line Amount"); // Subtotal
+                            AddLineExcelColumn(LineRowCounter, 9, TempSalesInvLine."Amount Including VAT" - TempSalesInvLine.Amount); // TotalTaxAmount
+                            AddLineExcelColumn(LineRowCounter, 10, TempSalesInvLine.GetLineAmountExclVAT()); // TotalExcludingTax
+                            AddLineExcelColumn(LineRowCounter, 11, ''); // ProductTariffCode
+                            AddLineExcelColumn(LineRowCounter, 12, ''); // CountryofOrigin
                         until TempSalesInvLine.Next() = 0;
                 until TempSalesInvHeader.Next() = 0;
 
+            // Write second sheet
             ExcelBuffer.WriteSheet('DocumentLineItems', CompanyName, UserId);
         end;
 
         // Process third sheet (LineItemsAddClassification) if we have line items
         if ClassificationRowNo > 1 then begin
+            // Clear buffer for third sheet
             ExcelBuffer.DeleteAll();
+
+            // Reinitialize classification headers
             ClassificationRowCounter := 1;
             InitializeClassificationExcelHeaders();
 
+            // Process all filtered invoice headers
             TempSalesInvHeader.CopyFilters(SalesInvHeader);
             if TempSalesInvHeader.FindSet() then
                 repeat
+                    // Process lines for each invoice
                     TempSalesInvLine.Reset();
                     TempSalesInvLine.SetRange("Document No.", TempSalesInvHeader."No.");
                     if TempSalesInvLine.FindSet() then
                         repeat
                             ClassificationRowCounter += 1;
 
-                            AddClassificationExcelColumn(ClassificationRowCounter, 1, TempSalesInvHeader."No.");
-                            AddClassificationExcelColumn(ClassificationRowCounter, 2, TempSalesInvLine."Line No.");
-                            AddClassificationExcelColumn(ClassificationRowCounter, 3, TempSalesInvLine."e-Invoice Classification");
+                            // Add line details to the LineItemsAddClassification sheet
+                            AddClassificationExcelColumn(ClassificationRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
+                            AddClassificationExcelColumn(ClassificationRowCounter, 2, TempSalesInvLine."Line No."); // LineItem.ID
+                            AddClassificationExcelColumn(ClassificationRowCounter, 3, TempSalesInvLine."e-Invoice Classification"); // ClassificationCode
                         until TempSalesInvLine.Next() = 0;
                 until TempSalesInvHeader.Next() = 0;
 
+            // Write third sheet
             ExcelBuffer.WriteSheet('LineItemsAddClassification', CompanyName, UserId);
         end;
 
         // Process fourth sheet (LineItemTaxes) if we have line items
         if TaxRowNo > 1 then begin
+            // Clear buffer for fourth sheet
             ExcelBuffer.DeleteAll();
+
+            // Reinitialize tax headers
             TaxRowCounter := 1;
             InitializeTaxExcelHeaders();
 
+            // Process all filtered invoice headers
             TempSalesInvHeader.CopyFilters(SalesInvHeader);
             if TempSalesInvHeader.FindSet() then
                 repeat
-                    TempSalesInvLine.Reset();
-                    TempSalesInvLine.SetRange("Document No.", TempSalesInvHeader."No.");
-                    TempSalesInvLine.SetFilter("VAT %", '<>%1', 0);
-                    if TempSalesInvLine.FindSet() then
+                    // Process lines for each invoice
+                    TempSalesInvLineTax.Reset();
+                    TempSalesInvLineTax.SetRange("Document No.", TempSalesInvHeader."No.");
+                    if TempSalesInvLineTax.FindSet() then
                         repeat
                             TaxRowCounter += 1;
 
-                            TaxAmount := TempSalesInvLine."Amount Including VAT" - TempSalesInvLine.Amount;
-                            PerUnitAmount := (TempSalesInvLine.Quantity <> 0) ? TaxAmount / TempSalesInvLine.Quantity : 0;
-
-                            AddTaxExcelColumn(TaxRowCounter, 1, TempSalesInvHeader."No.");
-                            AddTaxExcelColumn(TaxRowCounter, 2, TempSalesInvLine."Line No.");
-                            AddTaxExcelColumn(TaxRowCounter, 3, 'SST');
-                            AddTaxExcelColumn(TaxRowCounter, 4, TempSalesInvLine."VAT %");
-                            AddTaxExcelColumn(TaxRowCounter, 5, TaxAmount);
-                            AddTaxExcelColumn(TaxRowCounter, 6, PerUnitAmount);
-                            AddTaxExcelColumn(TaxRowCounter, 7, TempSalesInvLine."Unit of Measure Code");
-                            AddTaxExcelColumn(TaxRowCounter, 8, 0);
-                            AddTaxExcelColumn(TaxRowCounter, 9, '');
-                            AddTaxExcelColumn(TaxRowCounter, 10, TempSalesInvLine.Amount);
-                        until TempSalesInvLine.Next() = 0;
+                            // Get VAT information
+                            if VATPostingSetup.Get(TempSalesInvLineTax."VAT Bus. Posting Group", TempSalesInvLineTax."VAT Prod. Posting Group") then begin
+                                // Add tax details to the LineItemTaxes sheet
+                                AddTaxExcelColumn(TaxRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
+                                AddTaxExcelColumn(TaxRowCounter, 2, TempSalesInvLineTax."Line No."); // LineItem.ID
+                                AddTaxExcelColumn(TaxRowCounter, 3, TempSalesInvLineTax."e-Invoice Tax Type"); // TaxType
+                                AddTaxExcelColumn(TaxRowCounter, 4, TempSalesInvLineTax."VAT %"); // TaxRate
+                                AddTaxExcelColumn(TaxRowCounter, 5, TempSalesInvLineTax."Amount Including VAT" - TempSalesInvLineTax.Amount); // TaxAmount
+                                AddTaxExcelColumn(TaxRowCounter, 6, ''); // PerUnitAmount
+                                AddTaxExcelColumn(TaxRowCounter, 7, ''); // BaseUnitMeasure
+                                AddTaxExcelColumn(TaxRowCounter, 8, ''); // AmountTaxExempted
+                                AddTaxExcelColumn(TaxRowCounter, 9, ''); // DetailsTaxExemption
+                                AddTaxExcelColumn(TaxRowCounter, 10, ''); // TaxableAmount
+                            end;
+                        until TempSalesInvLineTax.Next() = 0;
                 until TempSalesInvHeader.Next() = 0;
 
+            // Write fourth sheet
             ExcelBuffer.WriteSheet('LineItemTaxes', CompanyName, UserId);
         end;
 
@@ -781,6 +837,7 @@ report 50300 "LHDN e-Invoice Export"
 
     trigger OnPreReport()
     begin
+        // Initialize global variables
         TotalTaxAmount := 0;
         TotalDiscountAmount := 0;
         TotalExcludingTax := 0;
@@ -788,11 +845,5 @@ report 50300 "LHDN e-Invoice Export"
         LineRowNo := 1;
         ClassificationRowNo := 1;
         TaxRowNo := 1;
-    end;
-
-    local procedure GetLineAmountExclVAT(SalesInvLine: Record "Sales Invoice Line"): Decimal
-    begin
-        // Simply return the Amount field from the passed record
-        exit(SalesInvLine.Amount);
     end;
 }

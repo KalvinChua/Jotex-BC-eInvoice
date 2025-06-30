@@ -58,6 +58,19 @@ pageextension 50316 eInvSalesReturnOrdHeader extends "Sales Return Order"
                     ValidateEInvoiceCompleteness();
                 end;
             }
+            action("Populate e-Invoice Fields")
+            {
+                ApplicationArea = All;
+                Caption = 'Populate e-Invoice Fields';
+                Image = Process;
+
+                trigger OnAction()
+                var
+                    EInvHandler: Codeunit "eInv Field Population Handler";
+                begin
+                    EInvHandler.CopyFieldsFromItemToSalesLines(Rec);
+                end;
+            }
         }
     }
 

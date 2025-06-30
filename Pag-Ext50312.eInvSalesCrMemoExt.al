@@ -58,6 +58,19 @@ pageextension 50312 eInvSalesCrMemoExt extends "Sales Credit Memo"
                     ValidateEInvoiceCompleteness();
                 end;
             }
+            action("Populate e-Invoice Fields")
+            {
+                ApplicationArea = All;
+                Caption = 'Populate e-Invoice Fields';
+                Image = Process;
+
+                trigger OnAction()
+                var
+                    EInvHandler: Codeunit "eInv Field Population Handler";
+                begin
+                    EInvHandler.CopyFieldsFromItemToSalesLines(Rec);
+                end;
+            }
         }
     }
 
