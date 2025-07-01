@@ -7,15 +7,19 @@ pageextension 50312 eInvSalesCrMemoExt extends "Sales Credit Memo"
             group("e-Invoice")
             {
                 Caption = 'e-Invoice Details';
+                Visible = IsJotexCompany;
                 field("eInvoice Document Type"; Rec."eInvoice Document Type")
                 {
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies the e-Invoice document type as required by tax authorities';
                     Importance = Promoted;
                     Editable = true;
+                    Visible = IsJotexCompany;
 
                     trigger OnValidate()
                     begin
+                        if not IsJotexCompany then
+                            exit;
                         ValidateEInvoiceDocumentType();
                         CurrPage.SaveRecord();
                     end;
@@ -25,18 +29,21 @@ pageextension 50312 eInvSalesCrMemoExt extends "Sales Credit Memo"
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies the payment mode for e-Invoice purposes';
                     Importance = Additional;
+                    Visible = IsJotexCompany;
                 }
                 field("eInvoice Currency Code"; Rec."eInvoice Currency Code")
                 {
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies the currency code for e-Invoice reporting';
                     Importance = Additional;
+                    Visible = IsJotexCompany;
                 }
                 field("eInvoice Version Code"; Rec."eInvoice Version Code")
                 {
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies version code for e-Invoice reporting';
                     Importance = Additional;
+                    Visible = IsJotexCompany;
                 }
             }
         }
@@ -50,11 +57,14 @@ pageextension 50312 eInvSalesCrMemoExt extends "Sales Credit Memo"
             {
                 Caption = 'Validate e-Invoice';
                 ApplicationArea = Suite;
-                Image = CheckList;  // Changed from CheckRules to CheckList
+                Image = CheckList;
                 ToolTip = 'Verify all required e-Invoice fields are populated correctly';
+                Visible = IsJotexCompany;
 
                 trigger OnAction()
                 begin
+                    if not IsJotexCompany then
+                        exit;
                     ValidateEInvoiceCompleteness();
                 end;
             }
@@ -63,16 +73,29 @@ pageextension 50312 eInvSalesCrMemoExt extends "Sales Credit Memo"
                 ApplicationArea = All;
                 Caption = 'Populate e-Invoice Fields';
                 Image = Process;
+                Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
                     EInvHandler: Codeunit "eInv Field Population Handler";
                 begin
+                    if not IsJotexCompany then
+                        exit;
                     EInvHandler.CopyFieldsFromItemToSalesLines(Rec);
                 end;
             }
         }
     }
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+    end;
 
     local procedure ValidateEInvoiceDocumentType()
     var

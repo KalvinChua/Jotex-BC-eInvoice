@@ -7,21 +7,31 @@ pageextension 50302 eInvSalesInvPageExt extends "Sales Invoice Subform"
             field("e-Invoice Classification"; Rec."e-Invoice Classification")
             {
                 ApplicationArea = All;
-                Visible = true;
+                Visible = IsJotexCompany;
                 ToolTip = 'Classification for Item based on LHDN requirement.';
             }
             field("e-Invoice Tax Type"; Rec."e-Invoice Tax Type")
             {
                 ApplicationArea = All;
-                Visible = true;
+                Visible = IsJotexCompany;
                 ToolTip = 'Tax Type for Item based on LHDN requirement.';
             }
             field("e-Invoice UOM"; Rec."e-Invoice UOM")
             {
                 ApplicationArea = All;
-                Visible = true;
+                Visible = IsJotexCompany;
                 ToolTip = 'UOM for Item based on LHDN requirement.';
             }
         }
     }
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+    end;
 }

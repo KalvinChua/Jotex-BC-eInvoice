@@ -4,7 +4,12 @@ codeunit 50306 "eInv Field Population"
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Line", 'OnAfterValidateEvent', 'Type', false, false)]
     local procedure CopyFromItemOnTypeChange(var Rec: Record "Sales Line"; var xRec: Record "Sales Line"; CurrFieldNo: Integer)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         if Rec.Type <> Rec.Type::Item then
             exit;
 
@@ -13,7 +18,12 @@ codeunit 50306 "eInv Field Population"
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Line", 'OnAfterValidateEvent', 'No.', false, false)]
     local procedure CopyFromItemOnItemNoChange(var Rec: Record "Sales Line"; var xRec: Record "Sales Line"; CurrFieldNo: Integer)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         if Rec.Type <> Rec.Type::Item then
             exit;
 
@@ -22,7 +32,12 @@ codeunit 50306 "eInv Field Population"
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterInsertEvent', '', false, false)]
     local procedure SetDefaultEInvoiceValuesOnInsert(var Rec: Record "Sales Header"; RunTrigger: Boolean)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         if Rec.IsTemporary then
             exit;
 
@@ -39,7 +54,12 @@ codeunit 50306 "eInv Field Population"
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Sell-to Customer No.', false, false)]
     local procedure SetDefaultEInvoiceValuesOnCustomerChange(var Rec: Record "Sales Header"; var xRec: Record "Sales Header"; CurrFieldNo: Integer)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         // For invoices, always use '01' unless already set
         if (Rec."Document Type" = Rec."Document Type"::Invoice) and
            (Rec."eInvoice Document Type" = '')
@@ -77,7 +97,12 @@ codeunit 50306 "eInv Field Population"
         SalesLine: Record "Sales Line";
         SalesInvHeader: Record "Sales Invoice Header";
         CommitIsSuppressed: Boolean)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         SalesInvLine."e-Invoice Tax Type" := SalesLine."e-Invoice Tax Type";
         SalesInvLine."e-Invoice Classification" := SalesLine."e-Invoice Classification";
         SalesInvLine."e-Invoice UOM" := SalesLine."e-Invoice UOM";
@@ -93,7 +118,11 @@ codeunit 50306 "eInv Field Population"
         SalesCrMemoHdrNo: Code[20])
     var
         SalesInvoiceHeader: Record "Sales Invoice Header";
+        CompanyInfo: Record "Company Information";
     begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         // Only process invoices (skip credit memos)
         if SalesInvHdrNo = '' then
             exit;

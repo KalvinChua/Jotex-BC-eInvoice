@@ -14,7 +14,12 @@ codeunit 50305 "eInv Posting Subscribers"
     var
         SalesInvoiceHeader: Record "Sales Invoice Header";
         TelemetryDimensions: Dictionary of [Text, Text];
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         // Only process invoices (skip credit memos and other documents)
         if SalesInvHdrNo = '' then
             exit;
@@ -45,7 +50,13 @@ codeunit 50305 "eInv Posting Subscribers"
         SalesLine: Record "Sales Line";
         SalesInvHeader: Record "Sales Invoice Header";
         CommitIsSuppressed: Boolean)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         // Only copy fields for item and resource lines
         if SalesLine.Type in [SalesLine.Type::Item, SalesLine.Type::Resource] then begin
             SalesInvLine."e-Invoice Classification" := SalesLine."e-Invoice Classification";
@@ -65,7 +76,12 @@ codeunit 50305 "eInv Posting Subscribers"
         SalesLine: Record "Sales Line";
         MissingFieldsErr: Label 'Missing e-Invoice fields for %1:\%2', Comment = '%1=Document No.,%2=Missing fields';
         MissingFields: Text;
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         if IsHandled then
             exit;
 

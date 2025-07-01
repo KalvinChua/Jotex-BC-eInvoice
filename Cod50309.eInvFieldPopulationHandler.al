@@ -5,7 +5,12 @@ codeunit 50309 "eInv Field Population Handler"
         SalesLine: Record "Sales Line";
         Item: Record Item;
         ModifiedHeader: Boolean;
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         // === Set Header Fields if Blank ===
         if SalesHeader."eInvoice Document Type" = '' then begin
             case SalesHeader."Document Type" of

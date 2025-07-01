@@ -2,13 +2,25 @@ codeunit 50308 "e-Invoice State Code Mgt"
 {
     [EventSubscriber(ObjectType::Table, Database::Customer, 'OnAfterValidateEvent', 'County', false, false)]
     local procedure UpdateEInvoiceStateCodeOnCountyChange(var Rec: Record Customer; var xRec: Record Customer)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         UpdateEInvoiceStateCode(Rec);
     end;
 
     [EventSubscriber(ObjectType::Page, Page::"Customer Card", 'OnAfterGetCurrRecordEvent', '', false, false)]
     local procedure UpdateEInvoiceStateCodeOnPageOpen(var Rec: Record Customer)
+    var
+        CompanyInfo: Record "Company Information";
     begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
         UpdateEInvoiceStateCode(Rec);
     end;
 

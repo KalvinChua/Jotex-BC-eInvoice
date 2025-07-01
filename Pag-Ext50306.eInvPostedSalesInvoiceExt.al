@@ -6,16 +6,21 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         {
             group("e-Invoice")
             {
+                Visible = IsJotexCompany;
                 field("eInvoice Document Type"; Rec."eInvoice Document Type")
                 {
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies the e-Invoice document type code';
+                    Visible = IsJotexCompany;
 
                     trigger OnValidate()
                     var
                         Customer: Record Customer;
                         CustomerEInvoiceExt: Record "Customer";
                     begin
+                        if not IsJotexCompany then
+                            exit;
+
                         if Customer.Get(Rec."Sell-to Customer No.") then begin
                             // Safe way to check for the field
                             if CustomerEInvoiceExt.Get(Customer."No.") then
@@ -28,18 +33,31 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the Payment Mode';
+                    Visible = IsJotexCompany;
                 }
                 field("eInvoice Currency Code"; Rec."eInvoice Currency Code")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the Currency Code';
+                    Visible = IsJotexCompany;
                 }
                 field("eInvoice Version Code"; Rec."eInvoice Version Code")
                 {
                     ApplicationArea = Suite;
                     ToolTip = 'Specifies version code for e-Invoice reporting';
+                    Visible = IsJotexCompany;
                 }
             }
         }
     }
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+    end;
 }
