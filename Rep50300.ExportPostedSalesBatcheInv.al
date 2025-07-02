@@ -192,6 +192,10 @@ report 50300 "LHDN e-Invoice Export"
                 VATPostingSetup: Record "VAT Posting Setup";
                 CountryRegion: Record "Country/Region";
             begin
+                // Skip lines with zero values for UnitPrice, Quantity, and UnitOfMeasurement
+                if ("Unit Price" = 0) and (Quantity = 0) and ("e-Invoice UOM" = '') then
+                    CurrReport.Skip();
+
                 // Only process lines for invoices that were included in the first sheet
                 if not ExcelBuffer.Get(RowNo, 1) then
                     CurrReport.Skip();
