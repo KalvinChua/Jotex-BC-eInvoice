@@ -106,7 +106,7 @@ report 50300 "LHDN e-Invoice Export"
                 AddExcelColumn(RowNo, 24, Customer."e-Invoice TIN No.");
                 AddExcelColumn(RowNo, 25, Customer.Name);
                 AddExcelColumn(RowNo, 26, Format(Customer."e-Invoice ID Type"));
-                AddExcelColumn(RowNo, 27, Customer."e-Invoice SST No.");
+                AddExcelColumn(RowNo, 27, Customer."e-Invoice ID No.");
                 AddExcelColumn(RowNo, 28, Customer."VAT Registration No.");
                 AddExcelColumn(RowNo, 29, Customer."E-Mail");
                 AddExcelColumn(RowNo, 30, Customer.Address);
@@ -617,7 +617,7 @@ report 50300 "LHDN e-Invoice Export"
         ExcelBuffer.Validate("Column No.", Column);
 
         // Force text format for ID, code, and numeric fields that should be treated as text
-        if Column in [2, 10, 19, 21, 27, 33, 35, 49] then
+        if Column in [2, 10, 19, 21, 27, 33, 35, 36, 49] then
             ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
         ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));

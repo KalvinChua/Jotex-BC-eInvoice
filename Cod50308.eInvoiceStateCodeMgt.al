@@ -25,47 +25,55 @@ codeunit 50308 "e-Invoice State Code Mgt"
     end;
 
     local procedure UpdateEInvoiceStateCode(var Customer: Record Customer)
+    var
+        OriginalStateCode: Code[2];
     begin
+        // Store original value to check if modification is needed
+        OriginalStateCode := Customer."e-Invoice State Code";
+
         if Customer.County = '' then begin
             Customer."e-Invoice State Code" := '';
-            exit;
+        end else begin
+            case UpperCase(Customer.County) of
+                'JOHOR':
+                    Customer."e-Invoice State Code" := '01';
+                'KEDAH':
+                    Customer."e-Invoice State Code" := '02';
+                'KELANTAN':
+                    Customer."e-Invoice State Code" := '03';
+                'MELAKA', 'MALACCA':
+                    Customer."e-Invoice State Code" := '04';
+                'NEGERI SEMBILAN', 'N.SEMBILAN':
+                    Customer."e-Invoice State Code" := '05';
+                'PAHANG':
+                    Customer."e-Invoice State Code" := '06';
+                'PULAU PINANG', 'PENANG':
+                    Customer."e-Invoice State Code" := '07';
+                'PERAK':
+                    Customer."e-Invoice State Code" := '08';
+                'PERLIS':
+                    Customer."e-Invoice State Code" := '09';
+                'SELANGOR':
+                    Customer."e-Invoice State Code" := '10';
+                'TERENGGANU':
+                    Customer."e-Invoice State Code" := '11';
+                'SABAH':
+                    Customer."e-Invoice State Code" := '12';
+                'SARAWAK':
+                    Customer."e-Invoice State Code" := '13';
+                'WILAYAH PERSEKUTUAN KUALA LUMPUR', 'KUALA LUMPUR', 'WP KUALA LUMPUR':
+                    Customer."e-Invoice State Code" := '14';
+                'WILAYAH PERSEKUTUAN LABUAN', 'LABUAN', 'WP LABUAN':
+                    Customer."e-Invoice State Code" := '15';
+                'WILAYAH PERSEKUTUAN PUTRAJAYA', 'PUTRAJAYA', 'WP PUTRAJAYA':
+                    Customer."e-Invoice State Code" := '16';
+                else
+                    Customer."e-Invoice State Code" := '17'; // Not Applicable
+            end;
         end;
 
-        case UpperCase(Customer.County) of
-            'JOHOR':
-                Customer."e-Invoice State Code" := '01';
-            'KEDAH':
-                Customer."e-Invoice State Code" := '02';
-            'KELANTAN':
-                Customer."e-Invoice State Code" := '03';
-            'MELAKA', 'MALACCA':
-                Customer."e-Invoice State Code" := '04';
-            'NEGERI SEMBILAN':
-                Customer."e-Invoice State Code" := '05';
-            'PAHANG':
-                Customer."e-Invoice State Code" := '06';
-            'PULAU PINANG', 'PENANG':
-                Customer."e-Invoice State Code" := '07';
-            'PERAK':
-                Customer."e-Invoice State Code" := '08';
-            'PERLIS':
-                Customer."e-Invoice State Code" := '09';
-            'SELANGOR':
-                Customer."e-Invoice State Code" := '10';
-            'TERENGGANU':
-                Customer."e-Invoice State Code" := '11';
-            'SABAH':
-                Customer."e-Invoice State Code" := '12';
-            'SARAWAK':
-                Customer."e-Invoice State Code" := '13';
-            'WILAYAH PERSEKUTUAN KUALA LUMPUR', 'KUALA LUMPUR', 'WP KUALA LUMPUR':
-                Customer."e-Invoice State Code" := '14';
-            'WILAYAH PERSEKUTUAN LABUAN', 'LABUAN', 'WP LABUAN':
-                Customer."e-Invoice State Code" := '15';
-            'WILAYAH PERSEKUTUAN PUTRAJAYA', 'PUTRAJAYA', 'WP PUTRAJAYA':
-                Customer."e-Invoice State Code" := '16';
-            else
-                Customer."e-Invoice State Code" := '17'; // Not Applicable
-        end;
+        // Only modify if the value has changed
+        if Customer."e-Invoice State Code" <> OriginalStateCode then
+            Customer.Modify();
     end;
 }

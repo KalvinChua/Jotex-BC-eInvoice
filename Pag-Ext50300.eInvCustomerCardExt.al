@@ -19,6 +19,12 @@ pageextension 50304 eInvCustomerCardExt extends "Customer Card"
                     Editable = true;
                     Visible = true;
                 }
+                field("e-Invoice ID No."; Rec."e-Invoice ID No.")
+                {
+                    ApplicationArea = All;
+                    Editable = true;
+                    Visible = true;
+                }
 
                 field("e-Invoice SST No."; Rec."e-Invoice SST No.")
                 {

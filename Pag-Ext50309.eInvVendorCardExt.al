@@ -20,6 +20,12 @@ pageextension 50309 eInvVendorCardExt extends "Vendor Card"
                     Visible = true;
                 }
 
+                field("e-Invoice ID No."; Rec."e-Invoice ID No.")
+                {
+                    ApplicationArea = All;
+                    Editable = true;
+                    Visible = true;
+                }
                 field("e-Invoice SST No."; Rec."e-Invoice SST No.")
                 {
                     ApplicationArea = All;

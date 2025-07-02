@@ -43,5 +43,10 @@ tableextension 50300 eInvoiceCustomerExt extends Customer
             Caption = 'Requires e-Invoice';
             DataClassification = CustomerContent;
         }
+        field(50308; "e-Invoice ID No."; Text[150])
+        {
+            Caption = 'e-Invoice ID No.';
+            DataClassification = CustomerContent;
+        }
     }
 }
