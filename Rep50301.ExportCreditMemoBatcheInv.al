@@ -116,7 +116,8 @@ report 50301 "Export Credit Memo Batch eInv"
                 AddExcelColumn(RowNo, 34, Customer.City);
                 AddExcelColumn(RowNo, 35, Customer."e-Invoice State Code");
                 AddExcelColumn(RowNo, 36, Customer."e-Invoice Country Code");
-                AddExcelColumn(RowNo, 37, Customer."Phone No.");
+                AddExcelColumn(RowNo, 37, DelChr(DelChr(Customer."Phone No.", '=', ' '), '=', '-'));
+
 
                 // Totals
                 AddExcelColumn(RowNo, 38, Round(TotalExcludingTax, 0.01)); // TotalExcludingTax
@@ -617,7 +618,7 @@ report 50301 "Export Credit Memo Batch eInv"
         ExcelBuffer.Validate("Column No.", Column);
 
         // Force text format for ID, code, and numeric fields that should be treated as text
-        if Column in [2, 10, 19, 21, 27, 33, 35, 36, 49] then
+        if Column in [2, 10, 19, 21, 27, 33, 35, 36, 37, 49] then
             ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
 
         ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));

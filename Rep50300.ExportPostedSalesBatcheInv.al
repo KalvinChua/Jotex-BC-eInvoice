@@ -76,6 +76,7 @@ report 50300 "LHDN e-Invoice Export"
                 InvDateTime := Format("Posting Date") + '  ' + Format(Time);
 
                 // Basic invoice information
+                ExcelBuffer.SelectOrAddSheet('Documents');
                 AddExcelColumn(RowNo, 1, "No."); // eInvoiceNumber
                 AddExcelColumn(RowNo, 2, "eInvoice Document Type"); // eInvoiceTypeCode
                 AddExcelColumn(RowNo, 3, "eInvoice Version Code"); // eInvoiceVersion
@@ -332,6 +333,7 @@ report 50300 "LHDN e-Invoice Export"
         ColumnNo := 1;
 
         // Add all columns from the LHDN Bulk Upload "Documents" sheet
+        ExcelBuffer.SelectOrAddSheet('Documents');
         AddHeaderColumn(ColumnNo, 'eInvoiceNumber');
         ColumnNo += 1;
         AddHeaderColumn(ColumnNo, 'eInvoiceTypeCode');
@@ -743,6 +745,7 @@ report 50300 "LHDN e-Invoice Export"
                             LineRowCounter += 1;
 
                             // Add line details to the DocumentLineItems sheet
+                            ExcelBuffer.SelectOrAddSheet('DocumentLineItems');
                             AddLineExcelColumn(LineRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
                             AddLineExcelColumn(LineRowCounter, 2, TempSalesInvLine."Line No."); // ID
                             AddLineExcelColumn(LineRowCounter, 3, TempSalesInvLine."e-Invoice Classification"); // Classification
@@ -783,6 +786,7 @@ report 50300 "LHDN e-Invoice Export"
                             ClassificationRowCounter += 1;
 
                             // Add line details to the LineItemsAddClassification sheet
+                            ExcelBuffer.SelectOrAddSheet('LineItemsAddClassification');
                             AddClassificationExcelColumn(ClassificationRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
                             AddClassificationExcelColumn(ClassificationRowCounter, 2, TempSalesInvLine."Line No."); // LineItem.ID
                             AddClassificationExcelColumn(ClassificationRowCounter, 3, TempSalesInvLine."e-Invoice Classification"); // ClassificationCode
@@ -816,6 +820,7 @@ report 50300 "LHDN e-Invoice Export"
                             // Get VAT information
                             if VATPostingSetup.Get(TempSalesInvLineTax."VAT Bus. Posting Group", TempSalesInvLineTax."VAT Prod. Posting Group") then begin
                                 // Add tax details to the LineItemTaxes sheet
+                                ExcelBuffer.SelectOrAddSheet('LineItemTaxes');
                                 AddTaxExcelColumn(TaxRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
                                 AddTaxExcelColumn(TaxRowCounter, 2, TempSalesInvLineTax."Line No."); // LineItem.ID
                                 AddTaxExcelColumn(TaxRowCounter, 3, TempSalesInvLineTax."e-Invoice Tax Type"); // TaxType
