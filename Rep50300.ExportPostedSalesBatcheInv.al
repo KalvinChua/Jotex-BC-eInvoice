@@ -279,56 +279,6 @@ report 50300 "LHDN e-Invoice Export"
                 InitializeTaxExcelHeaders();
             end;
         }
-
-        dataitem(SalesInvHeaderTax; "Sales Invoice Header")
-        {
-            DataItemLinkReference = SalesInvHeader;
-            DataItemTableView = SORTING("Posting Date");
-
-            trigger OnAfterGetRecord()
-            var
-                SalesInvLineLocal: Record "Sales Invoice Line";
-                VATPostingSetup: Record "VAT Posting Setup";
-                TaxAmount: Decimal;
-                TaxableAmount: Decimal;
-            begin
-                // Only process invoices that were included in the main sheet
-                if not ExcelBuffer.Get(RowNo, 1) then
-                    CurrReport.Skip();
-
-                // Initialize tax amounts
-                TaxAmount := 0;
-                TaxableAmount := 0;
-
-                // Calculate tax totals for this invoice
-                SalesInvLineLocal.SetRange("Document No.", "No.");
-                SalesInvLineLocal.SetFilter(Type, '<>%1', SalesInvLineLocal.Type::" ");
-                if SalesInvLineLocal.FindSet() then
-                    repeat
-                        if VATPostingSetup.Get(SalesInvLineLocal."VAT Bus. Posting Group", SalesInvLineLocal."VAT Prod. Posting Group") then begin
-                            DocTaxRowNo += 1;
-
-                            // Calculate tax amounts
-                            TaxAmount := SalesInvLineLocal."Amount Including VAT" - SalesInvLineLocal.Amount;
-                            TaxableAmount := SalesInvLineLocal.Amount;
-
-                            // Add tax summary to the DocumentTotalTax sheet
-                            AddDocTaxExcelColumn(DocTaxRowNo, 1, "No."); // eInvoiceNumber
-                            AddDocTaxExcelColumn(DocTaxRowNo, 2, SalesInvLineTax."e-Invoice Tax Type"); // TaxType
-                            AddDocTaxExcelColumn(DocTaxRowNo, 3, TaxableAmount); // TotalTaxableAmount
-                            AddDocTaxExcelColumn(DocTaxRowNo, 4, TaxAmount); // TotalTaxAmount
-                            AddDocTaxExcelColumn(DocTaxRowNo, 5, ''); // AmountTaxExempted (set to 0 if not tracked)
-                            AddDocTaxExcelColumn(DocTaxRowNo, 6, ''); // DetailsTaxExemption
-                        end;
-                    until SalesInvLineLocal.Next() = 0;
-            end;
-
-            trigger OnPreDataItem()
-            begin
-                DocTaxRowNo := 1; // Reset counter for each invoice
-                InitializeDocTaxExcelHeaders();
-            end;
-        }
     }
 
     requestpage
@@ -367,7 +317,6 @@ report 50300 "LHDN e-Invoice Export"
         LineRowNo: Integer;
         ClassificationRowNo: Integer;
         TaxRowNo: Integer;
-        DocTaxRowNo: Integer;
         InvDateTime: Text;
         TotalTaxAmount: Decimal;
         TotalDiscountAmount: Decimal;
@@ -626,27 +575,6 @@ report 50300 "LHDN e-Invoice Export"
         ColumnNo += 1;
     end;
 
-    local procedure InitializeDocTaxExcelHeaders()
-    var
-        ColumnNo: Integer;
-    begin
-        ColumnNo := 1;
-
-        // Add columns for the DocumentTotalTax sheet
-        AddDocTaxHeaderColumn(ColumnNo, 'eInvoiceNumber');
-        ColumnNo += 1;
-        AddDocTaxHeaderColumn(ColumnNo, 'TaxType');
-        ColumnNo += 1;
-        AddDocTaxHeaderColumn(ColumnNo, 'TotalTaxableAmount');
-        ColumnNo += 1;
-        AddDocTaxHeaderColumn(ColumnNo, 'TotalTaxAmount');
-        ColumnNo += 1;
-        AddDocTaxHeaderColumn(ColumnNo, 'AmountTaxExempted');
-        ColumnNo += 1;
-        AddDocTaxHeaderColumn(ColumnNo, 'DetailsTaxExemption');
-        ColumnNo += 1;
-    end;
-
     local procedure AddHeaderColumn(ColumnNo: Integer; ColumnName: Text)
     begin
         ExcelBuffer.Init();
@@ -679,15 +607,6 @@ report 50300 "LHDN e-Invoice Export"
         ExcelBuffer.Init();
         ExcelBuffer.Validate("Row No.", TaxRowNo);
         ExcelBuffer.Validate("Column No.", ColumnNo + 300); // Use column numbers >300 for the fourth sheet
-        ExcelBuffer.Validate("Cell Value as Text", ColumnName);
-        ExcelBuffer.Insert();
-    end;
-
-    local procedure AddDocTaxHeaderColumn(ColumnNo: Integer; ColumnName: Text)
-    begin
-        ExcelBuffer.Init();
-        ExcelBuffer.Validate("Row No.", DocTaxRowNo);
-        ExcelBuffer.Validate("Column No.", ColumnNo + 400); // Use column numbers >400 for the fifth sheet
         ExcelBuffer.Validate("Cell Value as Text", ColumnName);
         ExcelBuffer.Insert();
     end;
@@ -782,33 +701,6 @@ report 50300 "LHDN e-Invoice Export"
             ExcelBuffer.Modify();
     end;
 
-    local procedure AddDocTaxExcelColumn(Row: Integer; Column: Integer; Value: Variant)
-    begin
-        if (not IncludeAllFields) and (Format(Value) = '') then
-            exit;
-
-        // Clear any existing entry first
-        if ExcelBuffer.Get(Row, Column + 400) then
-            ExcelBuffer.Delete();
-
-        ExcelBuffer.Init();
-        ExcelBuffer.Validate("Row No.", Row);
-        ExcelBuffer.Validate("Column No.", Column + 400); // Use column numbers >400 for this sheet
-
-        // Force text format for code fields
-        if Column in [1, 2, 6] then
-            ExcelBuffer.Validate("Cell Type", ExcelBuffer."Cell Type"::Text);
-
-        // Format numeric values with 2 decimal places
-        if Column in [3, 4, 5] then
-            ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, '<Precision,2><Standard Format,2>'))
-        else
-            ExcelBuffer.Validate("Cell Value as Text", Format(Value, 0, 9));
-
-        if not ExcelBuffer.Insert() then
-            ExcelBuffer.Modify();
-    end;
-
     trigger OnPostReport()
     var
         TempSalesInvHeader: Record "Sales Invoice Header";
@@ -817,9 +709,6 @@ report 50300 "LHDN e-Invoice Export"
         LineRowCounter: Integer;
         ClassificationRowCounter: Integer;
         TaxRowCounter: Integer;
-        DocTaxRowCounter: Integer;
-        TaxAmount: Decimal;
-        TaxableAmount: Decimal;
     begin
         if ExcelBuffer.IsEmpty() then
             Error('No data to export.');
@@ -922,10 +811,10 @@ report 50300 "LHDN e-Invoice Export"
                     TempSalesInvLineTax.SetRange("Document No.", TempSalesInvHeader."No.");
                     if TempSalesInvLineTax.FindSet() then
                         repeat
+                            TaxRowCounter += 1;
+
                             // Get VAT information
                             if VATPostingSetup.Get(TempSalesInvLineTax."VAT Bus. Posting Group", TempSalesInvLineTax."VAT Prod. Posting Group") then begin
-                                TaxRowCounter += 1;
-
                                 // Add tax details to the LineItemTaxes sheet
                                 AddTaxExcelColumn(TaxRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
                                 AddTaxExcelColumn(TaxRowCounter, 2, TempSalesInvLineTax."Line No."); // LineItem.ID
@@ -945,47 +834,6 @@ report 50300 "LHDN e-Invoice Export"
             ExcelBuffer.WriteSheet('LineItemTaxes', CompanyName, UserId);
         end;
 
-        // Process fifth sheet (DocumentTotalTax) if we have tax data
-        if DocTaxRowNo > 1 then begin
-            // Clear buffer for fifth sheet
-            ExcelBuffer.DeleteAll();
-
-            // Reinitialize tax headers
-            DocTaxRowCounter := 1;
-            InitializeDocTaxExcelHeaders();
-
-            // Process all filtered invoice headers
-            TempSalesInvHeader.CopyFilters(SalesInvHeader);
-            if TempSalesInvHeader.FindSet() then
-                repeat
-                    // Process lines for each invoice
-                    TempSalesInvLine.Reset();
-                    TempSalesInvLine.SetRange("Document No.", TempSalesInvHeader."No.");
-                    if TempSalesInvLine.FindSet() then
-                        repeat
-                            // Get VAT information
-                            if VATPostingSetup.Get(TempSalesInvLine."VAT Bus. Posting Group", TempSalesInvLine."VAT Prod. Posting Group") then begin
-                                DocTaxRowCounter += 1;
-
-                                // Calculate tax amounts
-                                TaxAmount := TempSalesInvLine."Amount Including VAT" - TempSalesInvLine.Amount;
-                                TaxableAmount := TempSalesInvLine.Amount;
-
-                                // Add tax summary to the DocumentTotalTax sheet
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 1, TempSalesInvHeader."No."); // eInvoiceNumber
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 2, VATPostingSetup."VAT Identifier"); // TaxType
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 3, TaxableAmount); // TotalTaxableAmount
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 4, TaxAmount); // TotalTaxAmount
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 5, 0); // AmountTaxExempted
-                                AddDocTaxExcelColumn(DocTaxRowCounter, 6, ''); // DetailsTaxExemption
-                            end;
-                        until TempSalesInvLine.Next() = 0;
-                until TempSalesInvHeader.Next() = 0;
-
-            // Write fifth sheet
-            ExcelBuffer.WriteSheet('DocumentTotalTax', CompanyName, UserId);
-        end;
-
         ExcelBuffer.CloseBook();
         ExcelBuffer.SetFriendlyFilename(FileName);
         ExcelBuffer.OpenExcel();
@@ -1001,6 +849,5 @@ report 50300 "LHDN e-Invoice Export"
         LineRowNo := 1;
         ClassificationRowNo := 1;
         TaxRowNo := 1;
-        DocTaxRowNo := 1;
     end;
 }
