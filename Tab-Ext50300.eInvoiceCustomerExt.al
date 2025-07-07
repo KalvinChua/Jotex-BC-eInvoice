@@ -2,9 +2,9 @@ tableextension 50300 eInvoiceCustomerExt extends Customer
 {
     fields
     {
-        field(50300; "Last Validated TIN Name"; Text[100])
+        field(50300; "Validation Status"; Enum "TIN Validation Status Enum")
         {
-            Caption = 'TIN Registered Name';
+            DataClassification = CustomerContent;
         }
         field(50301; "Last TIN Validation"; DateTime)
         {

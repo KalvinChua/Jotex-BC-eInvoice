@@ -47,14 +47,7 @@ pageextension 50304 eInvCustomerCardExt extends "Customer Card"
                     Visible = true;
                 }
 
-                field("Last Validated TIN Name"; Rec."Last Validated TIN Name")
-                {
-                    ApplicationArea = All;
-                    Editable = false;
-                    Visible = true;
-                }
-
-                field("Last TIN Validation"; Rec."Last TIN Validation")
+                field("Validation Status"; Rec."Validation Status")
                 {
                     ApplicationArea = All;
                     Editable = false;
