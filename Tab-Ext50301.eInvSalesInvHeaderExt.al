@@ -5,18 +5,22 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
         field(50300; "eInvoice UUID"; Text[100])
         {
             Caption = 'e-Invoice UUID';
+            DataClassification = CustomerContent;
         }
         field(50301; "eInvoice QR URL"; Text[250])
         {
             Caption = 'e-Invoice QR URL';
+            DataClassification = CustomerContent;
         }
         field(50302; "eInvoice PDF URL"; Text[250])
         {
             Caption = 'e-Invoice PDF URL';
+            DataClassification = CustomerContent;
         }
         field(50304; "eInvoice Submission UID"; Text[100])
         {
             Caption = 'e-Invoice Submission UID';
+            DataClassification = CustomerContent;
         }
         field(50305; "eInvoice QR Image"; Media)
         {
@@ -45,6 +49,11 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
         {
             Caption = 'e-Invoice Version Code';
             TableRelation = "eInvoice Version".Code;
+            DataClassification = ToBeClassified;
+        }
+        field(50310; "eInvoice Validation Status"; Text[50])
+        {
+            Caption = 'e-Invoice Validation Status';
             DataClassification = ToBeClassified;
         }
     }
