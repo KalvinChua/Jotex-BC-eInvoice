@@ -48,5 +48,10 @@ tableextension 50300 eInvoiceCustomerExt extends Customer
             Caption = 'e-Invoice ID No.';
             DataClassification = CustomerContent;
         }
+        field(50309; "Last Validated TIN Name"; Text[150])
+        {
+            Caption = 'Last Validated TIN Name';
+            DataClassification = CustomerContent;
+        }
     }
 }
