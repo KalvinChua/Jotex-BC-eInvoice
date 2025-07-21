@@ -42,13 +42,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddBasicField(InvoiceObject, 'IssueTime', Format(Time(), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
 
         // Invoice type code with list version
-        AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', '01', 'listVersionID', '1.1');
+        AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', SalesInvoiceHeader."eInvoice Version Code");
 
         // Currency codes
         AddBasicField(InvoiceObject, 'DocumentCurrencyCode', CurrencyCode);
         AddBasicField(InvoiceObject, 'TaxCurrencyCode', CurrencyCode);
 
-        // Invoice period
+        // Invoice periodtin
         AddInvoicePeriod(InvoiceObject, SalesInvoiceHeader);
 
         // Billing reference (if applicable)
@@ -65,11 +65,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddAccountingCustomerParty(InvoiceObject, Customer);
 
         // Delivery and shipment
-        AddDelivery(InvoiceObject, Customer);
+        AddDelivery(InvoiceObject, Customer, SalesInvoiceHeader);
 
         // Payment information
-        AddPaymentMeans(InvoiceObject);
-        AddPaymentTerms(InvoiceObject);
+        AddPaymentMeans(InvoiceObject, SalesInvoiceHeader);
+        AddPaymentTerms(InvoiceObject, SalesInvoiceHeader);
 
         // Optional sections
         if HasPrepaidAmount(SalesInvoiceHeader) then
@@ -129,14 +129,16 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AdditionalDocArray: JsonArray;
         RefObject: JsonObject;
     begin
-        // Add any additional document references based on your business requirements
-        // This is optional - only add if you have additional references
+        // Add customs import form reference if available
+        if SalesInvoiceHeader."External Document No." <> '' then begin
+            Clear(RefObject);
+            AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
+            AddBasicField(RefObject, 'DocumentType', '');
+            AdditionalDocArray.Add(RefObject);
+        end;
 
-        // Example: Customs forms, permits, etc.
-        // Clear(RefObject);
-        // AddBasicField(RefObject, 'ID', 'CustomsForm123');
-        // AddBasicField(RefObject, 'DocumentType', 'CustomsImportForm');
-        // AdditionalDocArray.Add(RefObject);
+        // Add other document references as needed
+        // You can add more references based on your business requirements
 
         if AdditionalDocArray.Count > 0 then
             InvoiceObject.Add('AdditionalDocumentReference', AdditionalDocArray);
@@ -146,49 +148,62 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     var
         SupplierArray: JsonArray;
         SupplierObject: JsonObject;
+        PartyArray: JsonArray;
         PartyObject: JsonObject;
         PartyIdentificationArray: JsonArray;
+        PostalAddressArray: JsonArray;
         PostalAddressObject: JsonObject;
+        ContactArray: JsonArray;
         ContactObject: JsonObject;
         PartyLegalEntityArray: JsonArray;
         PartyLegalEntityObject: JsonObject;
+        IndustryClassificationArray: JsonArray;
         IndustryClassificationObject: JsonObject;
+        AdditionalAccountIDArray: JsonArray;
+        AdditionalAccountIDObject: JsonObject;
     begin
+        // Additional Account ID (for certifications like CertEX)
+        AdditionalAccountIDObject.Add('_', GetCertificationID());
+        AdditionalAccountIDObject.Add('schemeAgencyName', 'CertEX');
+        AdditionalAccountIDArray.Add(AdditionalAccountIDObject);
+        SupplierObject.Add('AdditionalAccountID', AdditionalAccountIDArray);
+
         // Industry classification (MSIC code)
-        AddBasicFieldWithAttribute(IndustryClassificationObject, '_', GetMSICCode(), 'name', GetMSICDescription());
+        IndustryClassificationObject.Add('_', GetMSICCode());
+        IndustryClassificationObject.Add('name', GetMSICDescription());
+        IndustryClassificationArray.Add(IndustryClassificationObject);
+        PartyObject.Add('IndustryClassificationCode', IndustryClassificationArray);
 
         // Party identification (TIN, BRN, SST, TTX)
-        AddPartyIdentification(PartyIdentificationArray, CompanyInfo."VAT Registration No.", 'TIN');
-        AddPartyIdentification(PartyIdentificationArray, CompanyInfo."Registration No.", 'BRN');
+        AddPartyIdentification(PartyIdentificationArray, CompanyInfo."e-Invoice TIN No.", 'TIN');
+        AddPartyIdentification(PartyIdentificationArray, CompanyInfo."ID No.", 'BRN');
         AddPartyIdentification(PartyIdentificationArray, GetSSTNumber(), 'SST');
         AddPartyIdentification(PartyIdentificationArray, GetTTXNumber(), 'TTX');
-
-        // Legal entity information
-        AddBasicField(PartyLegalEntityObject, 'RegistrationName', CompanyInfo.Name);
-        PartyLegalEntityArray.Add(PartyLegalEntityObject);
+        PartyObject.Add('PartyIdentification', PartyIdentificationArray);
 
         // Postal address
         AddBasicField(PostalAddressObject, 'CityName', CompanyInfo.City);
         AddBasicField(PostalAddressObject, 'PostalZone', CompanyInfo."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(CompanyInfo.County));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(CompanyInfo."City"));
         AddAddressLines(PostalAddressObject, CompanyInfo.Address, CompanyInfo."Address 2", '');
-        AddCountry(PostalAddressObject, GetCountryCode(CompanyInfo."Country/Region Code"));
+        AddCountry(PostalAddressObject, GetCountryCode(CompanyInfo."e-Invoice Country Code"));
+        PostalAddressArray.Add(PostalAddressObject);
+        PartyObject.Add('PostalAddress', PostalAddressArray);
+
+        // Legal entity information
+        AddBasicField(PartyLegalEntityObject, 'RegistrationName', CompanyInfo.Name);
+        PartyLegalEntityArray.Add(PartyLegalEntityObject);
+        PartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
 
         // Contact information
         AddBasicField(ContactObject, 'Telephone', CompanyInfo."Phone No.");
-        AddBasicField(ContactObject, 'ElectronicMail', CompanyInfo."E-Mail");
+        AddBasicField(ContactObject, 'ElectronicMail', CompanyInfo."e-Invoice Email");
+        ContactArray.Add(ContactObject);
+        PartyObject.Add('Contact', ContactArray);
 
-        // Build party object
-        PartyObject.Add('IndustryClassificationCode', IndustryClassificationObject);
-        PartyObject.Add('PartyIdentification', PartyIdentificationArray);
-        PartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
-        PartyObject.Add('PostalAddress', PostalAddressObject);
-        PartyObject.Add('Contact', ContactObject);
-
-        // Optional: Additional account ID (for certifications)
-        // AddAdditionalAccountID(SupplierObject);
-
-        SupplierObject.Add('Party', PartyObject);
+        // Build supplier object
+        PartyArray.Add(PartyObject);
+        SupplierObject.Add('Party', PartyArray);
         SupplierArray.Add(SupplierObject);
         InvoiceObject.Add('AccountingSupplierParty', SupplierArray);
     end;
@@ -197,122 +212,179 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     var
         CustomerArray: JsonArray;
         CustomerObject: JsonObject;
+        PartyArray: JsonArray;
         PartyObject: JsonObject;
         PartyIdentificationArray: JsonArray;
+        PostalAddressArray: JsonArray;
         PostalAddressObject: JsonObject;
+        ContactArray: JsonArray;
         ContactObject: JsonObject;
         PartyLegalEntityArray: JsonArray;
         PartyLegalEntityObject: JsonObject;
     begin
-        // Party identification
-        AddPartyIdentification(PartyIdentificationArray, Customer."VAT Registration No.", 'TIN');
-        AddPartyIdentification(PartyIdentificationArray, Customer."Registration Number", 'BRN');
-        AddPartyIdentification(PartyIdentificationArray, GetCustomerSSTNumber(Customer), 'SST');
-        AddPartyIdentification(PartyIdentificationArray, GetCustomerTTXNumber(Customer), 'TTX');
+        // Postal address
+        AddBasicField(PostalAddressObject, 'CityName', Customer.City);
+        AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer."City"));
+        AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
+        AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
+        PostalAddressArray.Add(PostalAddressObject);
+        PartyObject.Add('PostalAddress', PostalAddressArray);
 
         // Legal entity
         AddBasicField(PartyLegalEntityObject, 'RegistrationName', Customer.Name);
         PartyLegalEntityArray.Add(PartyLegalEntityObject);
+        PartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
 
-        // Postal address
-        AddBasicField(PostalAddressObject, 'CityName', Customer.City);
-        AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer.County));
-        AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
-        AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
+        // Party identification
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice TIN No.", 'TIN');
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", 'BRN');
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice SST No.", 'SST');
+        AddPartyIdentification(PartyIdentificationArray, '', 'TTX');
+        PartyObject.Add('PartyIdentification', PartyIdentificationArray);
 
         // Contact information
         AddBasicField(ContactObject, 'Telephone', Customer."Phone No.");
         AddBasicField(ContactObject, 'ElectronicMail', Customer."E-Mail");
+        ContactArray.Add(ContactObject);
+        PartyObject.Add('Contact', ContactArray);
 
-        // Build party object
-        PartyObject.Add('PartyIdentification', PartyIdentificationArray);
-        PartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
-        PartyObject.Add('PostalAddress', PostalAddressObject);
-        PartyObject.Add('Contact', ContactObject);
-
-        CustomerObject.Add('Party', PartyObject);
+        // Build customer object
+        PartyArray.Add(PartyObject);
+        CustomerObject.Add('Party', PartyArray);
         CustomerArray.Add(CustomerObject);
         InvoiceObject.Add('AccountingCustomerParty', CustomerArray);
     end;
 
-    local procedure AddDelivery(var InvoiceObject: JsonObject; Customer: Record Customer)
+    local procedure AddDelivery(var InvoiceObject: JsonObject; Customer: Record Customer; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
         DeliveryArray: JsonArray;
         DeliveryObject: JsonObject;
+        DeliveryPartyArray: JsonArray;
         DeliveryPartyObject: JsonObject;
         PartyIdentificationArray: JsonArray;
+        PostalAddressArray: JsonArray;
         PostalAddressObject: JsonObject;
-        PartyLegalEntityObject: JsonObject;
         PartyLegalEntityArray: JsonArray;
+        PartyLegalEntityObject: JsonObject;
         ShipmentArray: JsonArray;
         ShipmentObject: JsonObject;
     begin
-        // Delivery party identification
-        AddPartyIdentification(PartyIdentificationArray, Customer."VAT Registration No.", 'TIN');
-        AddPartyIdentification(PartyIdentificationArray, Customer."Registration Number", 'BRN');
-
         // Legal entity
         AddBasicField(PartyLegalEntityObject, 'RegistrationName', Customer.Name);
         PartyLegalEntityArray.Add(PartyLegalEntityObject);
+        DeliveryPartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
 
         // Delivery address (use ship-to if available, otherwise bill-to)
         AddBasicField(PostalAddressObject, 'CityName', Customer.City);
         AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer.County));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer."City"));
         AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
         AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
+        PostalAddressArray.Add(PostalAddressObject);
+        DeliveryPartyObject.Add('PostalAddress', PostalAddressArray);
 
+        // Delivery party identification
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice TIN No.", 'TIN');
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", 'BRN');
         DeliveryPartyObject.Add('PartyIdentification', PartyIdentificationArray);
-        DeliveryPartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
-        DeliveryPartyObject.Add('PostalAddress', PostalAddressObject);
+
+        DeliveryPartyArray.Add(DeliveryPartyObject);
+        DeliveryObject.Add('DeliveryParty', DeliveryPartyArray);
 
         // Optional: Shipment information
-        AddShipmentInfo(ShipmentArray);
+        AddShipmentInfoDynamic(ShipmentArray, SalesInvoiceHeader);
         if ShipmentArray.Count > 0 then
             DeliveryObject.Add('Shipment', ShipmentArray);
 
-        DeliveryObject.Add('DeliveryParty', DeliveryPartyObject);
         DeliveryArray.Add(DeliveryObject);
         InvoiceObject.Add('Delivery', DeliveryArray);
     end;
 
-    local procedure AddShipmentInfo(var ShipmentArray: JsonArray)
+    // Alternative version if you want to make it more dynamic:
+    local procedure AddShipmentInfoDynamic(var ShipmentArray: JsonArray; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
         ShipmentObject: JsonObject;
         FreightChargeArray: JsonArray;
         FreightChargeObject: JsonObject;
         ChargeIndicatorArray: JsonArray;
         ChargeIndicatorObject: JsonObject;
+        AllowanceChargeReasonArray: JsonArray;
+        AllowanceChargeReasonObject: JsonObject;
+        AmountArray: JsonArray;
+        AmountObject: JsonObject;
+        FreightAmount: Decimal;
+        CurrencyCode: Code[10];
     begin
-        // Only add shipment if there are freight charges
-        // This is optional based on your business needs
+        // Get currency code
+        if SalesInvoiceHeader."Currency Code" = '' then
+            CurrencyCode := 'MYR'
+        else
+            CurrencyCode := SalesInvoiceHeader."Currency Code";
 
-        // Example freight charge
-        // AddBasicField(ShipmentObject, 'ID', 'SHIP001');
-        // 
-        // ChargeIndicatorObject.Add('_', true);
-        // ChargeIndicatorArray.Add(ChargeIndicatorObject);
-        // FreightChargeObject.Add('ChargeIndicator', ChargeIndicatorArray);
-        // AddBasicField(FreightChargeObject, 'AllowanceChargeReason', 'Shipping Fee');
-        // AddAmountField(FreightChargeObject, 'Amount', 50.00, 'MYR');
-        // 
-        // FreightChargeArray.Add(FreightChargeObject);
-        // ShipmentObject.Add('FreightAllowanceCharge', FreightChargeArray);
-        // ShipmentArray.Add(ShipmentObject);
+        // Calculate or get freight amount (customize this based on your business logic)
+        FreightAmount := CalculateFreightAmount(SalesInvoiceHeader); // Implement this function
+
+        // If no custom function, use 0
+        if FreightAmount = 0 then
+            FreightAmount := 0.0;
+
+        AddBasicField(ShipmentObject, 'ID', GetShipmentID(SalesInvoiceHeader)); // Implement this if needed
+
+        // Freight allowance charge
+        ChargeIndicatorObject.Add('_', FreightAmount > 0); // True if there's an actual charge
+        ChargeIndicatorArray.Add(ChargeIndicatorObject);
+        FreightChargeObject.Add('ChargeIndicator', ChargeIndicatorArray);
+
+        AllowanceChargeReasonObject.Add('_', GetFreightReason(FreightAmount)); // 'Freight' if > 0, empty if 0
+        AllowanceChargeReasonArray.Add(AllowanceChargeReasonObject);
+        FreightChargeObject.Add('AllowanceChargeReason', AllowanceChargeReasonArray);
+
+        // Use proper numeric value and currency
+        AmountObject.Add('_', FreightAmount);
+        AmountObject.Add('currencyID', CurrencyCode);
+        AmountArray.Add(AmountObject);
+        FreightChargeObject.Add('Amount', AmountArray);
+
+        FreightChargeArray.Add(FreightChargeObject);
+        ShipmentObject.Add('FreightAllowanceCharge', FreightChargeArray);
+        ShipmentArray.Add(ShipmentObject);
     end;
 
-    local procedure AddPaymentMeans(var InvoiceObject: JsonObject)
+    // Helper functions for the dynamic version (implement as needed):
+    local procedure CalculateFreightAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Decimal
+    begin
+        // Implement your freight calculation logic here
+        // For now, return 0
+        exit(0.0);
+    end;
+
+    local procedure GetShipmentID(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
+    begin
+        // Return shipment ID if available
+        // For now, return empty
+        exit('');
+    end;
+
+    local procedure GetFreightReason(FreightAmount: Decimal): Text
+    begin
+        if FreightAmount > 0 then
+            exit('Freight')
+        else
+            exit('');
+    end;
+
+    local procedure AddPaymentMeans(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
         PaymentMeansArray: JsonArray;
         PaymentMeansObject: JsonObject;
-        PayeeAccountObject: JsonObject;
         PayeeAccountArray: JsonArray;
+        PayeeAccountObject: JsonObject;
     begin
-        // Payment means code (03 = Cash, 01 = Bank Transfer, etc.)
-        AddBasicField(PaymentMeansObject, 'PaymentMeansCode', '01'); // Bank transfer
+        // Payment mode code (03 = Cash, 01 = Bank Transfer, etc.)
+        AddBasicField(PaymentMeansObject, 'PaymentMeansCode', SalesInvoiceHeader."eInvoice Payment Mode");
 
-        // Payee financial account (optional)
+        // Payee financial account
         AddBasicField(PayeeAccountObject, 'ID', GetBankAccountNumber());
         PayeeAccountArray.Add(PayeeAccountObject);
         PaymentMeansObject.Add('PayeeFinancialAccount', PayeeAccountArray);
@@ -321,12 +393,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         InvoiceObject.Add('PaymentMeans', PaymentMeansArray);
     end;
 
-    local procedure AddPaymentTerms(var InvoiceObject: JsonObject)
+    local procedure AddPaymentTerms(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
         PaymentTermsArray: JsonArray;
         PaymentTermsObject: JsonObject;
     begin
-        AddBasicField(PaymentTermsObject, 'Note', GetPaymentTermsNote());
+        AddBasicField(PaymentTermsObject, 'Note', GetPaymentTermsNote(SalesInvoiceHeader));
         PaymentTermsArray.Add(PaymentTermsObject);
         InvoiceObject.Add('PaymentTerms', PaymentTermsArray);
     end;
@@ -339,7 +411,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     begin
         PrepaidAmount := GetPrepaidAmount(SalesInvoiceHeader);
         if PrepaidAmount > 0 then begin
-            AddBasicField(PrepaidObject, 'ID', SalesInvoiceHeader."No." + '-PREPAID');
+            AddBasicField(PrepaidObject, 'ID', SalesInvoiceHeader."External Document No.");
             AddAmountField(PrepaidObject, 'PaidAmount', PrepaidAmount, GetCurrencyCode(SalesInvoiceHeader));
             AddBasicField(PrepaidObject, 'PaidDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
             AddBasicField(PrepaidObject, 'PaidTime', Format(Time(), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
@@ -353,6 +425,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     var
         AllowanceArray: JsonArray;
         ChargeObject: JsonObject;
+        ChargeIndicatorArray: JsonArray;
+        ChargeIndicatorObject: JsonObject;
+        AllowanceChargeReasonArray: JsonArray;
+        AllowanceChargeReasonObject: JsonObject;
+        AmountArray: JsonArray;
+        AmountObject: JsonObject;
         SalesLine: Record "Sales Invoice Line";
         DiscountAmount: Decimal;
         ChargeAmount: Decimal;
@@ -362,24 +440,54 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if SalesLine.FindSet() then
             repeat
                 DiscountAmount += SalesLine."Line Discount Amount";
-            // Add any additional charges if applicable
             until SalesLine.Next() = 0;
 
         // Add discount as allowance
         if DiscountAmount > 0 then begin
             Clear(ChargeObject);
-            AddBasicField(ChargeObject, 'ChargeIndicator', 'false');
-            AddBasicField(ChargeObject, 'AllowanceChargeReason', 'Discount');
-            AddAmountField(ChargeObject, 'Amount', DiscountAmount, GetCurrencyCode(SalesInvoiceHeader));
+            ChargeIndicatorObject.Add('_', false);
+            ChargeIndicatorArray.Add(ChargeIndicatorObject);
+            ChargeObject.Add('ChargeIndicator', ChargeIndicatorArray);
+
+            Clear(AllowanceChargeReasonArray);
+            AllowanceChargeReasonObject.Add('_', '');
+            AllowanceChargeReasonArray.Add(AllowanceChargeReasonObject);
+            ChargeObject.Add('AllowanceChargeReason', AllowanceChargeReasonArray);
+
+            Clear(AmountArray);
+            AmountObject.Add('_', DiscountAmount);
+            AmountObject.Add('currencyID', GetCurrencyCode(SalesInvoiceHeader));
+            AmountArray.Add(AmountObject);
+            ChargeObject.Add('Amount', AmountArray);
+
             AllowanceArray.Add(ChargeObject);
         end;
 
-        // Add any charges if applicable
+        // Add any charges if applicable (calculate dynamically or omit if not applicable)
+        ChargeAmount := 0; // Set to 0 or calculate based on your business logic
+        // Example: ChargeAmount := CalculateServiceCharge(SalesInvoiceHeader);
+
         if ChargeAmount > 0 then begin
             Clear(ChargeObject);
-            AddBasicField(ChargeObject, 'ChargeIndicator', 'true');
-            AddBasicField(ChargeObject, 'AllowanceChargeReason', 'Service Charge');
-            AddAmountField(ChargeObject, 'Amount', ChargeAmount, GetCurrencyCode(SalesInvoiceHeader));
+            Clear(ChargeIndicatorArray);
+            Clear(ChargeIndicatorObject);
+            ChargeIndicatorObject.Add('_', true);
+            ChargeIndicatorArray.Add(ChargeIndicatorObject);
+            ChargeObject.Add('ChargeIndicator', ChargeIndicatorArray);
+
+            Clear(AllowanceChargeReasonArray);
+            Clear(AllowanceChargeReasonObject);
+            AllowanceChargeReasonObject.Add('_', 'Service charge');
+            AllowanceChargeReasonArray.Add(AllowanceChargeReasonObject);
+            ChargeObject.Add('AllowanceChargeReason', AllowanceChargeReasonArray);
+
+            Clear(AmountArray);
+            Clear(AmountObject);
+            AmountObject.Add('_', ChargeAmount);
+            AmountObject.Add('currencyID', GetCurrencyCode(SalesInvoiceHeader));
+            AmountArray.Add(AmountObject);
+            ChargeObject.Add('Amount', AmountArray);
+
             AllowanceArray.Add(ChargeObject);
         end;
 
@@ -393,6 +501,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         TaxTotalObject: JsonObject;
         TaxSubtotalArray: JsonArray;
         TaxSubtotalObject: JsonObject;
+        TaxCategoryArray: JsonArray;
         TaxCategoryObject: JsonObject;
         TaxSchemeArray: JsonArray;
         TaxSchemeObject: JsonObject;
@@ -409,28 +518,27 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 TaxableAmount += SalesLine.Amount;
             until SalesLine.Next() = 0;
 
-        if TotalTaxAmount > 0 then begin
-            AddAmountField(TaxTotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCode(SalesInvoiceHeader));
+        AddAmountField(TaxTotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCode(SalesInvoiceHeader));
 
-            // Tax subtotal
-            AddAmountField(TaxSubtotalObject, 'TaxableAmount', TaxableAmount, GetCurrencyCode(SalesInvoiceHeader));
-            AddAmountField(TaxSubtotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCode(SalesInvoiceHeader));
+        // Tax subtotal
+        AddAmountField(TaxSubtotalObject, 'TaxableAmount', TaxableAmount, GetCurrencyCode(SalesInvoiceHeader));
+        AddAmountField(TaxSubtotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCode(SalesInvoiceHeader));
 
-            // Tax category
-            AddBasicField(TaxCategoryObject, 'ID', GetTaxCategoryCode(SalesLine."VAT %"));
+        // Tax category
+        AddBasicField(TaxCategoryObject, 'ID', '01');
 
-            // Tax scheme
-            AddBasicFieldWithAttributes(TaxSchemeObject, 'ID', 'OTH', 'schemeID', 'UN/ECE 5153', 'schemeAgencyID', '6');
-            TaxSchemeArray.Add(TaxSchemeObject);
-            TaxCategoryObject.Add('TaxScheme', TaxSchemeArray);
+        // Tax scheme
+        AddBasicFieldWithAttributes(TaxSchemeObject, 'ID', 'OTH', 'schemeID', 'UN/ECE 5153', 'schemeAgencyID', '6');
+        TaxSchemeArray.Add(TaxSchemeObject);
+        TaxCategoryArray.Add(TaxCategoryObject);
+        TaxCategoryObject.Add('TaxScheme', TaxSchemeArray);
 
-            TaxSubtotalObject.Add('TaxCategory', TaxCategoryObject);
-            TaxSubtotalArray.Add(TaxSubtotalObject);
-            TaxTotalObject.Add('TaxSubtotal', TaxSubtotalArray);
+        TaxSubtotalArray.Add(TaxSubtotalObject);
+        TaxSubtotalObject.Add('TaxCategory', TaxCategoryArray);
+        TaxTotalObject.Add('TaxSubtotal', TaxSubtotalArray);
 
-            TaxTotalArray.Add(TaxTotalObject);
-            InvoiceObject.Add('TaxTotal', TaxTotalArray);
-        end;
+        TaxTotalArray.Add(TaxTotalObject);
+        InvoiceObject.Add('TaxTotal', TaxTotalArray);
     end;
 
     local procedure AddLegalMonetaryTotal(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -443,9 +551,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AllowanceTotalAmount: Decimal;
         ChargeTotalAmount: Decimal;
         PayableAmount: Decimal;
+        PayableRoundingAmount: Decimal;
         SalesLine: Record "Sales Invoice Line";
     begin
         // Calculate amounts from invoice lines
+        ChargeTotalAmount := 0; // Set to 0 or calculate based on your business logic
         SalesLine.SetRange("Document No.", SalesInvoiceHeader."No.");
         if SalesLine.FindSet() then
             repeat
@@ -456,17 +566,14 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         TaxExclusiveAmount := LineExtensionAmount - AllowanceTotalAmount + ChargeTotalAmount;
         TaxInclusiveAmount := SalesInvoiceHeader."Amount Including VAT";
         PayableAmount := TaxInclusiveAmount;
+        PayableRoundingAmount := 0; // Example rounding amount
 
         AddAmountField(LegalTotalObject, 'LineExtensionAmount', LineExtensionAmount, GetCurrencyCode(SalesInvoiceHeader));
         AddAmountField(LegalTotalObject, 'TaxExclusiveAmount', TaxExclusiveAmount, GetCurrencyCode(SalesInvoiceHeader));
         AddAmountField(LegalTotalObject, 'TaxInclusiveAmount', TaxInclusiveAmount, GetCurrencyCode(SalesInvoiceHeader));
-
-        if AllowanceTotalAmount > 0 then
-            AddAmountField(LegalTotalObject, 'AllowanceTotalAmount', AllowanceTotalAmount, GetCurrencyCode(SalesInvoiceHeader));
-
-        if ChargeTotalAmount > 0 then
-            AddAmountField(LegalTotalObject, 'ChargeTotalAmount', ChargeTotalAmount, GetCurrencyCode(SalesInvoiceHeader));
-
+        AddAmountField(LegalTotalObject, 'AllowanceTotalAmount', AllowanceTotalAmount, GetCurrencyCode(SalesInvoiceHeader));
+        AddAmountField(LegalTotalObject, 'ChargeTotalAmount', ChargeTotalAmount, GetCurrencyCode(SalesInvoiceHeader));
+        AddAmountField(LegalTotalObject, 'PayableRoundingAmount', PayableRoundingAmount, GetCurrencyCode(SalesInvoiceHeader));
         AddAmountField(LegalTotalObject, 'PayableAmount', PayableAmount, GetCurrencyCode(SalesInvoiceHeader));
 
         LegalTotalArray.Add(LegalTotalObject);
@@ -494,6 +601,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         TaxTotalObject: JsonObject;
         TaxSubtotalArray: JsonArray;
         TaxSubtotalObject: JsonObject;
+        TaxCategoryArray: JsonArray;
         TaxCategoryObject: JsonObject;
         TaxSchemeArray: JsonArray;
         TaxSchemeObject: JsonObject;
@@ -503,60 +611,105 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PriceObject: JsonObject;
         AllowanceChargeArray: JsonArray;
         CommodityArray: JsonArray;
+        CommodityObject: JsonObject;
+        ItemClassificationCodeArray: JsonArray;
+        ItemClassificationCodeObject: JsonObject;
         OriginCountryArray: JsonArray;
         OriginCountryObject: JsonObject;
+        IdentificationCodeArray: JsonArray;
+        IdentificationCodeObject: JsonObject;
+        DescriptionArray: JsonArray;
+        DescriptionObject: JsonObject;
+        ItemPriceExtensionArray: JsonArray;
+        ItemPriceExtensionObject: JsonObject;
         UnitCode: Code[10];
     begin
         // Line ID and quantity
         AddBasicField(LineObject, 'ID', Format(SalesInvoiceLine."Line No."));
 
-        UnitCode := GetUBLUnitCode(SalesInvoiceLine."Unit of Measure Code");
+        UnitCode := GetUBLUnitCode(SalesInvoiceLine);
         AddQuantityField(LineObject, 'InvoicedQuantity', SalesInvoiceLine.Quantity, UnitCode);
         AddAmountField(LineObject, 'LineExtensionAmount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
 
         // Line allowances/charges
         if SalesInvoiceLine."Line Discount Amount" > 0 then
-            AddLineAllowanceCharge(AllowanceChargeArray, false, 'Discount',
+            AddLineAllowanceCharge(AllowanceChargeArray, false, '',
                 SalesInvoiceLine."Line Discount %", SalesInvoiceLine."Line Discount Amount", GetCurrencyCode(CurrencyCode));
+
+        // Add a sample charge
+        // Example: Add a charge if applicable (remove hardcoded values)
+        // You can calculate the charge amount and percentage based on your business logic.
+        // For example, if you have a "Line Charge Amount" field:
+        // Removed usage of non-existent "Line Charge Amount" field.
+        // If you want to add a charge, replace the following with your own logic and field:
+        // Example:
+        // if MyChargeAmount > 0 then
+        //     AddLineAllowanceCharge(
+        //         AllowanceChargeArray,
+        //         true,
+        //         '', // Reason
+        //         0, // Percentage
+        //         MyChargeAmount,
+        //         GetCurrencyCode(CurrencyCode)
+        //     );
 
         if AllowanceChargeArray.Count > 0 then
             LineObject.Add('AllowanceCharge', AllowanceChargeArray);
 
         // Tax total for line
-        if SalesInvoiceLine."VAT %" > 0 then begin
-            AddAmountField(TaxTotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(TaxTotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
 
-            // Tax subtotal
-            AddAmountField(TaxSubtotalObject, 'TaxableAmount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
-            AddAmountField(TaxSubtotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
-            AddBasicField(TaxSubtotalObject, 'Percent', Format(SalesInvoiceLine."VAT %", 0, '<Precision,2:2><Standard Format,2>'));
+        // Tax subtotal
+        AddAmountField(TaxSubtotalObject, 'TaxableAmount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(TaxSubtotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddBasicField(TaxSubtotalObject, 'Percent', Format(SalesInvoiceLine."VAT %", 0, '<Precision,2:2><Standard Format,2>'));
 
-            // Tax category
-            AddBasicField(TaxCategoryObject, 'ID', GetTaxCategoryCode(SalesInvoiceLine."VAT %"));
+        // Tax category
+        AddBasicField(TaxCategoryObject, 'ID', SalesInvoiceLine."e-Invoice Tax Type");
+        AddBasicField(TaxCategoryObject, 'TaxExemptionReason', '');
 
-            // Tax scheme
-            AddBasicFieldWithAttributes(TaxSchemeObject, 'ID', 'OTH', 'schemeID', 'UN/ECE 5153', 'schemeAgencyID', '6');
-            TaxSchemeArray.Add(TaxSchemeObject);
-            TaxCategoryObject.Add('TaxScheme', TaxSchemeArray);
+        // Tax scheme
+        AddBasicFieldWithAttributes(TaxSchemeObject, 'ID', 'OTH', 'schemeID', 'UN/ECE 5153', 'schemeAgencyID', '6');
+        TaxSchemeArray.Add(TaxSchemeObject);
+        TaxCategoryArray.Add(TaxCategoryObject);
+        TaxCategoryObject.Add('TaxScheme', TaxSchemeArray);
 
-            TaxSubtotalObject.Add('TaxCategory', TaxCategoryObject);
-            TaxSubtotalArray.Add(TaxSubtotalObject);
-            TaxTotalObject.Add('TaxSubtotal', TaxSubtotalArray);
+        TaxSubtotalArray.Add(TaxSubtotalObject);
+        TaxSubtotalObject.Add('TaxCategory', TaxCategoryArray);
+        TaxTotalObject.Add('TaxSubtotal', TaxSubtotalArray);
 
-            TaxTotalArray.Add(TaxTotalObject);
-            LineObject.Add('TaxTotal', TaxTotalArray);
-        end;
+        TaxTotalArray.Add(TaxTotalObject);
+        LineObject.Add('TaxTotal', TaxTotalArray);
 
         // Item information
-        AddBasicField(ItemObject, 'Description', SalesInvoiceLine.Description);
+        // Commodity classification
+        ItemClassificationCodeObject.Add('_', GetHSCode(SalesInvoiceLine));
+        ItemClassificationCodeObject.Add('listID', 'PTC');
+        ItemClassificationCodeArray.Add(ItemClassificationCodeObject);
+        CommodityObject.Add('ItemClassificationCode', ItemClassificationCodeArray);
+        CommodityArray.Add(CommodityObject);
 
-        // Commodity classification (optional)
-        AddCommodityClassification(CommodityArray, GetHSCode(SalesInvoiceLine), 'PTC');
-        if CommodityArray.Count > 0 then
-            ItemObject.Add('CommodityClassification', CommodityArray);
+        // Add second commodity classification
+        Clear(CommodityObject);
+        Clear(ItemClassificationCodeArray);
+        Clear(ItemClassificationCodeObject);
+        ItemClassificationCodeObject.Add('_', '003');
+        ItemClassificationCodeObject.Add('listID', 'CLASS');
+        ItemClassificationCodeArray.Add(ItemClassificationCodeObject);
+        CommodityObject.Add('ItemClassificationCode', ItemClassificationCodeArray);
+        CommodityArray.Add(CommodityObject);
 
-        // Origin country (optional)
-        AddBasicField(OriginCountryObject, 'IdentificationCode', 'MYS');
+        ItemObject.Add('CommodityClassification', CommodityArray);
+
+        // Description
+        DescriptionObject.Add('_', SalesInvoiceLine.Description);
+        DescriptionArray.Add(DescriptionObject);
+        ItemObject.Add('Description', DescriptionArray);
+
+        // Origin country
+        IdentificationCodeObject.Add('_', GetOriginCountryCode(SalesInvoiceLine));
+        IdentificationCodeArray.Add(IdentificationCodeObject);
+        OriginCountryObject.Add('IdentificationCode', IdentificationCodeArray);
         OriginCountryArray.Add(OriginCountryObject);
         ItemObject.Add('OriginCountry', OriginCountryArray);
 
@@ -567,6 +720,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddAmountField(PriceObject, 'PriceAmount', SalesInvoiceLine."Unit Price", GetCurrencyCode(CurrencyCode));
         PriceArray.Add(PriceObject);
         LineObject.Add('Price', PriceArray);
+
+        // Item price extension
+        AddAmountField(ItemPriceExtensionObject, 'Amount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        ItemPriceExtensionArray.Add(ItemPriceExtensionObject);
+        LineObject.Add('ItemPriceExtension', ItemPriceExtensionArray);
 
         LineArray.Add(LineObject);
     end;
@@ -650,6 +808,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             IDArray.Add(IDValueObject);
             IDObject.Add('ID', IDArray);
             PartyIdentificationArray.Add(IDObject);
+        end else begin
+            // Add NA for missing values as per sample
+            IDValueObject.Add('_', 'NA');
+            IDValueObject.Add('schemeID', SchemeID);
+            IDArray.Add(IDValueObject);
+            IDObject.Add('ID', IDArray);
+            PartyIdentificationArray.Add(IDObject);
         end;
     end;
 
@@ -665,6 +830,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             Clear(LineValueObject);
             LineValueObject.Add('_', Address1);
             LineArray.Add(LineValueObject);
+            Clear(LineObject);
             LineObject.Add('Line', LineArray);
             AddressLineArray.Add(LineObject);
         end;
@@ -712,23 +878,35 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     local procedure AddLineAllowanceCharge(var AllowanceChargeArray: JsonArray; IsCharge: Boolean; Reason: Text; Percentage: Decimal; Amount: Decimal; CurrencyCode: Text)
     var
         AllowanceCharge: JsonObject;
+        ChargeIndicatorArray: JsonArray;
+        ChargeIndicatorObject: JsonObject;
+        AllowanceChargeReasonArray: JsonArray;
+        AllowanceChargeReasonObject: JsonObject;
+        MultiplierFactorArray: JsonArray;
+        MultiplierFactorObject: JsonObject;
+        AmountArray: JsonArray;
+        AmountObject: JsonObject;
     begin
-        AddBasicField(AllowanceCharge, 'ChargeIndicator', Format(IsCharge));
-        AddBasicField(AllowanceCharge, 'AllowanceChargeReason', Reason);
-        if Percentage > 0 then
-            AddBasicField(AllowanceCharge, 'MultiplierFactorNumeric', Format(Percentage / 100, 0, '<Precision,2:2><Standard Format,2>'));
-        AddAmountField(AllowanceCharge, 'Amount', Amount, CurrencyCode);
-        AllowanceChargeArray.Add(AllowanceCharge);
-    end;
+        ChargeIndicatorObject.Add('_', IsCharge);
+        ChargeIndicatorArray.Add(ChargeIndicatorObject);
+        AllowanceCharge.Add('ChargeIndicator', ChargeIndicatorArray);
 
-    local procedure AddCommodityClassification(var CommodityArray: JsonArray; Code: Text; ListID: Text)
-    var
-        ClassificationObject: JsonObject;
-    begin
-        if Code <> '' then begin
-            AddFieldWithAttribute(ClassificationObject, 'ItemClassificationCode', Code, 'listID', ListID);
-            CommodityArray.Add(ClassificationObject);
+        AllowanceChargeReasonObject.Add('_', Reason);
+        AllowanceChargeReasonArray.Add(AllowanceChargeReasonObject);
+        AllowanceCharge.Add('AllowanceChargeReason', AllowanceChargeReasonArray);
+
+        if Percentage > 0 then begin
+            MultiplierFactorObject.Add('_', Percentage / 100);
+            MultiplierFactorArray.Add(MultiplierFactorObject);
+            AllowanceCharge.Add('MultiplierFactorNumeric', MultiplierFactorArray);
         end;
+
+        AmountObject.Add('_', Amount);
+        AmountObject.Add('currencyID', CurrencyCode);
+        AmountArray.Add(AmountObject);
+        AllowanceCharge.Add('Amount', AmountArray);
+
+        AllowanceChargeArray.Add(AllowanceCharge);
     end;
 
     // Business logic helper functions (customize these based on your setup)
@@ -748,67 +926,52 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             exit(CurrencyCode);
     end;
 
-    local procedure GetUBLUnitCode(UOM: Code[10]): Code[10]
+    local procedure GetUBLUnitCode(SalesInvoiceLine: Record "Sales Invoice Line"): Code[10]
     begin
-        case UpperCase(UOM) of
-            'PCS', 'PC', 'PIECE':
-                exit('C62');
-            'BOX':
-                exit('BX');
-            'KG', 'KILOGRAM':
-                exit('KGM');
-            'L', 'LITER', 'LITRE':
-                exit('LTR');
-            'M', 'METER', 'METRE':
-                exit('MTR');
-            'SET':
-                exit('SET');
-            'PKT', 'PACKET':
-                exit('PK');
-            'HOUR', 'HR':
-                exit('HUR');
-            else
-                exit('C62'); // Default to pieces
-        end;
+        // Return the UBL unit code directly from the e-Invoice UOM field
+        if SalesInvoiceLine."e-Invoice UOM" <> '' then
+            exit(SalesInvoiceLine."e-Invoice UOM")
+        else
+            exit('EA'); // Default to pieces if empty
     end;
 
     local procedure GetStateCode(County: Text): Text
     begin
         case County of
-            'Johor':
+            'JOHOR':
                 exit('01');
-            'Kedah':
+            'KEDAH', 'SUNGAI PETANI':
                 exit('02');
-            'Kelantan':
+            'KELANTAN':
                 exit('03');
-            'Melaka', 'Malacca':
+            'MELAKA', 'MALACCA':
                 exit('04');
-            'Negeri Sembilan':
+            'NEGERI SEMBILAN', 'SEREMBAN', 'NILAI':
                 exit('05');
-            'Pahang':
+            'PAHANG':
                 exit('06');
-            'Pulau Pinang', 'Penang':
+            'PULAU PINANG', 'PENANG':
                 exit('07');
-            'Perak':
+            'PERAK':
                 exit('08');
-            'Perlis':
+            'PERLIS':
                 exit('09');
-            'Selangor':
+            'SELANGOR':
                 exit('10');
-            'Terengganu':
+            'TERENGGANU':
                 exit('11');
-            'Sabah':
+            'SABAH':
                 exit('12');
-            'Sarawak':
+            'SARAWAK', 'KUCHING':
                 exit('13');
-            'Wilayah Persekutuan Kuala Lumpur', 'Kuala Lumpur':
+            'WILAYAH PERSEKUTUAN KUALA LUMPUR', 'KUALA LUMPUR':
                 exit('14');
-            'Wilayah Persekutuan Labuan', 'Labuan':
+            'WILAYAH PERSEKUTUAN LABUAN', 'LABUAN':
                 exit('15');
-            'Wilayah Persekutuan Putrajaya', 'Putrajaya':
+            'WILAYAH PERSEKUTUAN PUTRAJAYA', 'PUTRAJAYA':
                 exit('16');
             else
-                exit('14'); // Default to KL
+                exit('17'); // Default to Not Applicable
         end;
     end;
 
@@ -820,39 +983,58 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit('MYS'); // Default to Malaysia
     end;
 
-    local procedure GetTaxCategoryCode(VATPercent: Decimal): Code[10]
+    local procedure GetTaxCategoryCode(eInvoiceTaxCategoryCode: Code[10]): Code[10]
     begin
-        case VATPercent of
-            0:
-                exit('E'); // Exempt
-            6:
-                exit('01'); // Standard rate
-            else
-                exit('01'); // Default to standard
-        end;
+        // Return the tax category code directly from the e-Invoice Tax Category Code field
+        if eInvoiceTaxCategoryCode <> '' then
+            exit(eInvoiceTaxCategoryCode)
+        else
+            exit('01'); // Default to standard rate if empty
     end;
 
     local procedure GetMSICCode(): Text
+    var
+        CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC code - customize this
-        exit('46510');
+        CompanyInformation.Get();
+        exit(CompanyInformation."MSIC Code");
     end;
 
     local procedure GetMSICDescription(): Text
+    var
+        CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC description - customize this
-        exit('Wholesale of computer hardware, software and peripherals');
+        CompanyInformation.Get();
+        exit(CompanyInformation."Business Activity Description")
+    end;
+
+    local procedure GetCertificationID(): Text
+    begin
+        // Return your certification ID (e.g., CertEX ID)
+        exit('');
     end;
 
     local procedure GetSSTNumber(): Text
+    var
+        CompanyInformation: Record "Company Information";
     begin
-        // Return SST registration number if applicable
+        if CompanyInformation.Get() then begin
+            if CompanyInformation."VAT Registration No." <> '' then
+                exit(CompanyInformation."VAT Registration No.");
+        end;
         exit('NA');
     end;
 
     local procedure GetTTXNumber(): Text
+    var
+        CompanyInformation: Record "Company Information";
     begin
-        // Return Tourism Tax registration number if applicable
+        if CompanyInformation.Get() then begin
+            if CompanyInformation."TTX No." <> '' then
+                exit(CompanyInformation."TTX No.");
+        end;
         exit('NA');
     end;
 
@@ -869,32 +1051,70 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     local procedure GetBankAccountNumber(): Text
+    var
+        CompanyInformation: Record "Company Information";
+        BankAccount: Record "Bank Account";
     begin
-        // Return your bank account number for payments
-        exit('1234567890123');
+        // Get the company's bank account number for payments
+        if CompanyInformation.Get() then begin
+            // Find the first bank account or use a specific one based on your setup
+            BankAccount.SetRange(Blocked, false);
+            if BankAccount.FindFirst() then
+                exit(BankAccount."No.");
+        end;
+        exit(''); // Return empty if not found
     end;
 
-    local procedure GetPaymentTermsNote(): Text
+    local procedure GetPaymentTermsNote(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
+    var
+        PaymentTerms: Record "Payment Terms";
+        CompanyInformation: Record "Company Information";
     begin
-        // Return payment terms description
-        exit('Payment due within 30 days');
+        // Return payment terms description based on Payment Terms Code from Company Information
+        if CompanyInformation.Get() then
+            if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then
+                exit(PaymentTerms.Description);
+        exit('');
     end;
 
     local procedure GetHSCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
     begin
-        // Return HS code for the item - customize based on your item setup
-        exit('9800.00.0010');
+        // Return the HS code directly from the e-Invoice Classification field
+        if SalesInvoiceLine."e-Invoice Classification" <> '' then
+            exit(SalesInvoiceLine."e-Invoice Classification")
+        else
+            exit('022'); // Default HS code if empty
     end;
 
     local procedure HasPrepaidAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
     begin
         // Check if there are any prepaid amounts
-        exit(false);
+        exit(GetPrepaidAmount(SalesInvoiceHeader) > 0);
     end;
 
     local procedure GetPrepaidAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Decimal
     begin
-        // Return prepaid amount if any
-        exit(0);
+        // Return prepaid amount if any - customize based on your business logic
+        exit(1); // Example amount
+    end;
+
+    local procedure GetOriginCountryCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
+    var
+        Item: Record Item;
+        CompanyInformation: Record "Company Information";
+    begin
+        // Try to get from item first
+        if SalesInvoiceLine.Type = SalesInvoiceLine.Type::Item then begin
+            if Item.Get(SalesInvoiceLine."No.") then begin
+                // If you have a country of origin field on Item table, use it
+                // exit(Item."Country of Origin Code");
+            end;
+        end;
+
+        // Fallback to company information
+        if CompanyInformation.Get() then
+            exit(GetCountryCode(CompanyInformation."e-Invoice Country Code"));
+
+        exit('MYS'); // Default to Malaysia
     end;
 }
