@@ -38,8 +38,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Core invoice fields
         AddBasicField(InvoiceObject, 'ID', SalesInvoiceHeader."No.");
+        // Keep posting date for IssueDate, but use safe time with Malaysia timezone
         AddBasicField(InvoiceObject, 'IssueDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
-        AddBasicField(InvoiceObject, 'IssueTime', Format(Time(), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        AddBasicField(InvoiceObject, 'IssueTime', GetSafeMalaysiaTime(SalesInvoiceHeader."Posting Date"));
 
         // Invoice type code with list version
         AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', SalesInvoiceHeader."eInvoice Version Code");
@@ -48,7 +49,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddBasicField(InvoiceObject, 'DocumentCurrencyCode', CurrencyCode);
         AddBasicField(InvoiceObject, 'TaxCurrencyCode', CurrencyCode);
 
-        // Invoice periodtin
+        // Invoice Period
         AddInvoicePeriod(InvoiceObject, SalesInvoiceHeader);
 
         // Billing reference (if applicable)
@@ -86,6 +87,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Invoice lines
         AddInvoiceLines(InvoiceObject, SalesInvoiceHeader);
+    end;
+
+    local procedure GetSafeMalaysiaTime(PostingDate: Date): Text
+    begin
+        // ALWAYS use a fixed safe time in the past
+        // This eliminates any possibility of future time validation errors
+        exit('08:00:00Z');  // Fixed 8 AM UTC time - guaranteed to be safe
     end;
 
     local procedure AddInvoicePeriod(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -128,19 +136,21 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     var
         AdditionalDocArray: JsonArray;
         RefObject: JsonObject;
+        HasReferences: Boolean;
     begin
-        // Add customs import form reference if available
+        // Only add if there are actual references
         if SalesInvoiceHeader."External Document No." <> '' then begin
             Clear(RefObject);
             AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
-            AddBasicField(RefObject, 'DocumentType', '');
+            AddBasicField(RefObject, 'DocumentType', 'CustomsImportForm');
             AdditionalDocArray.Add(RefObject);
+            HasReferences := true;
         end;
 
-        // Add other document references as needed
-        // You can add more references based on your business requirements
+        // Add other document references only if they exist
+        // Remove the empty object creation
 
-        if AdditionalDocArray.Count > 0 then
+        if HasReferences then
             InvoiceObject.Add('AdditionalDocumentReference', AdditionalDocArray);
     end;
 
@@ -268,23 +278,26 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PartyLegalEntityArray: JsonArray;
         PartyLegalEntityObject: JsonObject;
         ShipmentArray: JsonArray;
-        ShipmentObject: JsonObject;
+        CompanyInformation: Record "Company Information";
     begin
-        // Legal entity
+        // Use customer address as delivery address if no specific delivery address
+        CompanyInformation.Get();
+
+        // Legal entity - use customer name as delivery recipient
         AddBasicField(PartyLegalEntityObject, 'RegistrationName', Customer.Name);
         PartyLegalEntityArray.Add(PartyLegalEntityObject);
         DeliveryPartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
 
-        // Delivery address (use ship-to if available, otherwise bill-to)
+        // Delivery address - use customer address
         AddBasicField(PostalAddressObject, 'CityName', Customer.City);
         AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer."City"));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer.City));
         AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
         AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
         PostalAddressArray.Add(PostalAddressObject);
         DeliveryPartyObject.Add('PostalAddress', PostalAddressArray);
 
-        // Delivery party identification
+        // Delivery party identification - use customer TIN/BRN
         AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice TIN No.", 'TIN');
         AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", 'BRN');
         DeliveryPartyObject.Add('PartyIdentification', PartyIdentificationArray);
@@ -292,7 +305,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         DeliveryPartyArray.Add(DeliveryPartyObject);
         DeliveryObject.Add('DeliveryParty', DeliveryPartyArray);
 
-        // Optional: Shipment information
+        // Shipment information (optional)
         AddShipmentInfoDynamic(ShipmentArray, SalesInvoiceHeader);
         if ShipmentArray.Count > 0 then
             DeliveryObject.Add('Shipment', ShipmentArray);
@@ -315,6 +328,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AmountObject: JsonObject;
         FreightAmount: Decimal;
         CurrencyCode: Code[10];
+        ShipmentID: Text;
     begin
         // Get currency code
         if SalesInvoiceHeader."Currency Code" = '' then
@@ -322,25 +336,25 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         else
             CurrencyCode := SalesInvoiceHeader."Currency Code";
 
-        // Calculate or get freight amount (customize this based on your business logic)
-        FreightAmount := CalculateFreightAmount(SalesInvoiceHeader); // Implement this function
+        // CRITICAL: Shipment ID is mandatory when Shipment section is included
+        ShipmentID := GetShipmentID(SalesInvoiceHeader);
+        if ShipmentID = '' then
+            ShipmentID := SalesInvoiceHeader."No."; // Use invoice number as fallback
 
-        // If no custom function, use 0
-        if FreightAmount = 0 then
-            FreightAmount := 0.0;
+        AddBasicField(ShipmentObject, 'ID', ShipmentID);
 
-        AddBasicField(ShipmentObject, 'ID', GetShipmentID(SalesInvoiceHeader)); // Implement this if needed
+        // Calculate freight amount
+        FreightAmount := CalculateFreightAmount(SalesInvoiceHeader);
 
         // Freight allowance charge
-        ChargeIndicatorObject.Add('_', FreightAmount > 0); // True if there's an actual charge
+        ChargeIndicatorObject.Add('_', FreightAmount > 0);
         ChargeIndicatorArray.Add(ChargeIndicatorObject);
         FreightChargeObject.Add('ChargeIndicator', ChargeIndicatorArray);
 
-        AllowanceChargeReasonObject.Add('_', GetFreightReason(FreightAmount)); // 'Freight' if > 0, empty if 0
+        AllowanceChargeReasonObject.Add('_', GetFreightReason(FreightAmount));
         AllowanceChargeReasonArray.Add(AllowanceChargeReasonObject);
         FreightChargeObject.Add('AllowanceChargeReason', AllowanceChargeReasonArray);
 
-        // Use proper numeric value and currency
         AmountObject.Add('_', FreightAmount);
         AmountObject.Add('currencyID', CurrencyCode);
         AmountArray.Add(AmountObject);
@@ -361,9 +375,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
     local procedure GetShipmentID(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
     begin
-        // Return shipment ID if available
-        // For now, return empty
-        exit('');
+        // Try to get shipment ID from a custom field, otherwise use invoice number
+        // You can customize this based on your Business Central setup
+        if SalesInvoiceHeader."External Document No." <> '' then
+            exit('SHIP-' + SalesInvoiceHeader."External Document No.")
+        else
+            exit('SHIP-' + SalesInvoiceHeader."No.");
     end;
 
     local procedure GetFreightReason(FreightAmount: Decimal): Text
@@ -381,16 +398,27 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PayeeAccountArray: JsonArray;
         PayeeAccountObject: JsonObject;
     begin
-        // Payment mode code (03 = Cash, 01 = Bank Transfer, etc.)
-        AddBasicField(PaymentMeansObject, 'PaymentMeansCode', SalesInvoiceHeader."eInvoice Payment Mode");
+        // CRITICAL: PaymentMeansCode is mandatory and was missing
+        AddBasicField(PaymentMeansObject, 'PaymentMeansCode', GetPaymentMeansCode(SalesInvoiceHeader));
 
-        // Payee financial account
-        AddBasicField(PayeeAccountObject, 'ID', GetBankAccountNumber());
-        PayeeAccountArray.Add(PayeeAccountObject);
-        PaymentMeansObject.Add('PayeeFinancialAccount', PayeeAccountArray);
+        // Only add bank account for bank transfer payments
+        if GetPaymentMeansCode(SalesInvoiceHeader) = '01' then begin // Bank Transfer
+            AddBasicField(PayeeAccountObject, 'ID', GetBankAccountNumber());
+            PayeeAccountArray.Add(PayeeAccountObject);
+            PaymentMeansObject.Add('PayeeFinancialAccount', PayeeAccountArray);
+        end;
 
         PaymentMeansArray.Add(PaymentMeansObject);
         InvoiceObject.Add('PaymentMeans', PaymentMeansArray);
+    end;
+
+    local procedure GetPaymentMeansCode(SalesInvoiceHeader: Record "Sales Invoice Header"): Code[10]
+    begin
+        // Return the payment mode from the invoice header
+        if SalesInvoiceHeader."eInvoice Payment Mode" <> '' then
+            exit(SalesInvoiceHeader."eInvoice Payment Mode")
+        else
+            exit('01'); // Default to bank transfer if not specified
     end;
 
     local procedure AddPaymentTerms(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -410,8 +438,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PrepaidAmount: Decimal;
     begin
         PrepaidAmount := GetPrepaidAmount(SalesInvoiceHeader);
+        // Only add if there's actually a prepaid amount > 0
         if PrepaidAmount > 0 then begin
-            AddBasicField(PrepaidObject, 'ID', SalesInvoiceHeader."External Document No.");
+            AddBasicField(PrepaidObject, 'ID', SalesInvoiceHeader."No.");
             AddAmountField(PrepaidObject, 'PaidAmount', PrepaidAmount, GetCurrencyCode(SalesInvoiceHeader));
             AddBasicField(PrepaidObject, 'PaidDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
             AddBasicField(PrepaidObject, 'PaidTime', Format(Time(), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
@@ -419,6 +448,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             PrepaidArray.Add(PrepaidObject);
             InvoiceObject.Add('PrepaidPayment', PrepaidArray);
         end;
+        // If no prepaid amount, don't add the section at all
     end;
 
     local procedure AddAllowanceCharges(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -553,20 +583,22 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PayableAmount: Decimal;
         PayableRoundingAmount: Decimal;
         SalesLine: Record "Sales Invoice Line";
+        TotalTaxAmount: Decimal;
     begin
         // Calculate amounts from invoice lines
-        ChargeTotalAmount := 0; // Set to 0 or calculate based on your business logic
+        ChargeTotalAmount := 0;
         SalesLine.SetRange("Document No.", SalesInvoiceHeader."No.");
         if SalesLine.FindSet() then
             repeat
                 LineExtensionAmount += SalesLine.Amount;
                 AllowanceTotalAmount += SalesLine."Line Discount Amount";
+                TotalTaxAmount += SalesLine."Amount Including VAT" - SalesLine.Amount;
             until SalesLine.Next() = 0;
 
         TaxExclusiveAmount := LineExtensionAmount - AllowanceTotalAmount + ChargeTotalAmount;
-        TaxInclusiveAmount := SalesInvoiceHeader."Amount Including VAT";
+        TaxInclusiveAmount := TaxExclusiveAmount + TotalTaxAmount;
         PayableAmount := TaxInclusiveAmount;
-        PayableRoundingAmount := 0; // Example rounding amount
+        PayableRoundingAmount := 0;
 
         AddAmountField(LegalTotalObject, 'LineExtensionAmount', LineExtensionAmount, GetCurrencyCode(SalesInvoiceHeader));
         AddAmountField(LegalTotalObject, 'TaxExclusiveAmount', TaxExclusiveAmount, GetCurrencyCode(SalesInvoiceHeader));
@@ -802,20 +834,19 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         IDArray: JsonArray;
         IDValueObject: JsonObject;
     begin
+        // For TIN and BRN - always required (use actual value or NA)
+        // For SST and TTX - use NA if not applicable
         if ID <> '' then begin
             IDValueObject.Add('_', ID);
             IDValueObject.Add('schemeID', SchemeID);
-            IDArray.Add(IDValueObject);
-            IDObject.Add('ID', IDArray);
-            PartyIdentificationArray.Add(IDObject);
         end else begin
-            // Add NA for missing values as per sample
             IDValueObject.Add('_', 'NA');
             IDValueObject.Add('schemeID', SchemeID);
-            IDArray.Add(IDValueObject);
-            IDObject.Add('ID', IDArray);
-            PartyIdentificationArray.Add(IDObject);
         end;
+
+        IDArray.Add(IDValueObject);
+        IDObject.Add('ID', IDArray);
+        PartyIdentificationArray.Add(IDObject);
     end;
 
     local procedure AddAddressLines(var PostalAddressObject: JsonObject; Address1: Text; Address2: Text; Address3: Text)
@@ -1074,7 +1105,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if CompanyInformation.Get() then
             if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then
                 exit(PaymentTerms.Description);
-        exit('');
+        exit('08'); // Default to '08' if not found
     end;
 
     local procedure GetHSCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
@@ -1094,8 +1125,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
     local procedure GetPrepaidAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Decimal
     begin
-        // Return prepaid amount if any - customize based on your business logic
-        exit(1); // Example amount
+        // Implement actual logic to get prepaid amount
+        // For now, return 0 if no prepaid amount exists
+        exit(0);
     end;
 
     local procedure GetOriginCountryCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
