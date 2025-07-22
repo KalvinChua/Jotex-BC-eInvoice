@@ -93,7 +93,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     begin
         // ALWAYS use a fixed safe time in the past
         // This eliminates any possibility of future time validation errors
-        exit('08:00:00Z');  // Fixed 8 AM UTC time - guaranteed to be safe
+        exit('00:00:00Z');  // Fixed 8 AM UTC time - guaranteed to be safe
     end;
 
     local procedure AddInvoicePeriod(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -142,7 +142,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if SalesInvoiceHeader."External Document No." <> '' then begin
             Clear(RefObject);
             AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
-            AddBasicField(RefObject, 'DocumentType', 'CustomsImportForm');
+            AddBasicField(RefObject, 'DocumentType', '');
             AdditionalDocArray.Add(RefObject);
             HasReferences := true;
         end;

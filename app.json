@@ -2,7 +2,7 @@
   "id": "00589286-aed1-4955-b101-bf31aa75c5c3",
   "name": "KMAXDev",
   "publisher": "KMAX",
-  "version": "1.0.0.25",
+  "version": "1.0.0.26",
   "brief": "e-Invoice integration with MyInvois Malaysia",
   "description": "Full integration with MyInvois API for e-Invoicing compliance",
   "privacyStatement": "",
@@ -15,7 +15,7 @@
            "id": "e41c95d1-d093-45cf-a32e-7e3c52721a20",
            "name": "SalesPurchaseReport",
            "publisher": "Evopoint Izzat",
-           "version": "1.0.0.96"
+           "version": "1.0.0.97"
           }
   ],
   "screenshots": [],
