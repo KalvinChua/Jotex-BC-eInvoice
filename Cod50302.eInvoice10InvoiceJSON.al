@@ -3,9 +3,25 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     procedure GenerateEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header") JsonText: Text
     var
         JsonObject: JsonObject;
+        StartTime: DateTime;
     begin
+        StartTime := CurrentDateTime;
+
+        // Validate input
+        if SalesInvoiceHeader."No." = '' then
+            Error('Sales Invoice Header cannot be empty');
+
         JsonObject := BuildEInvoiceJson(SalesInvoiceHeader);
         JsonObject.WriteTo(JsonText);
+
+        // Validate output
+        if JsonText = '' then
+            Error('Failed to generate JSON for invoice %1', SalesInvoiceHeader."No.");
+
+        // Log completion
+        // Message('eInvoice JSON generated for %1 in %2 ms', 
+        //     SalesInvoiceHeader."No.", 
+        //     CurrentDateTime - StartTime);
     end;
 
     local procedure BuildEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header") JsonObject: JsonObject
@@ -30,6 +46,14 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         CompanyInformation: Record "Company Information";
         CurrencyCode: Code[10];
     begin
+        // Validate mandatory fields
+        if SalesInvoiceHeader."No." = '' then
+            Error('Invoice number is required');
+        if SalesInvoiceHeader."Bill-to Customer No." = '' then
+            Error('Bill-to Customer No. is required for invoice %1', SalesInvoiceHeader."No.");
+        if SalesInvoiceHeader."Posting Date" = 0D then
+            Error('Posting Date is required for invoice %1', SalesInvoiceHeader."No.");
+
         // Get currency code
         if SalesInvoiceHeader."Currency Code" = '' then
             CurrencyCode := 'MYR'
@@ -38,8 +62,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Core invoice fields
         AddBasicField(InvoiceObject, 'ID', SalesInvoiceHeader."No.");
-        // Keep posting date for IssueDate, but use safe time with Malaysia timezone
-        AddBasicField(InvoiceObject, 'IssueDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+        // CRITICAL COMPLIANCE: LHDN requires CURRENT date, not posting date
+        // Per documentation: "Date of issuance of the e-Invoice *Note that the date must be the current date in the UTC timezone"
+        AddBasicField(InvoiceObject, 'IssueDate', Format(Today(), 0, '<Year4>-<Month,2>-<Day,2>'));
         AddBasicField(InvoiceObject, 'IssueTime', GetSafeMalaysiaTime(SalesInvoiceHeader."Posting Date"));
 
         // Invoice type code with list version
@@ -48,6 +73,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         // Currency codes
         AddBasicField(InvoiceObject, 'DocumentCurrencyCode', CurrencyCode);
         AddBasicField(InvoiceObject, 'TaxCurrencyCode', CurrencyCode);
+
+        // MANDATORY: Currency exchange rate for non-MYR currencies
+        if CurrencyCode <> 'MYR' then
+            AddTaxExchangeRate(InvoiceObject, SalesInvoiceHeader, CurrencyCode);
 
         // Invoice Period
         AddInvoicePeriod(InvoiceObject, SalesInvoiceHeader);
@@ -59,10 +88,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddAdditionalDocumentReferences(InvoiceObject, SalesInvoiceHeader);
 
         // Party information
-        CompanyInformation.Get();
+        if not CompanyInformation.Get() then
+            Error('Company Information not found');
         AddAccountingSupplierParty(InvoiceObject, CompanyInformation);
 
-        Customer.Get(SalesInvoiceHeader."Bill-to Customer No.");
+        if not Customer.Get(SalesInvoiceHeader."Bill-to Customer No.") then
+            Error('Customer %1 not found', SalesInvoiceHeader."Bill-to Customer No.");
         AddAccountingCustomerParty(InvoiceObject, Customer);
 
         // Delivery and shipment
@@ -87,13 +118,21 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Invoice lines
         AddInvoiceLines(InvoiceObject, SalesInvoiceHeader);
+
+        // CRITICAL: Add mandatory digital signature (required by LHDN)
+        AddDigitalSignature(InvoiceObject, SalesInvoiceHeader);
     end;
 
     local procedure GetSafeMalaysiaTime(PostingDate: Date): Text
+    var
+        CurrentTime: Time;
+        TimeText: Text;
     begin
-        // ALWAYS use a fixed safe time in the past
-        // This eliminates any possibility of future time validation errors
-        exit('00:00:00Z');  // Fixed 8 AM UTC time - guaranteed to be safe
+        // CRITICAL COMPLIANCE: LHDN requires CURRENT time, not fixed time
+        // Per documentation: "Time of issuance of the e-Invoice *Note that the time must be the current time"
+        CurrentTime := Time();
+        TimeText := Format(CurrentTime, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z');
+        exit(TimeText);
     end;
 
     local procedure AddInvoicePeriod(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -205,8 +244,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         PartyLegalEntityArray.Add(PartyLegalEntityObject);
         PartyObject.Add('PartyLegalEntity', PartyLegalEntityArray);
 
-        // Contact information
+        // MANDATORY: Contact information per LHDN spec
+        if CompanyInfo."Phone No." = '' then
+            Error('Company phone number is mandatory for eInvoice compliance');
         AddBasicField(ContactObject, 'Telephone', CompanyInfo."Phone No.");
+
+        if CompanyInfo."e-Invoice Email" = '' then
+            Error('Company email is mandatory for eInvoice compliance');
         AddBasicField(ContactObject, 'ElectronicMail', CompanyInfo."e-Invoice Email");
         ContactArray.Add(ContactObject);
         PartyObject.Add('Contact', ContactArray);
@@ -253,7 +297,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddPartyIdentification(PartyIdentificationArray, '', 'TTX');
         PartyObject.Add('PartyIdentification', PartyIdentificationArray);
 
-        // Contact information
+        // MANDATORY: Contact information per LHDN spec
+        if Customer."Phone No." = '' then
+            Error('Customer phone number is mandatory for eInvoice compliance. Customer: %1', Customer."No.");
         AddBasicField(ContactObject, 'Telephone', Customer."Phone No.");
         AddBasicField(ContactObject, 'ElectronicMail', Customer."E-Mail");
         ContactArray.Add(ContactObject);
@@ -661,12 +707,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         UnitCode := GetUBLUnitCode(SalesInvoiceLine);
         AddQuantityField(LineObject, 'InvoicedQuantity', SalesInvoiceLine.Quantity, UnitCode);
-        AddAmountField(LineObject, 'LineExtensionAmount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(LineObject, 'LineExtensionAmount', SalesInvoiceLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
 
         // Line allowances/charges
         if SalesInvoiceLine."Line Discount Amount" > 0 then
             AddLineAllowanceCharge(AllowanceChargeArray, false, '',
-                SalesInvoiceLine."Line Discount %", SalesInvoiceLine."Line Discount Amount", GetCurrencyCode(CurrencyCode));
+                SalesInvoiceLine."Line Discount %", SalesInvoiceLine."Line Discount Amount", GetCurrencyCodeFromText(CurrencyCode));
 
         // Add a sample charge
         // Example: Add a charge if applicable (remove hardcoded values)
@@ -689,11 +735,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             LineObject.Add('AllowanceCharge', AllowanceChargeArray);
 
         // Tax total for line
-        AddAmountField(TaxTotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(TaxTotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
 
         // Tax subtotal
-        AddAmountField(TaxSubtotalObject, 'TaxableAmount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
-        AddAmountField(TaxSubtotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(TaxSubtotalObject, 'TaxableAmount', SalesInvoiceLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
+        AddAmountField(TaxSubtotalObject, 'TaxAmount', SalesInvoiceLine."Amount Including VAT" - SalesInvoiceLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
         AddBasicField(TaxSubtotalObject, 'Percent', Format(SalesInvoiceLine."VAT %", 0, '<Precision,2:2><Standard Format,2>'));
 
         // Tax category
@@ -714,18 +760,18 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         LineObject.Add('TaxTotal', TaxTotalArray);
 
         // Item information
-        // Commodity classification
+        // MANDATORY: Product Tariff Code (PTC) - FIRST classification
         ItemClassificationCodeObject.Add('_', GetHSCode(SalesInvoiceLine));
         ItemClassificationCodeObject.Add('listID', 'PTC');
         ItemClassificationCodeArray.Add(ItemClassificationCodeObject);
         CommodityObject.Add('ItemClassificationCode', ItemClassificationCodeArray);
         CommodityArray.Add(CommodityObject);
 
-        // Add second commodity classification
+        // MANDATORY: Classification Code (CLASS) - SECOND classification  
         Clear(CommodityObject);
         Clear(ItemClassificationCodeArray);
         Clear(ItemClassificationCodeObject);
-        ItemClassificationCodeObject.Add('_', '003');
+        ItemClassificationCodeObject.Add('_', GetClassificationCode(SalesInvoiceLine));
         ItemClassificationCodeObject.Add('listID', 'CLASS');
         ItemClassificationCodeArray.Add(ItemClassificationCodeObject);
         CommodityObject.Add('ItemClassificationCode', ItemClassificationCodeArray);
@@ -749,16 +795,64 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         LineObject.Add('Item', ItemArray);
 
         // Price
-        AddAmountField(PriceObject, 'PriceAmount', SalesInvoiceLine."Unit Price", GetCurrencyCode(CurrencyCode));
+        AddAmountField(PriceObject, 'PriceAmount', SalesInvoiceLine."Unit Price", GetCurrencyCodeFromText(CurrencyCode));
         PriceArray.Add(PriceObject);
         LineObject.Add('Price', PriceArray);
 
         // Item price extension
-        AddAmountField(ItemPriceExtensionObject, 'Amount', SalesInvoiceLine.Amount, GetCurrencyCode(CurrencyCode));
+        AddAmountField(ItemPriceExtensionObject, 'Amount', SalesInvoiceLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
         ItemPriceExtensionArray.Add(ItemPriceExtensionObject);
         LineObject.Add('ItemPriceExtension', ItemPriceExtensionArray);
 
         LineArray.Add(LineObject);
+    end;
+
+    local procedure AddDigitalSignature(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
+    var
+        SignatureArray: JsonArray;
+        SignatureObject: JsonObject;
+        DigitalSignatureArray: JsonArray;
+        DigitalSignatureObject: JsonObject;
+        SignedPropertiesArray: JsonArray;
+        SignedPropertiesObject: JsonObject;
+    begin
+        // MANDATORY: Digital signature as per LHDN requirement
+        // This is a placeholder structure - implement actual signing logic
+        AddBasicField(SignatureObject, 'ID', 'urn:oasis:names:specification:ubl:signature:Invoice');
+        AddBasicField(SignatureObject, 'SignatureMethod', 'urn:oasis:names:specification:ubl:dsig:enveloped:xades');
+
+        // Digital signature details (implement actual cryptographic signing)
+        DigitalSignatureObject.Add('Object', 'PLACEHOLDER_FOR_ACTUAL_SIGNATURE');
+        DigitalSignatureArray.Add(DigitalSignatureObject);
+        SignatureObject.Add('DigitalSignatureAttachment', DigitalSignatureArray);
+
+        SignatureArray.Add(SignatureObject);
+        InvoiceObject.Add('Signature', SignatureArray);
+    end;
+
+    local procedure AddTaxExchangeRate(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header"; SourceCurrencyCode: Code[10])
+    var
+        TaxExchangeRateArray: JsonArray;
+        TaxExchangeRateObject: JsonObject;
+        CurrencyExchangeRate: Record "Currency Exchange Rate";
+        ExchangeRate: Decimal;
+    begin
+        // MANDATORY for non-MYR currencies per LHDN specification
+        // Get exchange rate from Business Central
+        ExchangeRate := 1.0; // Default
+
+        if CurrencyExchangeRate.Get(SourceCurrencyCode, Today()) then
+            ExchangeRate := CurrencyExchangeRate."Exchange Rate Amount"
+        else if CurrencyExchangeRate.Get(SourceCurrencyCode, SalesInvoiceHeader."Posting Date") then
+            ExchangeRate := CurrencyExchangeRate."Exchange Rate Amount";
+
+        AddBasicField(TaxExchangeRateObject, 'SourceCurrencyCode', SourceCurrencyCode);
+        AddBasicField(TaxExchangeRateObject, 'TargetCurrencyCode', 'MYR');
+        AddBasicField(TaxExchangeRateObject, 'CalculationRate', Format(ExchangeRate, 0, '<Precision,15><Standard Format,2>'));
+        AddBasicField(TaxExchangeRateObject, 'Date', Format(Today(), 0, '<Year4>-<Month,2>-<Day,2>'));
+
+        TaxExchangeRateArray.Add(TaxExchangeRateObject);
+        InvoiceObject.Add('TaxExchangeRate', TaxExchangeRateArray);
     end;
 
     // Helper procedures for UBL 2.1 JSON structure
@@ -811,6 +905,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         ValueArray: JsonArray;
         ValueObject: JsonObject;
     begin
+        // Validate amount is not negative for invoice amounts
+        if (FieldName in ['LineExtensionAmount', 'TaxAmount', 'PayableAmount']) and (Amount < 0) then
+            Error('Amount field %1 cannot be negative: %2', FieldName, Amount);
+
         ValueObject.Add('_', Amount);
         ValueObject.Add('currencyID', CurrencyCode);
         ValueArray.Add(ValueObject);
@@ -949,7 +1047,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             exit(SalesInvoiceHeader."Currency Code");
     end;
 
-    local procedure GetCurrencyCode(CurrencyCode: Code[10]): Code[10]
+    local procedure GetCurrencyCodeFromText(CurrencyCode: Code[10]): Code[10]
     begin
         if CurrencyCode = '' then
             exit('MYR')
@@ -967,8 +1065,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     local procedure GetStateCode(County: Text): Text
+    var
+        UpperCounty: Text;
     begin
-        case County of
+        UpperCounty := UpperCase(County);
+        case UpperCounty of
             'JOHOR':
                 exit('01');
             'KEDAH', 'SUNGAI PETANI':
@@ -1008,10 +1109,32 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
     local procedure GetCountryCode(CountryRegionCode: Code[10]): Code[10]
     begin
-        if CountryRegionCode = 'MY' then
-            exit('MYS');
-        // Add more country mappings as needed
-        exit('MYS'); // Default to Malaysia
+        case UpperCase(CountryRegionCode) of
+            'MY', 'MYS', 'MALAYSIA':
+                exit('MYS');
+            'SG', 'SGP', 'SINGAPORE':
+                exit('SGP');
+            'TH', 'THA', 'THAILAND':
+                exit('THA');
+            'ID', 'IDN', 'INDONESIA':
+                exit('IDN');
+            'PH', 'PHL', 'PHILIPPINES':
+                exit('PHL');
+            'VN', 'VNM', 'VIETNAM':
+                exit('VNM');
+            'US', 'USA', 'UNITED STATES':
+                exit('USA');
+            'GB', 'GBR', 'UNITED KINGDOM':
+                exit('GBR');
+            'CN', 'CHN', 'CHINA':
+                exit('CHN');
+            'JP', 'JPN', 'JAPAN':
+                exit('JPN');
+            'AU', 'AUS', 'AUSTRALIA':
+                exit('AUS');
+            else
+                exit('MYS'); // Default to Malaysia
+        end;
     end;
 
     local procedure GetTaxCategoryCode(eInvoiceTaxCategoryCode: Code[10]): Code[10]
@@ -1028,8 +1151,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC code - customize this
-        CompanyInformation.Get();
-        exit(CompanyInformation."MSIC Code");
+        if CompanyInformation.Get() then
+            exit(CompanyInformation."MSIC Code")
+        else
+            exit(''); // Return empty if company info not found
     end;
 
     local procedure GetMSICDescription(): Text
@@ -1037,8 +1162,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC description - customize this
-        CompanyInformation.Get();
-        exit(CompanyInformation."Business Activity Description")
+        if CompanyInformation.Get() then
+            exit(CompanyInformation."Business Activity Description")
+        else
+            exit(''); // Return empty if company info not found
     end;
 
     local procedure GetCertificationID(): Text
@@ -1072,12 +1199,16 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     local procedure GetCustomerSSTNumber(Customer: Record Customer): Text
     begin
         // Return customer's SST number if available
-        exit('NA');
+        if Customer."e-Invoice SST No." <> '' then
+            exit(Customer."e-Invoice SST No.")
+        else
+            exit('NA');
     end;
 
     local procedure GetCustomerTTXNumber(Customer: Record Customer): Text
     begin
         // Return customer's TTX number if available
+        // Add field to Customer table extension if needed
         exit('NA');
     end;
 
@@ -1115,6 +1246,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             exit(SalesInvoiceLine."e-Invoice Classification")
         else
             exit('022'); // Default HS code if empty
+    end;
+
+    local procedure GetClassificationCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
+    begin
+        // MANDATORY: Return classification code as per LHDN requirement
+        // This should be configured in your item setup or use default
+        // Common codes: 001=Goods, 002=Services, 003=Mixed
+        if SalesInvoiceLine.Type = SalesInvoiceLine.Type::Item then
+            exit('001') // Goods
+        else
+            exit('002'); // Services
     end;
 
     local procedure HasPrepaidAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
