@@ -86,5 +86,7 @@ page 50300 eInvoiceSetupCard
             Setup."Primary Key" := 'SETUP';
             Setup.Insert();
         end;
+        // Ensure the page is showing the SETUP record
+        Rec.Get('SETUP');
     end;
 }

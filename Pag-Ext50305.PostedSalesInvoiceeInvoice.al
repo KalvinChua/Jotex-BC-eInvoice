@@ -72,8 +72,12 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                         Error('Generated JSON is invalid and cannot be sent to Azure Function.');
 
                     // 3. Get Azure Function URL from setup
-                    if not Setup.Get() then
-                        Error('e-Invoice Setup record not found.');
+                    if not Setup.Get('SETUP') then begin
+                        // Create setup record if it doesn't exist
+                        Setup.Init();
+                        Setup."Primary Key" := 'SETUP';
+                        Setup.Insert();
+                    end;
                     AzureFunctionUrl := Setup."Azure Function URL";
                     if AzureFunctionUrl = '' then
                         Error('Azure Function URL is not configured. Please set it in e-Invoice Setup.');
