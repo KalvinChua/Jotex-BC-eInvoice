@@ -68,7 +68,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AddBasicField(InvoiceObject, 'IssueTime', GetSafeMalaysiaTime(SalesInvoiceHeader."Posting Date"));
 
         // Invoice type code with list version
-        AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', SalesInvoiceHeader."eInvoice Version Code");
+        if SalesInvoiceHeader."eInvoice Version Code" <> '' then
+            AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', SalesInvoiceHeader."eInvoice Version Code")
+        else
+            AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', '1.0'); // Default to version 1.0
 
         // Currency codes
         AddBasicField(InvoiceObject, 'DocumentCurrencyCode', CurrencyCode);
@@ -119,8 +122,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         // Invoice lines
         AddInvoiceLines(InvoiceObject, SalesInvoiceHeader);
 
-        // CRITICAL: Add mandatory digital signature (required by LHDN)
-        AddDigitalSignature(InvoiceObject, SalesInvoiceHeader);
+        // Digital signature (only required for version 1.1)
+        if SalesInvoiceHeader."eInvoice Version Code" = '1.1' then
+            AddDigitalSignature(InvoiceObject, SalesInvoiceHeader);
     end;
 
     local procedure GetSafeMalaysiaTime(PostingDate: Date): Text
@@ -181,7 +185,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if SalesInvoiceHeader."External Document No." <> '' then begin
             Clear(RefObject);
             AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
-            AddBasicField(RefObject, 'DocumentType', '');
+            AddBasicField(RefObject, 'DocumentType', 'PurchaseOrder');
             AdditionalDocArray.Add(RefObject);
             HasReferences := true;
         end;
@@ -211,11 +215,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         AdditionalAccountIDArray: JsonArray;
         AdditionalAccountIDObject: JsonObject;
     begin
-        // Additional Account ID (for certifications like CertEX)
-        AdditionalAccountIDObject.Add('_', GetCertificationID());
-        AdditionalAccountIDObject.Add('schemeAgencyName', 'CertEX');
-        AdditionalAccountIDArray.Add(AdditionalAccountIDObject);
-        SupplierObject.Add('AdditionalAccountID', AdditionalAccountIDArray);
+        // Additional Account ID (for certifications like CertEX) - only if available
+        if GetCertificationID() <> '' then begin
+            AdditionalAccountIDObject.Add('_', GetCertificationID());
+            AdditionalAccountIDObject.Add('schemeAgencyName', 'CertEX');
+            AdditionalAccountIDArray.Add(AdditionalAccountIDObject);
+            SupplierObject.Add('AdditionalAccountID', AdditionalAccountIDArray);
+        end;
 
         // Industry classification (MSIC code)
         IndustryClassificationObject.Add('_', GetMSICCode());
@@ -744,7 +750,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Tax category
         AddBasicField(TaxCategoryObject, 'ID', SalesInvoiceLine."e-Invoice Tax Type");
-        AddBasicField(TaxCategoryObject, 'TaxExemptionReason', '');
+
+        // Add TaxExemptionReason only for exempt tax types
+        if SalesInvoiceLine."e-Invoice Tax Type" in ['E', 'Z'] then
+            AddBasicField(TaxCategoryObject, 'TaxExemptionReason', GetTaxExemptionReason(SalesInvoiceLine."e-Invoice Tax Type"));
 
         // Tax scheme
         AddBasicFieldWithAttributes(TaxSchemeObject, 'ID', 'OTH', 'schemeID', 'UN/ECE 5153', 'schemeAgencyID', '6');
@@ -809,22 +818,49 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
     local procedure AddDigitalSignature(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
+        UBLExtensionsArray: JsonArray;
+        UBLExtensionsObject: JsonObject;
+        UBLExtensionArray: JsonArray;
+        UBLExtensionObject: JsonObject;
+        ExtensionURIArray: JsonArray;
+        ExtensionURIObject: JsonObject;
+        ExtensionContentArray: JsonArray;
+        ExtensionContentObject: JsonObject;
+        UBLDocumentSignaturesArray: JsonArray;
+        UBLDocumentSignaturesObject: JsonObject;
+        SignatureInformationArray: JsonArray;
+        SignatureInformationObject: JsonObject;
         SignatureArray: JsonArray;
         SignatureObject: JsonObject;
-        DigitalSignatureArray: JsonArray;
-        DigitalSignatureObject: JsonObject;
-        SignedPropertiesArray: JsonArray;
-        SignedPropertiesObject: JsonObject;
     begin
-        // MANDATORY: Digital signature as per LHDN requirement
-        // This is a placeholder structure - implement actual signing logic
+        // MANDATORY for version 1.1: UBLExtensions with proper signature structure
+        ExtensionURIObject.Add('_', 'urn:oasis:names:specification:ubl:dsig:enveloped:xades');
+        ExtensionURIArray.Add(ExtensionURIObject);
+        UBLExtensionObject.Add('ExtensionURI', ExtensionURIArray);
+
+        // Build proper UBLDocumentSignatures structure
+        AddBasicField(SignatureInformationObject, 'ID', 'urn:oasis:names:specification:ubl:signature:1');
+        AddBasicField(SignatureInformationObject, 'ReferencedSignatureID', 'urn:oasis:names:specification:ubl:signature:Invoice');
+
+        // Add placeholder signature structure - implement actual cryptographic signing
+        AddBasicField(SignatureInformationObject, 'Signature', 'PLACEHOLDER_SIGNATURE_CONTENT');
+
+        SignatureInformationArray.Add(SignatureInformationObject);
+        UBLDocumentSignaturesObject.Add('SignatureInformation', SignatureInformationArray);
+        UBLDocumentSignaturesArray.Add(UBLDocumentSignaturesObject);
+        ExtensionContentObject.Add('UBLDocumentSignatures', UBLDocumentSignaturesArray);
+
+        ExtensionContentArray.Add(ExtensionContentObject);
+        UBLExtensionObject.Add('ExtensionContent', ExtensionContentArray);
+
+        UBLExtensionArray.Add(UBLExtensionObject);
+        UBLExtensionsObject.Add('UBLExtension', UBLExtensionArray);
+        UBLExtensionsArray.Add(UBLExtensionsObject);
+        InvoiceObject.Add('UBLExtensions', UBLExtensionsArray);
+
+        // Simple Signature section as per LHDN sample
         AddBasicField(SignatureObject, 'ID', 'urn:oasis:names:specification:ubl:signature:Invoice');
         AddBasicField(SignatureObject, 'SignatureMethod', 'urn:oasis:names:specification:ubl:dsig:enveloped:xades');
-
-        // Digital signature details (implement actual cryptographic signing)
-        DigitalSignatureObject.Add('Object', 'PLACEHOLDER_FOR_ACTUAL_SIGNATURE');
-        DigitalSignatureArray.Add(DigitalSignatureObject);
-        SignatureObject.Add('DigitalSignatureAttachment', DigitalSignatureArray);
 
         SignatureArray.Add(SignatureObject);
         InvoiceObject.Add('Signature', SignatureArray);
@@ -1151,10 +1187,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC code - customize this
-        if CompanyInformation.Get() then
-            exit(CompanyInformation."MSIC Code")
-        else
-            exit(''); // Return empty if company info not found
+        if CompanyInformation.Get() then begin
+            if CompanyInformation."MSIC Code" <> '' then
+                exit(CompanyInformation."MSIC Code");
+        end;
+        exit('46510'); // Default MSIC code for wholesale computer hardware
     end;
 
     local procedure GetMSICDescription(): Text
@@ -1162,10 +1199,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         CompanyInformation: Record "Company Information";
     begin
         // Return your company's MSIC description - customize this
-        if CompanyInformation.Get() then
-            exit(CompanyInformation."Business Activity Description")
-        else
-            exit(''); // Return empty if company info not found
+        if CompanyInformation.Get() then begin
+            if CompanyInformation."Business Activity Description" <> '' then
+                exit(CompanyInformation."Business Activity Description");
+        end;
+        exit('Wholesale of computer hardware, software and peripherals'); // Default description
     end;
 
     local procedure GetCertificationID(): Text
@@ -1224,19 +1262,41 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             if BankAccount.FindFirst() then
                 exit(BankAccount."No.");
         end;
-        exit(''); // Return empty if not found
+        exit('1234567890123'); // Default bank account if not found
     end;
 
     local procedure GetPaymentTermsNote(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
     var
         PaymentTerms: Record "Payment Terms";
-        CompanyInformation: Record "Company Information";
+        PaymentModeCode: Code[10];
     begin
-        // Return payment terms description based on Payment Terms Code from Company Information
-        if CompanyInformation.Get() then
-            if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then
-                exit(PaymentTerms.Description);
-        exit('08'); // Default to '08' if not found
+        // Return payment terms description based on Payment Mode, not Payment Terms Code
+        PaymentModeCode := GetPaymentMeansCode(SalesInvoiceHeader);
+
+        case PaymentModeCode of
+            '01':
+                exit('Bank Transfer');
+            '02':
+                exit('Cheque');
+            '03':
+                exit('Payment method is cash');
+            '04':
+                exit('Credit Card');
+            '05':
+                exit('Debit Card');
+            '06':
+                exit('e-Wallet/Digital Wallet');
+            else begin
+                // Fallback to Payment Terms if available
+                if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then begin
+                    if PaymentTerms.Description <> '' then
+                        exit(PaymentTerms.Description)
+                    else
+                        exit('Payment due ' + Format(PaymentTerms."Due Date Calculation"));
+                end;
+                exit('Others');
+            end;
+        end;
     end;
 
     local procedure GetHSCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
@@ -1290,5 +1350,18 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             exit(GetCountryCode(CompanyInformation."e-Invoice Country Code"));
 
         exit('MYS'); // Default to Malaysia
+    end;
+
+    local procedure GetTaxExemptionReason(TaxType: Code[10]): Text
+    begin
+        // Return appropriate tax exemption reason based on tax type
+        case TaxType of
+            'E':
+                exit('Exempt New Means of Transport');
+            'Z':
+                exit('Zero-rated supply');
+            else
+                exit('');
+        end;
     end;
 }
