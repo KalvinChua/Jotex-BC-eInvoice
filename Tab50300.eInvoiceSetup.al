@@ -2,6 +2,7 @@ table 50300 eInvoiceSetup
 {
     DataClassification = CustomerContent;
 
+
     fields
     {
         field(1; "Primary Key"; Code[10]) { DataClassification = SystemMetadata; }
@@ -36,6 +37,13 @@ table 50300 eInvoiceSetup
             Editable = true;
         }
 
+        // New field for Azure Function URL
+        field(100; "Azure Function URL"; Text[250])
+        {
+            DataClassification = SystemMetadata;
+            Caption = 'Azure Function URL';
+            Editable = true;
+        }
     }
 
     keys

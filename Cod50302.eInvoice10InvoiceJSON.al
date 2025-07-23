@@ -1,6 +1,32 @@
 codeunit 50302 "eInvoice 1.0 Invoice JSON"
 {
-    procedure GenerateEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header") JsonText: Text
+    procedure PostJsonToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text)
+    var
+        Client: HttpClient;
+        RequestContent: HttpContent;
+        Response: HttpResponseMessage;
+        Headers: HttpHeaders;
+    begin
+        // Set up headers
+        Headers.Clear();
+        Headers.Add('Content-Type', 'application/json');
+
+        // Set up request content
+        RequestContent.WriteFrom(JsonText);
+        RequestContent.GetHeaders := Headers;
+
+        // Send POST request
+        if not Client.Post(AzureFunctionUrl, RequestContent, Response) then
+            Error('Failed to POST to Azure Function.');
+
+        // Read response
+        if not Response.IsSuccessStatusCode then
+            Error('Azure Function returned error: %1', Response.HttpStatusCode);
+
+        Response.Content().ReadAs(ResponseText);
+    end;
+
+    procedure GenerateEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) JsonText: Text
     var
         JsonObject: JsonObject;
         StartTime: DateTime;
@@ -11,7 +37,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if SalesInvoiceHeader."No." = '' then
             Error('Sales Invoice Header cannot be empty');
 
-        JsonObject := BuildEInvoiceJson(SalesInvoiceHeader);
+        JsonObject := BuildEInvoiceJson(SalesInvoiceHeader, IncludeSignature);
         JsonObject.WriteTo(JsonText);
 
         // Validate output
@@ -24,7 +50,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         //     CurrentDateTime - StartTime);
     end;
 
-    local procedure BuildEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header") JsonObject: JsonObject
+    local procedure BuildEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) JsonObject: JsonObject
     var
         InvoiceArray: JsonArray;
         InvoiceObject: JsonObject;
@@ -35,16 +61,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         JsonObject.Add('_B', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
 
         // Build the invoice object
-        InvoiceObject := CreateInvoiceObject(SalesInvoiceHeader);
+        InvoiceObject := CreateInvoiceObject(SalesInvoiceHeader, IncludeSignature);
         InvoiceArray.Add(InvoiceObject);
         JsonObject.Add('Invoice', InvoiceArray);
     end;
 
-    local procedure CreateInvoiceObject(SalesInvoiceHeader: Record "Sales Invoice Header") InvoiceObject: JsonObject
+    local procedure CreateInvoiceObject(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) InvoiceObject: JsonObject
     var
         Customer: Record Customer;
         CompanyInformation: Record "Company Information";
         CurrencyCode: Code[10];
+        NowUTC: DateTime;
     begin
         // Validate mandatory fields
         if SalesInvoiceHeader."No." = '' then
@@ -62,10 +89,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Core invoice fields
         AddBasicField(InvoiceObject, 'ID', SalesInvoiceHeader."No.");
-        // CRITICAL COMPLIANCE: LHDN requires CURRENT date, not posting date
-        // Per documentation: "Date of issuance of the e-Invoice *Note that the date must be the current date in the UTC timezone"
-        AddBasicField(InvoiceObject, 'IssueDate', Format(Today(), 0, '<Year4>-<Month,2>-<Day,2>'));
-        AddBasicField(InvoiceObject, 'IssueTime', GetSafeMalaysiaTime(SalesInvoiceHeader."Posting Date"));
+        // LHDN: IssueDate = Posting Date, IssueTime = current UTC time (buffered)
+        NowUTC := CurrentDateTime - 60000; // Subtract 60,000 ms = 1 minute
+        AddBasicField(InvoiceObject, 'IssueDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+        AddBasicField(InvoiceObject, 'IssueTime', Format(DT2Time(NowUTC), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
 
         // Invoice type code with list version
         if SalesInvoiceHeader."eInvoice Version Code" <> '' then
@@ -122,8 +149,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         // Invoice lines
         AddInvoiceLines(InvoiceObject, SalesInvoiceHeader);
 
-        // Digital signature (only required for version 1.1)
-        if SalesInvoiceHeader."eInvoice Version Code" = '1.1' then
+        // Digital signature (only required for version 1.1 and if requested)
+        if (SalesInvoiceHeader."eInvoice Version Code" = '1.1') and IncludeSignature then
             AddDigitalSignature(InvoiceObject, SalesInvoiceHeader);
     end;
 

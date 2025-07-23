@@ -10,6 +10,7 @@ page 50300 eInvoiceSetupCard
     {
         area(content)
         {
+
             group("API Configuration")
             {
                 field("Client ID"; Rec."Client ID")
@@ -29,7 +30,12 @@ page 50300 eInvoiceSetupCard
                     ApplicationArea = All;
                     ToolTip = 'Specifies the e-Invoice version to use for submission to LHDN (e.g. 1.0 or 1.1).';
                 }
-
+                // New field for Azure Function URL
+                field("Azure Function URL"; Rec."Azure Function URL")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the Azure Function endpoint for e-Invoice signing and submission.';
+                }
             }
 
             group("Token Info")
