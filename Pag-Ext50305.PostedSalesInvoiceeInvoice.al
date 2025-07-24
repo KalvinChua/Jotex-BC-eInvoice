@@ -59,21 +59,20 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     AzureFunctionUrl: Text;
                     Headers: HttpHeaders;
                     Setup: Record "eInvoiceSetup";
-                    IsValidJson: Boolean;
                     TestJson: JsonObject;
                     ResponseText: Text;
+                    RequestJson: JsonObject;
+                    RequestJsonText: Text;
                 begin
                     // 1. Generate unsigned JSON
                     JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
 
                     // 2. Validate JSON (basic check)
-                    // Try to parse as JsonObject to check validity
                     if not TestJson.ReadFrom(JsonText) then
                         Error('Generated JSON is invalid and cannot be sent to Azure Function.');
 
                     // 3. Get Azure Function URL from setup
                     if not Setup.Get('SETUP') then begin
-                        // Create setup record if it doesn't exist
                         Setup.Init();
                         Setup."Primary Key" := 'SETUP';
                         Setup.Insert();
@@ -82,8 +81,11 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     if AzureFunctionUrl = '' then
                         Error('Azure Function URL is not configured. Please set it in e-Invoice Setup.');
 
-                    // 4. Prepare HTTP POST
-                    RequestContent.WriteFrom(JsonText);
+                    // 4. Prepare HTTP POST - wrap JSON in expected format
+                    RequestJson.Add('unsignedJson', JsonText);
+                    RequestJson.WriteTo(RequestJsonText);
+
+                    RequestContent.WriteFrom(RequestJsonText);
                     RequestContent.GetHeaders(Headers);
                     Headers.Clear();
                     Headers.Add('Content-Type', 'application/json');
