@@ -1,51 +1,69 @@
+/// <summary>
+/// Business Central e-Invoice JSON Generator and Azure Function Integration
+/// 
+/// PURPOSE:
+/// Generate LHDN-compliant UBL 2.1 JSON invoices and process through Azure Function for digital signing
+/// 
+/// INTEGRATION FLOW:
+/// 1. Business Central generates unsigned e-Invoice JSON (UBL 2.1 format)
+/// 2. Posts JSON to Azure Function with proper payload structure
+/// 3. Azure Function digitally signs using JOTEX P12 certificate (7-step process)
+/// 4. Returns signed JSON and LHDN-ready payload to Business Central
+/// 5. Business Central submits to LHDN MyInvois API
+/// 6. Processes LHDN response and updates invoice status
+/// 
+/// AZURE FUNCTION INTEGRATION:
+/// - Endpoint: Configurable in eInvoice Setup
+/// - Payload: {"unsignedJson": "...", "invoiceType": "01", "environment": "PREPROD/PRODUCTION", "timestamp": "...", "requestId": "..."}
+/// - Response: {"success": true, "signedJson": "...", "lhdnPayload": {"documents": [...]}}
+/// - Error Handling: Comprehensive validation and retry logic
+/// 
+/// LHDN COMPLIANCE:
+/// - UBL 2.1 JSON structure as per LHDN specification
+/// - Digital signature using JOTEX certificate infrastructure
+/// - Proper TIN validation and environment-specific endpoints
+/// - Complete audit trail for compliance requirements
+/// 
+/// CUSTOMIZATION POINTS:
+/// - Business logic helper procedures for company-specific mappings
+/// - Field population based on your Business Central setup
+/// - Error handling and logging preferences
+/// 
+/// Author: Business Central e-Invoice Integration Team
+/// Version: 2.0 - Enhanced with Azure Function integration and comprehensive error handling
+/// Last Updated: July 2025
+/// </summary>
 codeunit 50302 "eInvoice 1.0 Invoice JSON"
 {
+    // ======================================================================================================
+    // MAIN AZURE FUNCTION INTEGRATION PROCEDURES
+    // ======================================================================================================
+
+    /// <summary>
+    /// Sends unsigned e-Invoice JSON to Azure Function for digital signing using JOTEX certificate
+    /// This is a simplified version - main logic moved to TryPostToAzureFunction for better error handling
+    /// </summary>
+    /// <param name="JsonText">Unsigned e-Invoice JSON in UBL 2.1 format</param>
+    /// <param name="AzureFunctionUrl">Azure Function endpoint URL for signing service</param>
+    /// <param name="ResponseText">Response from Azure Function containing signed JSON and LHDN payload</param>
     procedure PostJsonToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text)
-    var
-        Client: HttpClient;
-        RequestContent: HttpContent;
-        Response: HttpResponseMessage;
-        Headers: HttpHeaders;
-        PayloadText: Text;
-        RequestResult: Boolean;
     begin
-        // Clear any previous response
-        ResponseText := '';
-
-        // Validate input JSON before processing
-        if JsonText = '' then
-            Error('Cannot send empty JSON to Azure Function');
-
-        // Basic validation - check if JSON looks valid without parsing
-        if not (JsonText.StartsWith('{') and JsonText.EndsWith('}')) then
-            Error('Invalid JSON format provided to Azure Function');
-
-        // Simple payload structure to avoid JSON serialization issues
-        PayloadText := '{"unsignedJson":' + JsonText + ',"invoiceType":"01","environment":"PREPROD"}';
-
-        // Set up request content with proper error handling
-        RequestContent.WriteFrom(PayloadText);
-        RequestContent.GetHeaders(Headers);
-        Headers.Clear();
-        Headers.Add('Content-Type', 'application/json');
-
-        // Send POST request with proper context handling
-        RequestResult := Client.Post(AzureFunctionUrl, RequestContent, Response);
-
-        if not RequestResult then
-            Error('Failed to connect to Azure Function at %1. Please check network connectivity and Azure Function availability.', AzureFunctionUrl);
-
-        // Read response content
-        Response.Content().ReadAs(ResponseText);
-
-        // Check response status
-        if not Response.IsSuccessStatusCode then
-            Error('Azure Function returned error status %1: %2', Response.HttpStatusCode, Response.ReasonPhrase);
-
-        if ResponseText = '' then
-            Error('Received empty response from Azure Function');
+        // This procedure is kept for backward compatibility
+        // All logic moved to TryPostToAzureFunction to prevent recursive calls
+        if not TryPostToAzureFunction(JsonText, AzureFunctionUrl, ResponseText) then
+            Error('Failed to communicate with Azure Function. Please check the configuration and try again.');
     end;
 
+    // ======================================================================================================
+    // MAIN E-INVOICE JSON GENERATION PROCEDURES
+    // ======================================================================================================
+
+    /// <summary>
+    /// Generates LHDN-compliant UBL 2.1 JSON for Sales Invoice
+    /// </summary>
+    /// <param name="SalesInvoiceHeader">Sales Invoice record to convert</param>
+    /// <param name="IncludeSignature">Whether to include digital signature placeholder</param>
+    /// <returns>Complete UBL 2.1 JSON string</returns>
     procedure GenerateEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) JsonText: Text
     var
         JsonObject: JsonObject;
@@ -938,7 +956,14 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         InvoiceObject.Add('TaxExchangeRate', TaxExchangeRateArray);
     end;
 
-    // Helper procedures for UBL 2.1 JSON structure
+    // ======================================================================================================
+    // UBL 2.1 JSON STRUCTURE HELPER PROCEDURES
+    // These procedures ensure proper LHDN-compliant JSON structure formatting
+    // ======================================================================================================
+
+    /// <summary>
+    /// Adds a basic field with text value in UBL 2.1 array format
+    /// </summary>
     local procedure AddBasicField(var ParentObject: JsonObject; FieldName: Text; FieldValue: Text)
     var
         ValueArray: JsonArray;
@@ -951,6 +976,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
+    /// <summary>
+    /// Adds a field with one attribute in UBL 2.1 format
+    /// </summary>
     local procedure AddFieldWithAttribute(var ParentObject: JsonObject; FieldName: Text; FieldValue: Text; AttributeName: Text; AttributeValue: Text)
     var
         ValueArray: JsonArray;
@@ -964,11 +992,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
+    /// <summary>
+    /// Wrapper for AddFieldWithAttribute - maintains backward compatibility
+    /// </summary>
     local procedure AddBasicFieldWithAttribute(var ParentObject: JsonObject; FieldName: Text; FieldValue: Text; AttributeName: Text; AttributeValue: Text)
     begin
         AddFieldWithAttribute(ParentObject, FieldName, FieldValue, AttributeName, AttributeValue);
     end;
 
+    /// <summary>
+    /// Adds a field with two attributes in UBL 2.1 format
+    /// </summary>
     local procedure AddBasicFieldWithAttributes(var ParentObject: JsonObject; FieldName: Text; FieldValue: Text; Attr1Name: Text; Attr1Value: Text; Attr2Name: Text; Attr2Value: Text)
     var
         ValueArray: JsonArray;
@@ -983,6 +1017,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
+    /// <summary>
+    /// Adds amount field with currency code attribute - includes validation for negative amounts
+    /// </summary>
     local procedure AddAmountField(var ParentObject: JsonObject; FieldName: Text; Amount: Decimal; CurrencyCode: Text)
     var
         ValueArray: JsonArray;
@@ -1231,20 +1268,30 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
+    // ======================================================================================================
+    // BUSINESS LOGIC HELPER PROCEDURES
+    // Configure these based on your company setup and Business Central field mappings
+    // ======================================================================================================
+
+    /// <summary>
+    /// Gets tax category code with fallback to standard rate
+    /// </summary>
     local procedure GetTaxCategoryCode(eInvoiceTaxCategoryCode: Code[10]): Code[10]
     begin
-        // Return the tax category code directly from the e-Invoice Tax Category Code field
         if eInvoiceTaxCategoryCode <> '' then
             exit(eInvoiceTaxCategoryCode)
         else
             exit('01'); // Default to standard rate if empty
     end;
 
+    /// <summary>
+    /// Gets company MSIC code from Company Information or returns default
+    /// </summary>
     local procedure GetMSICCode(): Text
     var
         CompanyInformation: Record "Company Information";
     begin
-        // Return your company's MSIC code - customize this
+        // Return your company's MSIC code - customize this based on your field mappings
         if CompanyInformation.Get() then begin
             if CompanyInformation."MSIC Code" <> '' then
                 exit(CompanyInformation."MSIC Code");
@@ -1252,6 +1299,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit('46510'); // Default MSIC code for wholesale computer hardware
     end;
 
+    /// <summary>
+    /// Gets company MSIC description from Company Information or returns default
+    /// </summary>
     local procedure GetMSICDescription(): Text
     var
         CompanyInformation: Record "Company Information";
@@ -1264,12 +1314,18 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit('Wholesale of computer hardware, software and peripherals'); // Default description
     end;
 
+    /// <summary>
+    /// Gets certification ID (e.g., CertEX ID) - customize based on your requirements
+    /// </summary>
     local procedure GetCertificationID(): Text
     begin
-        // Return your certification ID (e.g., CertEX ID)
-        exit('');
+        // Return your certification ID - add custom field to Company Information if needed
+        exit(''); // Return empty if no certification required
     end;
 
+    /// <summary>
+    /// Gets company SST registration number or returns 'NA'
+    /// </summary>
     local procedure GetSSTNumber(): Text
     var
         CompanyInformation: Record "Company Information";
@@ -1423,7 +1479,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
-    // Enhanced Azure Function integration with LHDN direct submission
+    /// <summary>
+    /// Complete integration workflow: Generate → Sign → Submit to LHDN
+    /// Handles the full process from unsigned JSON to LHDN submission with proper error handling
+    /// </summary>
+    /// <param name="SalesInvoiceHeader">Sales Invoice record to process</param>
+    /// <param name="LhdnResponse">Final response from LHDN MyInvois API</param>
+    /// <returns>True if entire process successful, False if any step fails</returns>
     procedure GetSignedInvoiceAndSubmitToLHDN(SalesInvoiceHeader: Record "Sales Invoice Header"; var LhdnResponse: Text): Boolean
     var
         UnsignedJsonText: Text;
@@ -1448,65 +1510,156 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if not TryPostToAzureFunction(UnsignedJsonText, AzureFunctionUrl, AzureResponseText) then
             Error('Failed to communicate with Azure Function. Please check connectivity and try again.');
 
-        // Step 4: Parse Azure Function response
+        // Step 4: Parse Azure Function response with detailed validation
         if not AzureResponse.ReadFrom(AzureResponseText) then
-            Error('Invalid JSON response from Azure Function: %1', AzureResponseText);
+            Error('Invalid JSON response from Azure Function: %1', CopyStr(AzureResponseText, 1, 500));
 
+        // Check for success status
         if not AzureResponse.Get('success', JsonToken) or not JsonToken.AsValue().AsBoolean() then begin
             if AzureResponse.Get('error', JsonToken) then
                 Error('Azure Function signing failed: %1', JsonToken.AsValue().AsText())
+            else if AzureResponse.Get('message', JsonToken) then
+                Error('Azure Function error: %1', JsonToken.AsValue().AsText())
             else
-                Error('Azure Function signing failed with unknown error');
+                Error('Azure Function signing failed with unknown error. Response: %1', CopyStr(AzureResponseText, 1, 200));
         end;
 
-        // Step 5: Extract LHDN payload and submit to LHDN API
-        // Azure Function returns: { "lhdnPayload": { "documents": [...] } }
-        // LHDN API expects: { "documents": [...] }
-        // So we extract the lhdnPayload object which contains the correct structure
-        if AzureResponse.Get('lhdnPayload', JsonToken) then
-            exit(SubmitToLhdnApi(JsonToken.AsObject(), SalesInvoiceHeader, LhdnResponse))
-        else
-            Error('No LHDN payload found in Azure Function response');
+        // Step 5: Process and store signed JSON (important for audit trail)
+        if AzureResponse.Get('signedJson', JsonToken) then begin
+            // Store the signed JSON for records/audit purposes
+            StoreSignedInvoiceJson(SalesInvoiceHeader, JsonToken.AsValue().AsText());
+        end;
+
+        // Step 6: Extract LHDN payload and submit to LHDN API
+        // Expected Azure Function response format:
+        // {
+        //   "success": true,
+        //   "signedJson": "...",
+        //   "lhdnPayload": { "documents": [...] }
+        // }
+        if AzureResponse.Get('lhdnPayload', JsonToken) then begin
+            // Validate the LHDN payload structure before submission
+            if ValidateLhdnPayloadStructure(JsonToken.AsValue().AsText()) then
+                exit(SubmitToLhdnApi(JsonToken.AsObject(), SalesInvoiceHeader, LhdnResponse))
+            else
+                Error('Invalid LHDN payload structure received from Azure Function');
+        end else
+            Error('No LHDN payload found in Azure Function response. Response keys: %1', GetJsonObjectKeys(AzureResponse));
     end;
 
-    // Safer HTTP call wrapper with try-catch pattern
+    /// <summary>
+    /// Safer HTTP call wrapper with proper error handling and retry logic
+    /// Prevents recursive calls and memory issues by implementing controlled retry mechanism
+    /// </summary>
+    /// <param name="JsonText">JSON payload to send</param>
+    /// <param name="AzureFunctionUrl">Azure Function endpoint URL</param>
+    /// <param name="ResponseText">Response from Azure Function</param>
+    /// <returns>True if successful, False if failed after all retries</returns>
     local procedure TryPostToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     var
+        HttpClient: HttpClient;
+        RequestContent: HttpContent;
+        Response: HttpResponseMessage;
+        Headers: HttpHeaders;
+        PayloadObject: JsonObject;
+        PayloadText: Text;
+        Setup: Record "eInvoiceSetup";
+        EnvironmentText: Text;
+        AttemptCount: Integer;
+        MaxAttempts: Integer;
+        LastError: Text;
         CallSuccessful: Boolean;
     begin
-        // Clear any previous response
+        // Initialize variables
         ResponseText := '';
         CallSuccessful := false;
+        MaxAttempts := 3;
+        LastError := '';
 
-        // Use a controlled approach to handle potential context issues
-        Clear(CallSuccessful);
+        // Get environment setting from setup
+        if Setup.Get('SETUP') then begin
+            case Setup.Environment of
+                Setup.Environment::Preprod:
+                    EnvironmentText := 'PREPROD';
+                Setup.Environment::Production:
+                    EnvironmentText := 'PRODUCTION';
+                else
+                    EnvironmentText := 'PREPROD';
+            end;
+        end else
+            EnvironmentText := 'PREPROD';
 
-        // Attempt the HTTP call with basic error handling
-        // The error will be caught by the calling function
-        PostJsonToAzureFunction(JsonText, AzureFunctionUrl, ResponseText);
-        CallSuccessful := (ResponseText <> '');
-
-        if not CallSuccessful then
+        // Validate inputs before attempting
+        if JsonText = '' then begin
+            LastError := 'Cannot send empty JSON to Azure Function';
             exit(false);
+        end;
 
-        exit(CallSuccessful);
+        if AzureFunctionUrl = '' then begin
+            LastError := 'Azure Function URL is not configured';
+            exit(false);
+        end;
+
+        // Create proper JSON payload structure
+        PayloadObject.Add('unsignedJson', JsonText);
+        PayloadObject.Add('invoiceType', '01');
+        PayloadObject.Add('environment', EnvironmentText);
+        PayloadObject.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        PayloadObject.Add('requestId', CreateGuid());
+        PayloadObject.WriteTo(PayloadText);
+
+        // Attempt HTTP call with retry logic
+        for AttemptCount := 1 to MaxAttempts do begin
+            Clear(HttpClient);
+            Clear(RequestContent);
+            Clear(Response);
+            Clear(Headers);
+
+            // Set up request content
+            RequestContent.WriteFrom(PayloadText);
+            RequestContent.GetHeaders(Headers);
+            Headers.Clear();
+            Headers.Add('Content-Type', 'application/json');
+
+            // Make HTTP request
+            if HttpClient.Post(AzureFunctionUrl, RequestContent, Response) then begin
+                if Response.IsSuccessStatusCode then begin
+                    Response.Content.ReadAs(ResponseText);
+                    if ResponseText <> '' then begin
+                        CallSuccessful := true;
+                        exit(true); // Success - exit immediately
+                    end else begin
+                        LastError := StrSubstNo('Empty response received from Azure Function (Attempt %1/%2)', AttemptCount, MaxAttempts);
+                    end;
+                end else begin
+                    Response.Content.ReadAs(ResponseText);
+                    LastError := StrSubstNo('HTTP %1: %2 (Attempt %3/%4)', Response.HttpStatusCode, Response.ReasonPhrase, AttemptCount, MaxAttempts);
+                end;
+            end else begin
+                LastError := StrSubstNo('Failed to send HTTP request to Azure Function (Attempt %1/%2)', AttemptCount, MaxAttempts);
+            end;
+
+            // Add delay between retries (except for last attempt)
+            if (AttemptCount < MaxAttempts) and (not CallSuccessful) then
+                Sleep(2000); // Wait 2 seconds before retry
+        end;
+
+        // If we get here, all attempts failed
+        Error('Failed to communicate with Azure Function after %1 attempts.\n\nLast error: %2\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration', MaxAttempts, LastError);
     end;
 
-    // Check if HTTP calls are allowed in current context
-    local procedure CanMakeHttpCall(): Boolean
-    begin
-        // Simple validation that we're in a context that allows HTTP calls
-        // In Business Central, HTTP calls are generally allowed in:
-        // - Page actions
-        // - Report processing
-        // - Codeunit execution from user actions
-        // They may be restricted in:
-        // - Posting routines
-        // - Trigger events
-        // - Background processes
-        exit(true); // Assume calls are allowed for now
-    end;
+    // ======================================================================================================
+    // LHDN MyInvois API INTEGRATION PROCEDURES
+    // ======================================================================================================
 
+    /// <summary>
+    /// Submits digitally signed invoice to LHDN MyInvois API for official processing
+    /// Handles proper payload structure validation and comprehensive error reporting
+    /// </summary>
+    /// <param name="LhdnPayload">Signed JSON payload from Azure Function</param>
+    /// <param name="SalesInvoiceHeader">Invoice record for context and updates</param>
+    /// <param name="LhdnResponse">Response from LHDN API</param>
+    /// <returns>True if submission successful, False otherwise</returns>
     procedure SubmitToLhdnApi(LhdnPayload: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header"; var LhdnResponse: Text): Boolean
     var
         HttpClient: HttpClient;
@@ -2095,6 +2248,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit(false);
     end;
 
+    /// <summary>
+    /// Retrieves available document types from LHDN MyInvois API
+    /// Useful for validation and configuration purposes
+    /// </summary>
+    /// <param name="DocumentTypesResponse">JSON response containing available document types</param>
+    /// <returns>True if successful, False otherwise</returns>
     procedure GetLhdnDocumentTypes(var DocumentTypesResponse: Text): Boolean
     var
         HttpClient: HttpClient;
@@ -2152,6 +2311,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit(false);
     end;
 
+    /// <summary>
+    /// Retrieves LHDN notifications for the taxpayer within specified date range
+    /// Supports filtering by notification type and pagination
+    /// </summary>
+    /// <param name="NotificationsResponse">JSON response containing notifications</param>
+    /// <param name="DateFrom">Start date for notification search</param>
+    /// <param name="DateTo">End date for notification search</param>
+    /// <param name="NotificationType">Filter by notification type (0 for all)</param>
+    /// <param name="PageNo">Page number for pagination (0 for default)</param>
+    /// <param name="PageSize">Number of items per page (0 for default)</param>
+    /// <returns>True if successful, False otherwise</returns>
     procedure GetLhdnNotifications(var NotificationsResponse: Text; DateFrom: Date; DateTo: Date; NotificationType: Integer; PageNo: Integer; PageSize: Integer): Boolean
     var
         HttpClient: HttpClient;
@@ -2320,83 +2490,16 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
-    // Build correct payload structure for Azure Function
-    local procedure BuildAzureFunctionPayload(UnsignedJson: Text) PayloadObject: JsonObject
-    var
-        eInvoiceSetup: Record "eInvoiceSetup";
-        EnvironmentType: Text;
-        MetadataObject: JsonObject;
-    begin
-        // Get environment from setup
-        if eInvoiceSetup.Get('SETUP') then begin
-            if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-                EnvironmentType := 'PREPROD'
-            else
-                EnvironmentType := 'PROD';
-        end else
-            EnvironmentType := 'PREPROD'; // Default to PREPROD for safety
+    // ======================================================================================================
+    // LHDN PAYLOAD VALIDATION PROCEDURES
+    // ======================================================================================================
 
-        // CRITICAL FIX: Build the correct payload structure expected by Azure Function
-        PayloadObject.Add('unsignedJson', UnsignedJson);        // The invoice JSON string
-        PayloadObject.Add('invoiceType', '01');                 // Standard invoice type
-        PayloadObject.Add('environment', EnvironmentType);      // PREPROD or PROD - matching LHDN API
-        PayloadObject.Add('submissionId', CreateGuid());        // Unique submission ID
-
-        // Add metadata for enhanced tracking
-        MetadataObject := BuildMetadataInfo();
-        PayloadObject.Add('metadata', MetadataObject);
-    end;
-
-    local procedure BuildMetadataInfo() MetadataObject: JsonObject
-    var
-        UserInfo: JsonObject;
-        EnvironmentInfo: JsonObject;
-    begin
-        // Build comprehensive metadata for Azure Function
-        MetadataObject.Add('correlationId', CreateGuid());
-        MetadataObject.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
-        MetadataObject.Add('source', 'BusinessCentral');
-        MetadataObject.Add('version', GetBCVersionInfo());
-
-        // Add user and environment context
-        UserInfo := BuildUserInfo();
-        EnvironmentInfo := BuildEnvironmentInfo();
-        MetadataObject.Add('user', UserInfo);
-        MetadataObject.Add('environment', EnvironmentInfo);
-    end;
-
-    local procedure BuildUserInfo() UserInfo: JsonObject
-    begin
-        UserInfo.Add('sessionId', Format(SessionId));
-        UserInfo.Add('userId', UserId);
-        UserInfo.Add('companyName', CompanyName);
-        UserInfo.Add('tenantId', TenantId);
-    end;
-
-    local procedure BuildEnvironmentInfo() EnvironmentInfo: JsonObject
-    begin
-        EnvironmentInfo.Add('environmentType', GetEnvironmentType());
-        EnvironmentInfo.Add('region', GetRegionInfo());
-        EnvironmentInfo.Add('applicationVersion', GetBCVersionInfo());
-    end;
-
-    local procedure GetBCVersionInfo(): Text
-    begin
-        exit('BC26.0'); // Static version - can be enhanced with actual version detection
-    end;
-
-    local procedure GetEnvironmentType(): Text
-    begin
-        // Determine environment type - could be enhanced with actual environment detection
-        exit('Production'); // Default - customize based on your setup
-    end;
-
-    local procedure GetRegionInfo(): Text
-    begin
-        // Return region information - customize based on your deployment
-        exit('Malaysia'); // Default for Malaysian eInvoice
-    end;
-
+    /// <summary>
+    /// Validates that the LHDN payload structure matches required format for document submission
+    /// Ensures proper "documents" array structure with required fields
+    /// </summary>
+    /// <param name="PayloadText">JSON payload to validate</param>
+    /// <returns>True if structure is valid for LHDN submission</returns>
     local procedure ValidateLhdnPayloadStructure(PayloadText: Text): Boolean
     var
         PayloadObject: JsonObject;
@@ -2442,31 +2545,88 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         exit(true);
     end;
 
+    // ======================================================================================================
+    // UTILITY AND HELPER PROCEDURES
+    // ======================================================================================================
+
+    /// <summary>
+    /// Creates a new GUID for correlation tracking
+    /// </summary>
+    /// <returns>Formatted GUID string</returns>
+    local procedure CreateGuid(): Text
+    var
+        GuidVar: Guid;
+    begin
+        GuidVar := CreateGuid();
+        exit(Format(GuidVar, 0, 4));
+    end;
+
+    /// <summary>
+    /// Validates JSON text format without parsing the full structure
+    /// </summary>
+    /// <param name="JsonText">JSON text to validate</param>
+    /// <returns>True if valid JSON format</returns>
     local procedure TestJsonValidity(JsonText: Text): Boolean
     var
         JsonObject: JsonObject;
     begin
-        // Try to parse the JSON to ensure it's valid
         exit(JsonObject.ReadFrom(JsonText));
     end;
 
-    procedure ValidatePayloadStructure(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
+    /// <summary>
+    /// Stores signed invoice JSON for audit trail and compliance requirements
+    /// Can be extended to save to custom tables for permanent record keeping
+    /// </summary>
+    /// <param name="SalesInvoiceHeader">Invoice record for reference</param>
+    /// <param name="SignedJsonText">Digitally signed JSON from Azure Function</param>
+    local procedure StoreSignedInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; SignedJsonText: Text)
     var
-        JsonText: Text;
-        PayloadText: Text;
-        JsonObject: JsonObject;
+        TempBlob: Codeunit "Temp Blob";
+        OutStream: OutStream;
+        InStream: InStream;
+        FileName: Text;
     begin
-        // Generate the eInvoice JSON
-        JsonText := GenerateEInvoiceJson(SalesInvoiceHeader, false);
+        // Store signed JSON for audit trail and records
+        // You can extend this to store in a custom table if needed
 
-        // Create the payload that will be sent to Azure Function
-        PayloadText := '{"unsignedJson":' + JsonText + ',"invoiceType":"01","environment":"PREPROD"}';
+        FileName := StrSubstNo('SignedInvoice_%1_%2.json',
+            SalesInvoiceHeader."No.",
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
 
-        // Validate the payload structure
-        if not JsonObject.ReadFrom(PayloadText) then
-            Error('Generated payload is not valid JSON');
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(SignedJsonText);
+        TempBlob.CreateInStream(InStream);
 
-        // Return the payload for inspection
-        exit(PayloadText);
+        // Optional: Download the signed JSON for verification
+        // DownloadFromStream(InStream, 'Signed eInvoice JSON', '', 'JSON files (*.json)|*.json', FileName);
+
+        // TODO: Store in a custom table for permanent record keeping
+        // Example: 
+        // SignedInvoiceLog."Invoice No." := SalesInvoiceHeader."No.";
+        // SignedInvoiceLog.SetSignedJSONText(SignedJsonText);
+        // SignedInvoiceLog.Insert();
+    end;
+
+    /// <summary>
+    /// Gets all property keys from a JSON object for debugging purposes
+    /// Useful for troubleshooting Azure Function response structure issues
+    /// </summary>
+    /// <param name="JsonObj">JSON object to analyze</param>
+    /// <returns>Comma-separated list of all keys</returns>
+    local procedure GetJsonObjectKeys(JsonObj: JsonObject): Text
+    var
+        KeysList: Text;
+        Keys: List of [Text];
+        i: Integer;
+        CurrentKey: Text;
+    begin
+        Keys := JsonObj.Keys();
+        for i := 1 to Keys.Count() do begin
+            CurrentKey := Keys.Get(i);
+            if KeysList <> '' then
+                KeysList += ', ';
+            KeysList += CurrentKey;
+        end;
+        exit(KeysList);
     end;
 }

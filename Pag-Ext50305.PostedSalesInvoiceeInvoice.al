@@ -88,25 +88,17 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     SignedJsonText: Text;
                     OutStream: OutStream;
                     InStream: InStream;
-                    Client: HttpClient;
-                    RequestContent: HttpContent;
-                    Response: HttpResponseMessage;
                     AzureFunctionUrl: Text;
-                    Headers: HttpHeaders;
                     Setup: Record "eInvoiceSetup";
-                    ResponseText: Text;
-                    RequestJson: JsonObject;
-                    RequestJsonText: Text;
                     InvoiceId: Text;
-                    PayloadSize: Integer;
+                    RetryCount: Integer;
+                    MaxRetries: Integer;
                 begin
                     // Step 1: Generate unsigned eInvoice JSON with validation
                     InvoiceId := Rec."No.";
-
                     JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
-                    PayloadSize := StrLen(JsonText);
 
-                    // Step 2: Basic JSON validation without context-sensitive operations
+                    // Step 2: Basic JSON validation
                     if JsonText = '' then
                         Error('Generated JSON is empty and cannot be sent to Azure Function.\n\nPlease check invoice data completeness and try again.');
 
@@ -123,86 +115,42 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     if AzureFunctionUrl = '' then
                         Error('Azure Function URL is not configured.\n\nPlease configure the Azure Function URL in e-Invoice Setup and try again.');
 
-                    // Step 4: Prepare HTTP POST with enhanced payload structure (following myinvois-client pattern)
-                    RequestJson.Add('unsignedJson', JsonText);
-                    RequestJson.Add('invoiceId', InvoiceId);
-                    RequestJson.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
-                    RequestJson.Add('environment', Format(Setup.Environment));
-                    RequestJson.WriteTo(RequestJsonText);
+                    // Step 4: Send to Azure Function using background session with retry logic
+                    MaxRetries := 3;
+                    RetryCount := 0;
+                    repeat
+                        RetryCount += 1;
+                        ClearLastError();
 
-                    RequestContent.WriteFrom(RequestJsonText);
-                    RequestContent.GetHeaders(Headers);
-                    Headers.Clear();
-                    Headers.Add('Content-Type', 'application/json');
-                    Headers.Add('User-Agent', 'BusinessCentral-eInvoice/1.0');
+                        if not TryPostToAzureFunctionInBackground(JsonText, AzureFunctionUrl, SignedJsonText) then begin
+                            if RetryCount >= MaxRetries then
+                                Error('Failed to communicate with Azure Function after %1 attempts.\n\nLast error: %2\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration', MaxRetries, GetLastErrorText());
 
-                    // Step 5: Send POST request with enhanced error handling and diagnostics
-                    if not Client.Post(AzureFunctionUrl, RequestContent, Response) then
-                        Error('Failed to connect to Azure Function\n\n' +
-                              'Troubleshooting Steps:\n' +
-                              '1. Verify Azure Function URL is accessible: %1\n' +
-                              '2. Check network connectivity and firewall settings\n' +
-                              '3. Ensure Azure Function is running and healthy\n' +
-                              '4. Validate Function App authentication settings\n' +
-                              '5. Check Function App resource availability', AzureFunctionUrl);
+                            // Wait before retry (progressive delay: 1s, 2s, 3s)
+                            Sleep(1000 * RetryCount);
+                        end else
+                            break; // Success, exit retry loop
 
-                    if Response.IsSuccessStatusCode() then begin
-                        Response.Content().ReadAs(SignedJsonText);
+                    until RetryCount >= MaxRetries;
 
-                        // Basic response validation without context-sensitive operations
-                        if SignedJsonText = '' then
-                            Error('Azure Function returned empty response.\n\nPlease check Function App logs and try again.');
+                    // Step 5: Basic response validation
+                    if SignedJsonText = '' then
+                        Error('Azure Function returned empty response.\n\nPlease check Function App logs and try again.');
 
-                        if not (SignedJsonText.StartsWith('{') and SignedJsonText.EndsWith('}')) then
-                            Error('Azure Function returned invalid JSON response.\n\nPlease check Function App logs and try again.');
+                    if not (SignedJsonText.StartsWith('{') and SignedJsonText.EndsWith('}')) then
+                        Error('Azure Function returned invalid JSON response.\n\nPlease check Function App logs and try again.');
 
-                        // Step 6: Download the signed JSON with enhanced metadata
-                        FileName := StrSubstNo('eInvoice_Signed_%1_%2.json',
-                            Rec."No.",
-                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+                    // Step 6: Download the signed JSON
+                    FileName := StrSubstNo('eInvoice_Signed_%1_%2.json',
+                        Rec."No.",
+                        Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
 
-                        TempBlob.CreateOutStream(OutStream);
-                        OutStream.WriteText(SignedJsonText);
-                        TempBlob.CreateInStream(InStream);
-                        DownloadFromStream(InStream, 'Download Signed e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
+                    TempBlob.CreateOutStream(OutStream);
+                    OutStream.WriteText(SignedJsonText);
+                    TempBlob.CreateInStream(InStream);
+                    DownloadFromStream(InStream, 'Download Signed e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
 
-                        Message('eInvoice %1 successfully signed and downloaded as %2', InvoiceId, FileName);
-                    end else begin
-                        Response.Content().ReadAs(ResponseText);
-
-                        // Enhanced error reporting with diagnostic information (inspired by myinvois-client)
-                        Error('Azure Function Error: %1 %2\n\n' +
-                              'Diagnostic Information:\n' +
-                              'Status Code: %1\n' +
-                              'Reason: %2\n' +
-                              'Function URL: %3\n' +
-                              'Timestamp: %4\n' +
-                              'Invoice: %5\n' +
-                              'Request Size: %6 characters\n\n' +
-                              'Response Details:\n%7\n\n' +
-                              'Troubleshooting Steps:\n' +
-                              '1. Check Azure Function logs in Application Insights\n' +
-                              '2. Verify Function App is running and accessible\n' +
-                              '3. Check if Function App has sufficient resources\n' +
-                              '4. Validate JSON payload structure and completeness\n' +
-                              '5. Review Function App authentication/authorization\n' +
-                              '6. Check for any Function App deployment issues\n' +
-                              '7. Verify digital signature certificate availability\n\n' +
-                              'Common 500 Error Causes:\n' +
-                              '• Function code exceptions (check Application Insights)\n' +
-                              '• Resource constraints (CPU/Memory/Timeout)\n' +
-                              '• Dependencies unavailable (certificate services)\n' +
-                              '• Configuration issues (app settings, connection strings)\n' +
-                              '• Digital signature certificate problems\n' +
-                              '• UBL structure validation failures\n\n' +
-                              'Session IDs for Support:\n' +
-                              '• Correlation ID: Available in response headers\n' +
-                              '• Request timestamp: %4\n' +
-                              '• Function URL: %3',
-                              Response.HttpStatusCode(), Response.ReasonPhrase(), AzureFunctionUrl,
-                              Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2> <Hours24,2>:<Minutes,2>:<Seconds,2>'),
-                              Rec."No.", PayloadSize, ResponseText);
-                    end;
+                    Message('eInvoice %1 successfully signed and downloaded as %2', InvoiceId, FileName);
                 end;
             }
 
@@ -354,4 +302,18 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
             }
         }
     }
+
+    [TryFunction]
+    local procedure TryPostToAzureFunctionInBackground(JsonText: Text; AzureFunctionUrl: Text; var SignedJsonText: Text)
+    var
+        eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+    begin
+        eInvoiceGenerator.PostJsonToAzureFunction(JsonText, AzureFunctionUrl, SignedJsonText);
+    end;
+
+    [TryFunction]
+    local procedure TryPostToAzureFunction(var eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON"; JsonText: Text; AzureFunctionUrl: Text; var SignedJsonText: Text)
+    begin
+        eInvoiceGenerator.PostJsonToAzureFunction(JsonText, AzureFunctionUrl, SignedJsonText);
+    end;
 }
