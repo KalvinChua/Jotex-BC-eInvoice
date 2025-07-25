@@ -49,9 +49,37 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     procedure PostJsonToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text)
     begin
         // This procedure is kept for backward compatibility
-        // All logic moved to TryPostToAzureFunction to prevent recursive calls
-        if not TryPostToAzureFunction(JsonText, AzureFunctionUrl, ResponseText) then
+        // All logic moved to TryPostToAzureFunctionInternal to prevent recursive calls
+        if not TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText) then
             Error('Failed to communicate with Azure Function. Please check the configuration and try again.');
+    end;
+
+    /// <summary>
+    /// Safe wrapper for TryPostToAzureFunction that returns boolean instead of throwing errors
+    /// Used by page extensions to avoid recursion issues
+    /// </summary>
+    /// <param name="JsonText">Unsigned e-Invoice JSON in UBL 2.1 format</param>
+    /// <param name="AzureFunctionUrl">Azure Function endpoint URL for signing service</param>
+    /// <param name="ResponseText">Response from Azure Function containing signed JSON and LHDN payload</param>
+    /// <returns>True if successful, False if failed</returns>
+    procedure TryPostToAzureFunctionSafe(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
+    begin
+        exit(TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText));
+    end;
+
+    /// <summary>
+    /// Public wrapper that provides error messages for compatibility
+    /// </summary>
+    /// <param name="JsonText">JSON payload to send</param>
+    /// <param name="AzureFunctionUrl">Azure Function endpoint URL</param>
+    /// <param name="ResponseText">Response from Azure Function</param>
+    /// <returns>True if successful, False if failed after all retries</returns>
+    procedure TryPostToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
+    begin
+        if not TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText) then begin
+            Error('Failed to communicate with Azure Function after 3 attempts.\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration');
+        end;
+        exit(true);
     end;
 
     // ======================================================================================================
@@ -1507,7 +1535,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             Error('Azure Function URL is not configured in eInvoice Setup.');
 
         // Step 3: Get signed invoice from Azure Function with improved error handling
-        if not TryPostToAzureFunction(UnsignedJsonText, AzureFunctionUrl, AzureResponseText) then
+        if not TryPostToAzureFunctionInternal(UnsignedJsonText, AzureFunctionUrl, AzureResponseText) then
             Error('Failed to communicate with Azure Function. Please check connectivity and try again.');
 
         // Step 4: Parse Azure Function response with detailed validation
@@ -1548,14 +1576,14 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     /// <summary>
-    /// Safer HTTP call wrapper with proper error handling and retry logic
-    /// Prevents recursive calls and memory issues by implementing controlled retry mechanism
+    /// Internal HTTP call wrapper with proper error handling and retry logic
+    /// Returns boolean instead of throwing errors to prevent recursion
     /// </summary>
     /// <param name="JsonText">JSON payload to send</param>
     /// <param name="AzureFunctionUrl">Azure Function endpoint URL</param>
     /// <param name="ResponseText">Response from Azure Function</param>
     /// <returns>True if successful, False if failed after all retries</returns>
-    local procedure TryPostToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
+    local procedure TryPostToAzureFunctionInternal(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     var
         HttpClient: HttpClient;
         RequestContent: HttpContent;
@@ -1644,8 +1672,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 Sleep(2000); // Wait 2 seconds before retry
         end;
 
-        // If we get here, all attempts failed
-        Error('Failed to communicate with Azure Function after %1 attempts.\n\nLast error: %2\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration', MaxAttempts, LastError);
+        // If we get here, all attempts failed - return false instead of throwing error
+        exit(false);
     end;
 
     // ======================================================================================================

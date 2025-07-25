@@ -308,12 +308,16 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
     var
         eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
     begin
-        eInvoiceGenerator.PostJsonToAzureFunction(JsonText, AzureFunctionUrl, SignedJsonText);
+        // Call TryPostToAzureFunction directly to avoid recursion through PostJsonToAzureFunction
+        if not eInvoiceGenerator.TryPostToAzureFunctionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then
+            Error('Failed to communicate with Azure Function');
     end;
 
     [TryFunction]
     local procedure TryPostToAzureFunction(var eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON"; JsonText: Text; AzureFunctionUrl: Text; var SignedJsonText: Text)
     begin
-        eInvoiceGenerator.PostJsonToAzureFunction(JsonText, AzureFunctionUrl, SignedJsonText);
+        // Call TryPostToAzureFunction directly to avoid recursion through PostJsonToAzureFunction
+        if not eInvoiceGenerator.TryPostToAzureFunctionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then
+            Error('Failed to communicate with Azure Function');
     end;
 }
