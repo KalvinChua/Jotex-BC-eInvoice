@@ -183,8 +183,6 @@ report 50301 "Export Credit Memo Batch eInv"
 
         dataitem(SalesCrLine; "Sales Cr.Memo Line")
         {
-            DataItemLink = "Document No." = field("No.");
-            DataItemLinkReference = SalesCrHeader;
             DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
 
             trigger OnAfterGetRecord()
@@ -240,8 +238,6 @@ report 50301 "Export Credit Memo Batch eInv"
 
         dataitem(SalesInvLineTax; "Sales Cr.Memo Line")
         {
-            DataItemLink = "Document No." = field("No.");
-            DataItemLinkReference = SalesCrHeader;
             DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
 
             trigger OnAfterGetRecord()

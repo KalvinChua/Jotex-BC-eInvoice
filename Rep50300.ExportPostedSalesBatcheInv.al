@@ -182,8 +182,6 @@ report 50300 "LHDN e-Invoice Export"
 
         dataitem(SalesInvLine; "Sales Invoice Line")
         {
-            DataItemLink = "Document No." = field("No.");
-            DataItemLinkReference = SalesInvHeader;
             DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
 
             trigger OnAfterGetRecord()
@@ -243,8 +241,6 @@ report 50300 "LHDN e-Invoice Export"
 
         dataitem(SalesInvLineTax; "Sales Invoice Line")
         {
-            DataItemLink = "Document No." = field("No.");
-            DataItemLinkReference = SalesInvHeader;
             DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
 
             trigger OnAfterGetRecord()
@@ -282,8 +278,6 @@ report 50300 "LHDN e-Invoice Export"
 
         dataitem(SalesInvDocTax; "Sales Invoice Line")
         {
-            DataItemLink = "Document No." = field("No.");
-            DataItemLinkReference = SalesInvHeader;
             DataItemTableView = SORTING("Document No.", "Line No.") WHERE(Type = FILTER(<> " "));
 
             trigger OnAfterGetRecord()

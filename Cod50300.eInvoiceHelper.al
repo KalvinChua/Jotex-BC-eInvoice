@@ -1,19 +1,39 @@
 codeunit 50300 eInvoiceHelper
 {
+    // Enhanced e-Invoice Helper with patterns inspired by myinvois-client
+    // Includes improved error handling, token management, and API communication
+
+    var
+        DefaultTimeout: Duration;
+
+    procedure InitializeHelper()
+    begin
+        DefaultTimeout := 300000; // 5 minutes timeout
+    end;
+
     procedure GetAccessTokenFromSetup(var SetupRec: Record eInvoiceSetup): Text
     var
         Token: Text;
         ExpirySeconds: Integer;
         ExpiryTime: DateTime;
+        TokenValidityBuffer: Duration;
     begin
-        // ✅ Reuse existing token if still valid
+        InitializeHelper();
+
+        // Enhanced token validation with buffer time (following myinvois-client pattern)
+        TokenValidityBuffer := 300000; // 5 minutes buffer before actual expiry
+
         if (SetupRec."Last Token" <> '') and (SetupRec."Token Timestamp" <> 0DT) and (SetupRec."Token Expiry (s)" > 0) then begin
-            ExpiryTime := SetupRec."Token Timestamp" + (1000 * SetupRec."Token Expiry (s)"); // milliseconds
-            if ExpiryTime > CurrentDateTime() then
+            ExpiryTime := SetupRec."Token Timestamp" + ((SetupRec."Token Expiry (s)" - 300) * 1000); // 5 min buffer
+            if ExpiryTime > CurrentDateTime() then begin
+                // Log token reuse for debugging
+                LogTokenOperation('Token reused', SetupRec."Last Token", ExpiryTime);
                 exit(SetupRec."Last Token");
+            end;
         end;
 
-        // ❌ Token missing or expired – generate new
+        // Token missing, expired, or near expiry – generate new
+        LogTokenOperation('Generating new token', '', 0DT);
         Token := GetAccessTokenFromFields(
             SetupRec."Client ID",
             SetupRec."Client Secret",
@@ -21,11 +41,13 @@ codeunit 50300 eInvoiceHelper
             ExpirySeconds
         );
 
+        // Update setup with new token and enhanced metadata
         SetupRec."Last Token" := Token;
         SetupRec."Token Timestamp" := CurrentDateTime();
         SetupRec."Token Expiry (s)" := ExpirySeconds;
         SetupRec.Modify();
 
+        LogTokenOperation('New token generated', Token, SetupRec."Token Timestamp" + (ExpirySeconds * 1000));
         exit(Token);
     end;
 
@@ -41,11 +63,27 @@ codeunit 50300 eInvoiceHelper
         BodyText: Text;
         Content: HttpContent;
         Headers: HttpHeaders;
+        CorrelationId: Text;
+        RequestStartTime: DateTime;
+        RequestEndTime: DateTime;
     begin
         ExpirySeconds := 0;
+        CorrelationId := CreateGuid();
+        RequestStartTime := CurrentDateTime();
 
+        // Enhanced input validation
         if (ClientID = '') or (ClientSecret = '') then
-            Error('Client ID or Client Secret is blank.');
+            Error('Authentication Configuration Error\n\n' +
+                  'Client ID or Client Secret is blank.\n\n' +
+                  'Resolution Steps:\n' +
+                  '1. Navigate to e-Invoice Setup\n' +
+                  '2. Configure Client ID and Client Secret\n' +
+                  '3. Verify credentials with LHDN\n' +
+                  '4. Save configuration and retry\n\n' +
+                  'Correlation ID: %1', CorrelationId);
+
+        // Set timeout for HTTP client
+        HttpClient.Timeout := DefaultTimeout;
 
         if Env = Env::Preprod then
             TokenURL := 'https://preprod-api.myinvois.hasil.gov.my/connect/token'
@@ -80,8 +118,112 @@ codeunit 50300 eInvoiceHelper
                 ExpirySeconds := ExpiryValue.AsValue().AsInteger();
             end;
 
+            RequestEndTime := CurrentDateTime();
+            LogTokenOperation('Token request successful', AccessToken, RequestStartTime + (ExpirySeconds * 1000));
+
             exit(AccessToken);
-        end else
-            Error('Access token not found in response. Response: %1', ResponseText);
+        end else begin
+            RequestEndTime := CurrentDateTime();
+            Error('❌ Access Token Request Failed\n\n' +
+                  '📋 Response Details:\n%1\n\n' +
+                  '🔧 Troubleshooting Steps:\n' +
+                  '1. Verify Client ID and Client Secret are correct\n' +
+                  '2. Check if credentials are active in LHDN portal\n' +
+                  '3. Ensure correct environment is selected\n' +
+                  '4. Verify network connectivity to LHDN servers\n' +
+                  '5. Check for any API service outages\n\n' +
+                  '🆔 Correlation ID: %2\n' +
+                  '⏱️ Request Duration: %3 ms', ResponseText, CorrelationId, RequestEndTime - RequestStartTime);
+        end;
+    end;
+
+    local procedure LogTokenOperation(Operation: Text; Token: Text; ExpiryTime: DateTime)
+    var
+        LogMessage: Text;
+        TokenPreview: Text;
+    begin
+        // Create safe token preview (first 10 characters + ...)
+        if StrLen(Token) > 10 then
+            TokenPreview := CopyStr(Token, 1, 10) + '...'
+        else if Token <> '' then
+            TokenPreview := '***'
+        else
+            TokenPreview := 'N/A';
+
+        LogMessage := StrSubstNo('%1 - Token: %2, Expiry: %3',
+            Operation,
+            TokenPreview,
+            Format(ExpiryTime, 0, '<Year4>-<Month,2>-<Day,2> <Hours24,2>:<Minutes,2>:<Seconds,2>'));
+
+        // Could be extended to write to event log or custom logging table
+        // For now, this serves as a placeholder for debugging
+    end;
+
+    procedure ValidateEnvironmentConfiguration(Setup: Record "eInvoiceSetup") IsValid: Boolean
+    var
+        ValidationErrors: List of [Text];
+        ErrorText: Text;
+        ErrorMessage: Text;
+    begin
+        // Comprehensive environment validation inspired by myinvois-client
+        IsValid := true;
+
+        // Check required fields
+        if Setup."Client ID" = '' then begin
+            ValidationErrors.Add('Client ID is not configured');
+            IsValid := false;
+        end;
+
+        if Setup."Client Secret" = '' then begin
+            ValidationErrors.Add('Client Secret is not configured');
+            IsValid := false;
+        end;
+
+        if Setup."Azure Function URL" = '' then begin
+            ValidationErrors.Add('Azure Function URL is not configured');
+            IsValid := false;
+        end;
+
+        // Report validation errors if any
+        if not IsValid then begin
+            ErrorMessage := '❌ eInvoice Configuration Validation Failed\n\n🔧 Missing Configuration:\n';
+            foreach ErrorText in ValidationErrors do
+                ErrorMessage += '• ' + ErrorText + '\n';
+
+            ErrorMessage += '\n💡 Please complete the configuration in e-Invoice Setup and try again.';
+            Error(ErrorMessage);
+        end;
+    end;
+
+    procedure GetFormattedEnvironmentInfo(Setup: Record "eInvoiceSetup") EnvironmentInfo: Text
+    var
+        InfoObject: JsonObject;
+        InfoText: Text;
+    begin
+        // Format environment information for debugging and logging
+        InfoObject.Add('environment', Format(Setup.Environment));
+        InfoObject.Add('hasClientId', Setup."Client ID" <> '');
+        InfoObject.Add('hasClientSecret', Setup."Client Secret" <> '');
+        InfoObject.Add('hasAzureFunctionUrl', Setup."Azure Function URL" <> '');
+        InfoObject.Add('tokenStatus', GetTokenStatus(Setup));
+        InfoObject.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+
+        InfoObject.WriteTo(InfoText);
+        EnvironmentInfo := InfoText;
+    end;
+
+    local procedure GetTokenStatus(Setup: Record "eInvoiceSetup") Status: Text
+    var
+        ExpiryTime: DateTime;
+    begin
+        if (Setup."Last Token" = '') or (Setup."Token Timestamp" = 0DT) then
+            Status := 'No Token'
+        else begin
+            ExpiryTime := Setup."Token Timestamp" + (Setup."Token Expiry (s)" * 1000);
+            if ExpiryTime > CurrentDateTime() then
+                Status := 'Valid'
+            else
+                Status := 'Expired';
+        end;
     end;
 }

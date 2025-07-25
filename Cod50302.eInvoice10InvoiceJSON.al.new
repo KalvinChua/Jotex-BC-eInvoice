@@ -1,0 +1,248 @@
+codeunit 50302 "eInvoice 1.0 Invoice JSON"
+{
+    procedure PostJsonToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text)
+    var
+        Client: HttpClient;
+        Request: HttpRequestMessage;
+        Response: HttpResponseMessage;
+        RequestHeaders: HttpHeaders;
+        Content: HttpContent;
+        PayloadObject: JsonObject;
+        PayloadText: Text;
+        RetryCount: Integer;
+        MaxRetries: Integer;
+        Success: Boolean;
+        ErrorMessage: Text;
+        RequestSuccess: Boolean;
+    begin
+        MaxRetries := 3;
+        RetryCount := 0;
+        Success := false;
+
+        // Build CORRECT payload with all required fields
+        PayloadObject := BuildAzureFunctionPayload(JsonText);
+        PayloadObject.WriteTo(PayloadText);
+
+        repeat
+            RetryCount += 1;
+            
+            Clear(Client);
+            Clear(Request);
+            Clear(Response);
+            Clear(ErrorMessage);
+            
+            // Prepare HTTP request
+            Content.WriteFrom(PayloadText);
+            Content.GetHeaders(RequestHeaders);
+            RequestHeaders.Clear();
+            RequestHeaders.Add('Content-Type', 'application/json');
+            
+            Request.Method := 'POST';
+            Request.SetRequestUri(AzureFunctionUrl);
+            Request.Content := Content;
+            
+            // Send request
+            RequestSuccess := Client.Send(Request, Response);
+            if RequestSuccess then begin
+                Response.Content.ReadAs(ResponseText);
+                
+                if Response.IsSuccessStatusCode then begin
+                    Success := true;
+                end else begin
+                    ErrorMessage := StrSubstNo('Azure Function returned status %1: %2', 
+                        Response.HttpStatusCode, ResponseText);
+                end;
+            end else begin
+                ErrorMessage := 'Failed to connect to Azure Function';
+            end;
+            
+            if not Success and (RetryCount < MaxRetries) then
+                Sleep(1000 * RetryCount); // Exponential backoff
+                
+        until Success or (RetryCount >= MaxRetries);
+
+        if not Success then begin
+            ResponseText := ErrorMessage;
+            Error('Azure Function call failed after %1 attempts: %2', MaxRetries, ErrorMessage);
+        end;
+    end;
+
+    procedure GetSignedInvoiceAndSubmitToLHDN(SalesInvoiceHeader: Record "Sales Invoice Header"; var LhdnResponse: Text): Boolean
+    var
+        UnsignedJsonText: Text;
+        AzureResponseText: Text;
+        AzureResponse: JsonObject;
+        JsonToken: JsonToken;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        AzureFunctionUrl: Text;
+    begin
+        // Step 1: Generate unsigned eInvoice JSON
+        UnsignedJsonText := GenerateEInvoiceJson(SalesInvoiceHeader, false);
+        
+        // Step 2: Get Azure Function URL from setup
+        if not eInvoiceSetup.Get('SETUP') then
+            Error('eInvoice Setup not found. Please configure the Azure Function URL.');
+            
+        AzureFunctionUrl := eInvoiceSetup."Azure Function URL";
+        if AzureFunctionUrl = '' then
+            Error('Azure Function URL is not configured in eInvoice Setup.');
+        
+        // Step 3: Get signed invoice from Azure Function
+        PostJsonToAzureFunction(UnsignedJsonText, AzureFunctionUrl, AzureResponseText);
+        
+        // Step 4: Parse Azure Function response
+        if not AzureResponse.ReadFrom(AzureResponseText) then
+            Error('Invalid JSON response from Azure Function: %1', AzureResponseText);
+            
+        if not AzureResponse.Get('success', JsonToken) or not JsonToken.AsValue().AsBoolean() then begin
+            if AzureResponse.Get('error', JsonToken) then
+                Error('Azure Function signing failed: %1', JsonToken.AsValue().AsText())
+            else
+                Error('Azure Function signing failed with unknown error');
+        end;
+        
+        // Step 5: Extract LHDN payload and submit to LHDN API
+        if AzureResponse.Get('lhdnPayload', JsonToken) then
+            exit(SubmitToLhdnApi(JsonToken.AsObject(), LhdnResponse))
+        else
+            Error('No LHDN payload found in Azure Function response');
+    end;
+    
+    procedure SubmitToLhdnApi(LhdnPayload: JsonObject; var LhdnResponse: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        ContentHeaders: HttpHeaders;
+        RequestHeaders: HttpHeaders;
+        LhdnPayloadText: Text;
+        AccessToken: Text;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        LhdnApiUrl: Text;
+    begin
+        // Get setup for environment determination
+        if not eInvoiceSetup.Get('SETUP') then
+            Error('eInvoice Setup not found');
+            
+        // Convert payload to text
+        LhdnPayload.WriteTo(LhdnPayloadText);
+        
+        // Get LHDN access token
+        if not GetLhdnAccessToken(AccessToken) then
+            Error('Failed to obtain LHDN access token');
+        
+        // Determine LHDN API URL based on environment
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            LhdnApiUrl := 'https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions'
+        else
+            LhdnApiUrl := 'https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions';
+        
+        // Setup LHDN API request
+        HttpRequestMessage.Method := 'POST';
+        HttpRequestMessage.SetRequestUri(LhdnApiUrl);
+        HttpRequestMessage.Content.WriteFrom(LhdnPayloadText);
+        HttpRequestMessage.Content.GetHeaders(ContentHeaders);
+        ContentHeaders.Clear();
+        ContentHeaders.Add('Content-Type', 'application/json');
+        HttpRequestMessage.GetHeaders(RequestHeaders);
+        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+        
+        // Submit to LHDN
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            HttpResponseMessage.Content.ReadAs(LhdnResponse);
+            
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                Message('LHDN Submission successful: %1', LhdnResponse);
+                exit(true);
+            end else begin
+                Error('LHDN API error %1: %2', HttpResponseMessage.HttpStatusCode, LhdnResponse);
+            end;
+        end;
+        
+        exit(false);
+    end;
+    
+    local procedure GetLhdnAccessToken(var AccessToken: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        ContentHeaders: HttpHeaders;
+        TokenRequestBody: Text;
+        TokenResponse: Text;
+        JsonResponse: JsonObject;
+        JsonToken: JsonToken;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        TokenUrl: Text;
+    begin
+        // Get setup
+        if not eInvoiceSetup.Get('SETUP') then
+            Error('eInvoice Setup not found');
+            
+        if (eInvoiceSetup."Client ID" = '') or (eInvoiceSetup."Client Secret" = '') then
+            Error('LHDN Client ID and Client Secret must be configured in eInvoice Setup');
+        
+        // Prepare OAuth2 token request
+        TokenRequestBody := StrSubstNo('grant_type=client_credentials&client_id=%1&client_secret=%2&scope=InvoicingAPI',
+            eInvoiceSetup."Client ID", eInvoiceSetup."Client Secret");
+        
+        // Determine token URL based on environment
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            TokenUrl := 'https://preprod-api.myinvois.hasil.gov.my/connect/token'
+        else
+            TokenUrl := 'https://api.myinvois.hasil.gov.my/connect/token';
+        
+        HttpRequestMessage.Method := 'POST';
+        HttpRequestMessage.SetRequestUri(TokenUrl);
+        HttpRequestMessage.Content.WriteFrom(TokenRequestBody);
+        HttpRequestMessage.Content.GetHeaders(ContentHeaders);
+        ContentHeaders.Clear();
+        ContentHeaders.Add('Content-Type', 'application/x-www-form-urlencoded');
+        
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                HttpResponseMessage.Content.ReadAs(TokenResponse);
+                
+                if JsonResponse.ReadFrom(TokenResponse) then begin
+                    if JsonResponse.Get('access_token', JsonToken) then begin
+                        AccessToken := JsonToken.AsValue().AsText();
+                        
+                        // Update setup with new token and expiry
+                        eInvoiceSetup."Last Token" := AccessToken;
+                        eInvoiceSetup."Token Timestamp" := CurrentDateTime;
+                        if JsonResponse.Get('expires_in', JsonToken) then
+                            eInvoiceSetup."Token Expiry (s)" := JsonToken.AsValue().AsInteger();
+                        eInvoiceSetup.Modify();
+                        
+                        exit(true);
+                    end;
+                end;
+            end else begin
+                HttpResponseMessage.Content.ReadAs(TokenResponse);
+                Error('LHDN token request failed %1: %2', HttpResponseMessage.HttpStatusCode, TokenResponse);
+            end;
+        end;
+        
+        exit(false);
+    end;
+
+    // Placeholder for the rest of the existing methods - will be restored from backup
+    procedure GenerateEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) JsonText: Text
+    var
+        JsonObject: JsonObject;
+        StartTime: DateTime;
+    begin
+        StartTime := CurrentDateTime;
+
+        // Validate input
+        if SalesInvoiceHeader."No." = '' then
+            Error('Sales Invoice Header cannot be empty');
+
+        JsonObject := BuildEInvoiceJson(SalesInvoiceHeader, IncludeSignature);
+        JsonObject.WriteTo(JsonText);
+
+        // Validate output
+        if JsonText = '' then
+            Error('Failed to generate JSON for invoice %1', SalesInvoiceHeader."No.");
+    end;
+}

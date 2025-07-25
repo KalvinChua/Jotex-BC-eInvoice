@@ -74,6 +74,50 @@ page 50300 eInvoiceSetupCard
                     Message('Access token retrieved: %1', CopyStr(Token, 1, 50) + '...');
                 end;
             }
+
+            action(GetDocumentTypes)
+            {
+                Caption = 'Get LHDN Document Types';
+                ApplicationArea = All;
+                Image = Document;
+                ToolTip = 'Retrieve all available document types from LHDN MyInvois API';
+
+                trigger OnAction()
+                var
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    DocumentTypesResponse: Text;
+                begin
+                    if eInvoiceJsonCodeunit.GetLhdnDocumentTypes(DocumentTypesResponse) then begin
+                        // Success message is already shown in the procedure
+                    end;
+                    // Error handling is done in the procedure
+                end;
+            }
+
+            action(GetNotifications)
+            {
+                Caption = 'Get LHDN Notifications';
+                ApplicationArea = All;
+                Image = Email;
+                ToolTip = 'Retrieve notifications from LHDN MyInvois system';
+
+                trigger OnAction()
+                var
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    NotificationsResponse: Text;
+                    DateFrom: Date;
+                    DateTo: Date;
+                begin
+                    // Get notifications for the last 7 days
+                    DateFrom := CalcDate('-7D', Today);
+                    DateTo := Today;
+
+                    if eInvoiceJsonCodeunit.GetLhdnNotifications(NotificationsResponse, DateFrom, DateTo, 0, 1, 50) then begin
+                        // Success message is already shown in the procedure
+                    end;
+                    // Error handling is done in the procedure
+                end;
+            }
         }
     }
 
