@@ -128,8 +128,8 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     // Step 4: Send to Azure Function using session-safe method
                     Message('Sending JSON to Azure Function at: %1', AzureFunctionUrl);
 
-                    // Use session-safe method to avoid context issues
-                    if not eInvoiceGenerator.TryPostToAzureFunctionSessionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then begin
+                    // Use the new direct HTTP method with proper implementation
+                    if not eInvoiceGenerator.TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, SignedJsonText) then begin
                         Message('Failed to communicate with Azure Function.\n\nError: %1\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration\n• Try refreshing the page and attempting again', SignedJsonText);
                         exit;
                     end;

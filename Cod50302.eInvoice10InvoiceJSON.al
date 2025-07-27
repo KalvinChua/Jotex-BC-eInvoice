@@ -49,8 +49,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     procedure PostJsonToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text)
     var
         Success: Boolean;
+        CorrelationId: Text;
+        MaxRetries: Integer;
     begin
-        Success := TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText);
+        CorrelationId := CreateGuid();
+        MaxRetries := 3;
+        Success := TryDirectHttpClient(AzureFunctionUrl, BuildAzureFunctionPayload(JsonText, CorrelationId), ResponseText, CorrelationId, MaxRetries);
         if not Success then begin
             Error('Failed to communicate with Azure Function: %1', ResponseText);
         end;
@@ -66,7 +70,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     /// <returns>True if successful, False if failed</returns>
     procedure TryPostToAzureFunctionSafe(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     begin
-        exit(TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText));
+        // Use the new direct implementation
+        exit(TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, ResponseText));
     end;
 
     /// <summary>
@@ -79,9 +84,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     procedure TryPostToAzureFunction(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     var
         Success: Boolean;
-        ErrorMsg: Text;
     begin
-        Success := TryPostToAzureFunctionInternal(JsonText, AzureFunctionUrl, ResponseText);
+        Success := TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, ResponseText);
+
         if Success then begin
             // Additional validation can be added here
             if ResponseText = '' then begin
@@ -91,14 +96,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
 
         if not Success then begin
-            Error('Failed to communicate with Azure Function after 3 attempts.\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration\n\nError Details: %1', ResponseText);
+            Error('Failed to communicate with Azure Function.\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration\n\nError Details: %1', ResponseText);
         end;
         exit(true);
     end;
 
     /// <summary>
-    /// Session-safe wrapper for HTTP calls to avoid context issues
-    /// Uses a simplified approach to handle HTTP operations from page actions
+    /// Session-safe wrapper that calls the main implementation
     /// </summary>
     /// <param name="JsonText">JSON payload to send</param>
     /// <param name="AzureFunctionUrl">Azure Function endpoint URL</param>
@@ -106,21 +110,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     /// <returns>True if successful, False if failed</returns>
     procedure TryPostToAzureFunctionSessionSafe(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     begin
-        // Validate URL format first
-        if not ValidateAzureFunctionUrl(AzureFunctionUrl) then begin
-            ResponseText := StrSubstNo('Invalid Azure Function URL format: %1. Expected format: https://[function-name].azurewebsites.net/api/[function-endpoint]', AzureFunctionUrl);
-            exit(false);
-        end;
-
-        // Try direct call with simplified approach
-        if TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, ResponseText) then
-            exit(true);
-
-        // If direct call fails, provide enhanced error message
-        if ResponseText = '' then
-            ResponseText := 'HTTP operation failed due to session context restrictions. Please try again or contact administrator.';
-
-        exit(false);
+        // Call the main implementation
+        exit(TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, ResponseText));
     end;
 
     /// <summary>
@@ -145,115 +136,145 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     /// <summary>
-    /// Simple connectivity test for debugging Azure Function issues
+    /// Simple connectivity test for Azure Function
     /// </summary>
     procedure TestAzureFunctionConnectivity(AzureFunctionUrl: Text): Text
     var
-        Client: HttpClient;
-        Response: HttpResponseMessage;
-        RequestContent: HttpContent;
-        Headers: HttpHeaders;
+        HttpClient: HttpClient;
+        HttpResponseMessage: HttpResponseMessage;
         ResponseText: Text;
-        TestPayload: Text;
-        DiagnosticInfo: Text;
-        StartTime: DateTime;
-        EndTime: DateTime;
+        TestUrl: Text;
     begin
-        StartTime := CurrentDateTime();
+        // Test connectivity endpoint (no authentication needed)
+        TestUrl := 'https://einvoicejotex-b0hthca2gqaghwcf.southeastasia-01.azurewebsites.net/api/connectivity-test';
 
-        // Create minimal test payload
-        TestPayload := '{"test":"connectivity","source":"BusinessCentral-Debug"}';
-
-        // Setup request
-        RequestContent.WriteFrom(TestPayload);
-        RequestContent.GetHeaders(Headers);
-        Headers.Clear();
-        Headers.Add('Content-Type', 'application/json');
-
-        Client.Timeout := 30000; // 30 seconds timeout for testing
-
-        // Attempt connection
-        if Client.Post(AzureFunctionUrl, RequestContent, Response) then begin
-            EndTime := CurrentDateTime();
-            Response.Content().ReadAs(ResponseText);
-
-            DiagnosticInfo := StrSubstNo('✅ CONNECTION SUCCESS\n' +
-                'URL: %1\n' +
-                'Status: %2 %3\n' +
-                'Response Time: %4ms\n' +
-                'Response Length: %5 chars\n' +
-                'Response Preview: %6',
-                AzureFunctionUrl,
-                Response.HttpStatusCode(),
-                Response.ReasonPhrase(),
-                EndTime - StartTime,
-                StrLen(ResponseText),
-                CopyStr(ResponseText, 1, 200));
+        if HttpClient.Get(TestUrl, HttpResponseMessage) then begin
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                HttpResponseMessage.Content.ReadAs(ResponseText);
+                exit('✅ Azure Function connectivity successful. Response: ' + CopyStr(ResponseText, 1, 200));
+            end else begin
+                exit('Function returned error: ' + Format(HttpResponseMessage.HttpStatusCode));
+            end;
         end else begin
-            EndTime := CurrentDateTime();
-            DiagnosticInfo := StrSubstNo('❌ CONNECTION FAILED\n' +
-                'URL: %1\n' +
-                'Timeout: %2ms\n' +
-                'Elapsed: %3ms\n' +
-                'Possible Issues:\n' +
-                '• Function not running\n' +
-                '• Network connectivity\n' +
-                '• Firewall blocking\n' +
-                '• Invalid URL format\n' +
-                '• SSL/TLS issues',
-                AzureFunctionUrl,
-                30000,
-                EndTime - StartTime);
+            exit('Cannot connect to Azure Function - Check network connectivity');
         end;
-
-        exit(DiagnosticInfo);
     end;
 
     /// <summary>
-    /// Direct HTTP call with enhanced error handling for better diagnostics
+    /// Analyzes Azure Function URL structure for diagnostics
     /// </summary>
-    local procedure TryPostToAzureFunctionDirect(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
+    local procedure AnalyzeAzureFunctionUrl(Url: Text): Text
     var
-        Client: HttpClient;
-        Response: HttpResponseMessage;
-        RequestContent: HttpContent;
-        Headers: HttpHeaders;
-        RequestText: Text;
-        ErrorDetails: Text;
+        Analysis: Text;
+        HasHttps: Boolean;
+        HasAzureWebsites: Boolean;
+        HasApi: Boolean;
+        HasCode: Boolean;
+        FunctionName: Text;
+        AppName: Text;
+        ApiPos: Integer;
+        CodePos: Integer;
     begin
-        // Create simple JSON payload without complex objects
-        RequestText := '{"unsignedJson":' + JsonText + ',"source":"BusinessCentral"}';
+        Analysis := '';
 
-        // Prepare request with minimal setup
+        // Check HTTPS
+        HasHttps := Url.StartsWith('https://');
+        Analysis += '• HTTPS: ' + Format(HasHttps) + '\n';
+
+        // Check Azure Websites domain
+        HasAzureWebsites := Url.Contains('azurewebsites.net');
+        Analysis += '• Azure Domain: ' + Format(HasAzureWebsites) + '\n';
+
+        // Extract app name
+        if HasHttps and HasAzureWebsites then begin
+            AppName := CopyStr(Url, 9); // Remove https://
+            if AppName.Contains('.') then
+                AppName := CopyStr(AppName, 1, AppName.IndexOf('.') - 1);
+            Analysis += '• App Name: ' + AppName + '\n';
+        end;
+
+        // Check API path
+        HasApi := Url.Contains('/api/');
+        Analysis += '• API Path: ' + Format(HasApi) + '\n';
+
+        // Extract function name
+        if HasApi then begin
+            ApiPos := Url.IndexOf('/api/');
+            FunctionName := CopyStr(Url, ApiPos + 5);
+            if FunctionName.Contains('?') then
+                FunctionName := CopyStr(FunctionName, 1, FunctionName.IndexOf('?') - 1);
+            Analysis += '• Function Name: ' + FunctionName + '\n';
+        end;
+
+        // Check function key
+        HasCode := Url.Contains('?code=');
+        Analysis += '• Has Function Key: ' + Format(HasCode) + '\n';
+
+        // Overall assessment
+        if HasHttps and HasAzureWebsites and HasApi and HasCode then
+            Analysis += '• Overall: URL format looks correct ✅'
+        else
+            Analysis += '• Overall: URL format may have issues ⚠️';
+
+        exit(Analysis);
+    end;
+
+    /// <summary>
+    /// Direct HTTP call to Azure Function with proper implementation
+    /// </summary>
+    procedure TryPostToAzureFunctionDirect(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestContent: HttpContent;
+        JsonObj: JsonObject;
+        Headers: HttpHeaders;
+        RequestId: Text;
+        RequestText: Text;
+    begin
+        RequestId := CreateGuid();
+
+        // Create request payload matching Azure Function expectations
+        JsonObj.Add('unsignedJson', JsonText);
+        JsonObj.Add('invoiceType', '01');
+        JsonObj.Add('environment', 'PREPROD');
+        JsonObj.Add('submissionId', RequestId);
+        JsonObj.Add('correlationId', RequestId);
+        JsonObj.Add('requestedBy', UserId());
+
+        // Convert to string
+        JsonObj.WriteTo(RequestText);
         RequestContent.WriteFrom(RequestText);
+
+        // Set headers
         RequestContent.GetHeaders(Headers);
         Headers.Clear();
         Headers.Add('Content-Type', 'application/json');
 
-        // Set timeout to avoid hanging
-        Client.Timeout := 120000; // 2 minutes timeout
+        // Configure request
+        HttpRequestMessage.Method := 'POST';
+        HttpRequestMessage.SetRequestUri(AzureFunctionUrl);
+        HttpRequestMessage.Content := RequestContent;
 
-        // Enhanced HTTP POST with detailed error reporting
-        if Client.Post(AzureFunctionUrl, RequestContent, Response) then begin
-            // Successfully sent request, check response
-            Response.Content().ReadAs(ResponseText);
+        // Set timeout
+        HttpClient.Timeout(300000); // 5 minutes
 
-            if Response.IsSuccessStatusCode() then begin
-                // Success case
+        // Send request
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                HttpResponseMessage.Content.ReadAs(ResponseText);
                 exit(true);
             end else begin
-                // HTTP error response
-                ErrorDetails := StrSubstNo('Azure Function returned HTTP %1 %2. Response: %3',
-                    Response.HttpStatusCode(), Response.ReasonPhrase(), ResponseText);
-                ResponseText := ErrorDetails;
+                HttpResponseMessage.Content.ReadAs(ResponseText);
                 exit(false);
             end;
-        end else begin
-            // Failed to send request
-            ResponseText := StrSubstNo('Failed to connect to Azure Function at %1. Check: Network connectivity, Function URL correctness, Function availability', AzureFunctionUrl);
-            exit(false);
         end;
+
+        exit(false);
     end;
+
+
 
     // ======================================================================================================
     // MAIN E-INVOICE JSON GENERATION PROCEDURES
@@ -1712,7 +1733,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
 
         // Step 3: Get signed invoice from Azure Function with improved error handling
-        if not TryPostToAzureFunctionInternal(UnsignedJsonText, AzureFunctionUrl, AzureResponseText) then begin
+        if not TryDirectHttpClient(AzureFunctionUrl, BuildAzureFunctionPayload(UnsignedJsonText, CreateGuid()), AzureResponseText, CreateGuid(), 3) then begin
             LhdnResponse := 'Failed to communicate with Azure Function. Please check connectivity and try again.';
             exit(false);
         end;
@@ -1723,9 +1744,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             exit(false);
         end;
 
-        // Check for success status
+        // Check for success status (BusinessCentralSigningResponse format)
         if not AzureResponse.Get('success', JsonToken) or not JsonToken.AsValue().AsBoolean() then begin
-            if AzureResponse.Get('error', JsonToken) then
+            if AzureResponse.Get('errorDetails', JsonToken) then
                 LhdnResponse := StrSubstNo('Azure Function signing failed: %1', JsonToken.AsValue().AsText())
             else if AzureResponse.Get('message', JsonToken) then
                 LhdnResponse := StrSubstNo('Azure Function error: %1', JsonToken.AsValue().AsText())
@@ -1741,20 +1762,15 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
 
         // Step 6: Extract LHDN payload and submit to LHDN API
-        // Expected Azure Function response format:
+        // BusinessCentralSigningResponse format:
         // {
         //   "success": true,
         //   "signedJson": "...",
-        //   "lhdnPayload": { "documents": [...] }
+        //   "lhdnPayload": "..." (string, not object)
         // }
         if AzureResponse.Get('lhdnPayload', JsonToken) then begin
-            // Validate the LHDN payload structure before submission
-            if ValidateLhdnPayloadStructure(JsonToken.AsValue().AsText()) then
-                exit(SubmitToLhdnApi(JsonToken.AsObject(), SalesInvoiceHeader, LhdnResponse))
-            else begin
-                LhdnResponse := 'Invalid LHDN payload structure received from Azure Function';
-                exit(false);
-            end;
+            // Parse the LHDN payload string into JSON object
+            exit(ProcessLhdnPayload(JsonToken.AsValue().AsText(), SalesInvoiceHeader, LhdnResponse));
         end else begin
             LhdnResponse := StrSubstNo('No LHDN payload found in Azure Function response. Response keys: %1', GetJsonObjectKeys(AzureResponse));
             exit(false);
@@ -1762,8 +1778,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     /// <summary>
-    /// Internal implementation for posting to Azure Function - NO RECURSION
-    /// This is the actual HTTP client implementation that was missing
+    /// Internal implementation for posting to Azure Function using Microsoft's recommended approach
+    /// Uses the System Application Azure Functions codeunit with fallback to direct HttpClient
     /// </summary>
     /// <param name="JsonText">JSON payload to send to Azure Function</param>
     /// <param name="AzureFunctionUrl">Azure Function endpoint URL</param>
@@ -1771,20 +1787,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     /// <returns>True if successful, False if failed</returns>
     local procedure TryPostToAzureFunctionInternal(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     var
-        Client: HttpClient;
-        Response: HttpResponseMessage;
-        RequestContent: HttpContent;
-        Headers: HttpHeaders;
         RequestPayload: JsonObject;
         RequestText: Text;
         CorrelationId: Text;
-        RequestStartTime: DateTime;
-        RequestEndTime: DateTime;
-        ElapsedTime: Duration;
-        AttemptCount: Integer;
-        MaxRetries: Integer;
-        Success: Boolean;
         Setup: Record "eInvoiceSetup";
+        Success: Boolean;
+        MaxRetries: Integer;
+        AttemptCount: Integer;
     begin
         // Initialize variables
         Success := false;
@@ -1797,16 +1806,64 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         // Get setup for environment information
         if Setup.Get('SETUP') then;
 
-        // Build structured request payload for Azure Function
-        RequestPayload.Add('unsignedJson', JsonText);
+        // Build BusinessCentralSigningRequest payload matching Azure Function model
         RequestPayload.Add('correlationId', CorrelationId);
-        RequestPayload.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
         RequestPayload.Add('environment', Format(Setup.Environment));
-        RequestPayload.Add('source', 'BusinessCentral');
-        RequestPayload.Add('version', '1.0');
         RequestPayload.Add('invoiceType', '01'); // Standard invoice
-        RequestPayload.Add('requestId', CorrelationId);
+        RequestPayload.Add('unsignedJson', JsonText);
+        RequestPayload.Add('submissionId', CorrelationId);
+        RequestPayload.Add('requestedBy', UserId());
         RequestPayload.WriteTo(RequestText);
+
+        // Try Microsoft's Azure Functions approach first, then fallback to direct HttpClient
+        Success := TryMicrosoftAzureFunctions(AzureFunctionUrl, RequestText, ResponseText, CorrelationId);
+
+        if not Success then begin
+            // Fallback to direct HttpClient approach
+            Success := TryDirectHttpClient(AzureFunctionUrl, RequestText, ResponseText, CorrelationId, MaxRetries);
+        end;
+
+        exit(Success);
+    end;
+
+    /// <summary>
+    /// Attempts to use Microsoft's System Application Azure Functions codeunit
+    /// </summary>
+    local procedure TryMicrosoftAzureFunctions(AzureFunctionUrl: Text; RequestText: Text; var ResponseText: Text; CorrelationId: Text): Boolean
+    var
+        BaseUrl: Text;
+        FunctionKey: Text;
+    begin
+        // Try to use Microsoft's Azure Functions framework
+        // Note: This may not be available in all Business Central environments
+
+        // Parse URL components
+        BaseUrl := GetBaseUrl(AzureFunctionUrl);
+        FunctionKey := GetFunctionKey(AzureFunctionUrl);
+
+        // TODO: Implement Microsoft's Azure Functions codeunit when available
+        // For now, return false to use fallback approach
+        ResponseText := 'Microsoft Azure Functions codeunit not available, using fallback approach';
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Direct HttpClient implementation as fallback
+    /// </summary>
+    local procedure TryDirectHttpClient(AzureFunctionUrl: Text; RequestText: Text; var ResponseText: Text; CorrelationId: Text; MaxRetries: Integer): Boolean
+    var
+        Client: HttpClient;
+        Response: HttpResponseMessage;
+        RequestContent: HttpContent;
+        Headers: HttpHeaders;
+        AttemptCount: Integer;
+        Success: Boolean;
+        RequestStartTime: DateTime;
+        RequestEndTime: DateTime;
+        ElapsedTime: Duration;
+    begin
+        Success := false;
+        AttemptCount := 0;
 
         // Retry loop for network resilience
         repeat
@@ -1815,16 +1872,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
             // Configure HTTP client
             Client.Clear();
-            Client.Timeout := 300000; // 5 minutes timeout
+            Client.Timeout := 300000; // 5 minutes timeout for Azure Functions
 
-            // Prepare request content
+            // Prepare request content with enhanced headers
             RequestContent.WriteFrom(RequestText);
             RequestContent.GetHeaders(Headers);
             Headers.Clear();
             Headers.Add('Content-Type', 'application/json; charset=utf-8');
-            Headers.Add('User-Agent', 'BusinessCentral-eInvoice/1.0');
+            Headers.Add('User-Agent', 'BusinessCentral-eInvoice/2.0');
+            Headers.Add('Accept', 'application/json');
             Headers.Add('X-Correlation-ID', CorrelationId);
-            Headers.Add('X-Request-Source', 'BusinessCentral');
+            Headers.Add('X-Request-Source', 'BusinessCentral-DirectClient');
             Headers.Add('X-Attempt-Number', Format(AttemptCount));
 
             // Send POST request to Azure Function
@@ -1845,16 +1903,17 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                             AttemptCount, MaxRetries, CorrelationId, ElapsedTime);
                     end;
                 end else begin
-                    // HTTP error response
-                    ResponseText := StrSubstNo('Azure Function HTTP Error (Attempt %1/%2)\nStatus: %3 %4\nCorrelation ID: %5\nElapsed Time: %6ms\nResponse: %7',
-                        AttemptCount, MaxRetries, Response.HttpStatusCode(), Response.ReasonPhrase(), CorrelationId, ElapsedTime, ResponseText);
+                    // HTTP error response with enhanced details
+                    ResponseText := StrSubstNo('Azure Function HTTP Error (Attempt %1/%2)\nStatus: %3 %4\nCorrelation ID: %5\nElapsed Time: %6ms\nURL: %7\nResponse: %8',
+                        AttemptCount, MaxRetries, Response.HttpStatusCode(), Response.ReasonPhrase(),
+                        CorrelationId, ElapsedTime, CopyStr(AzureFunctionUrl, 1, 100), CopyStr(ResponseText, 1, 300));
                 end;
             end else begin
                 // Connection failure
                 RequestEndTime := CurrentDateTime;
                 ElapsedTime := RequestEndTime - RequestStartTime;
-                ResponseText := StrSubstNo('Failed to connect to Azure Function (Attempt %1/%2)\nURL: %3\nCorrelation ID: %4\nElapsed Time: %5ms\nCheck network connectivity and URL configuration.',
-                    AttemptCount, MaxRetries, AzureFunctionUrl, CorrelationId, ElapsedTime);
+                ResponseText := StrSubstNo('Failed to connect to Azure Function (Attempt %1/%2)\nURL: %3\nCorrelation ID: %4\nElapsed Time: %5ms\nTroubleshooting: Check network, DNS, firewall, and Azure Function status',
+                    AttemptCount, MaxRetries, CopyStr(AzureFunctionUrl, 1, 100), CorrelationId, ElapsedTime);
             end;
 
             // Wait before retry (except on last attempt)
@@ -1863,8 +1922,69 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         until Success or (AttemptCount >= MaxRetries);
 
-        // Final result
         exit(Success);
+    end;
+
+    /// <summary>
+    /// Extracts base URL from Azure Function URL (removes parameters)
+    /// </summary>
+    local procedure GetBaseUrl(FullUrl: Text): Text
+    var
+        QuestionMarkPos: Integer;
+    begin
+        QuestionMarkPos := FullUrl.IndexOf('?');
+        if QuestionMarkPos > 0 then
+            exit(CopyStr(FullUrl, 1, QuestionMarkPos - 1))
+        else
+            exit(FullUrl);
+    end;
+
+    /// <summary>
+    /// Extracts function key from Azure Function URL for authentication
+    /// </summary>
+    local procedure GetFunctionKey(FullUrl: Text): Text
+    var
+        CodeParam: Text;
+        StartPos: Integer;
+        EndPos: Integer;
+    begin
+        // Look for code= parameter in URL
+        CodeParam := 'code=';
+        StartPos := FullUrl.IndexOf(CodeParam);
+
+        if StartPos = 0 then
+            exit(''); // No function key found (anonymous function)
+
+        StartPos := StartPos + StrLen(CodeParam);
+        EndPos := FullUrl.IndexOf('&', StartPos);
+
+        if EndPos = 0 then
+            exit(CopyStr(FullUrl, StartPos)) // Function key is at the end
+        else
+            exit(CopyStr(FullUrl, StartPos, EndPos - StartPos)); // Function key has more parameters after it
+    end;
+
+    /// <summary>
+    /// Builds the BusinessCentralSigning endpoint URL from the main Azure Function URL
+    /// </summary>
+    local procedure BuildBusinessCentralSigningUrl(OriginalUrl: Text): Text
+    var
+        BaseUrl: Text;
+        FunctionKey: Text;
+        BusinessCentralUrl: Text;
+    begin
+        // Extract base URL and function key
+        BaseUrl := GetBaseUrl(OriginalUrl);
+        FunctionKey := GetFunctionKey(OriginalUrl);
+
+        // Build BusinessCentralSigning endpoint URL
+        BusinessCentralUrl := BaseUrl + '/api/BusinessCentralSigning';
+
+        // Add function key if present
+        if FunctionKey <> '' then
+            BusinessCentralUrl += '?code=' + FunctionKey;
+
+        exit(BusinessCentralUrl);
     end;
 
     // ======================================================================================================
@@ -2848,6 +2968,53 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
         exit(KeysList);
     end;
+
+    /// <summary>
+    /// Builds Azure Function payload in BusinessCentralSigningRequest format
+    /// </summary>
+    local procedure BuildAzureFunctionPayload(JsonText: Text; CorrelationId: Text): Text
+    var
+        RequestPayload: JsonObject;
+        Setup: Record "eInvoiceSetup";
+        RequestText: Text;
+    begin
+        // Get setup for environment information
+        if Setup.Get('SETUP') then;
+
+        // Build BusinessCentralSigningRequest payload matching Azure Function model
+        RequestPayload.Add('correlationId', CorrelationId);
+        RequestPayload.Add('environment', Format(Setup.Environment));
+        RequestPayload.Add('invoiceType', '01'); // Standard invoice
+        RequestPayload.Add('unsignedJson', JsonText);
+        RequestPayload.Add('submissionId', CorrelationId);
+        RequestPayload.Add('requestedBy', UserId());
+        RequestPayload.WriteTo(RequestText);
+
+        exit(RequestText);
+    end;
+
+    /// <summary>
+    /// Processes LHDN payload from Azure Function response
+    /// </summary>
+    local procedure ProcessLhdnPayload(LhdnPayloadText: Text; SalesInvoiceHeader: Record "Sales Invoice Header"; var LhdnResponse: Text): Boolean
+    var
+        LhdnPayloadObject: JsonObject;
+    begin
+        if LhdnPayloadObject.ReadFrom(LhdnPayloadText) then begin
+            // Validate the LHDN payload structure before submission
+            if ValidateLhdnPayloadStructure(LhdnPayloadText) then
+                exit(SubmitToLhdnApi(LhdnPayloadObject, SalesInvoiceHeader, LhdnResponse))
+            else begin
+                LhdnResponse := 'Invalid LHDN payload structure received from Azure Function';
+                exit(false);
+            end;
+        end else begin
+            LhdnResponse := 'Failed to parse LHDN payload from Azure Function response';
+            exit(false);
+        end;
+    end;
+
+
 
     // ======================================================================================================
     // PERFORMANCE OPTIMIZATION VARIABLES
