@@ -112,7 +112,6 @@ codeunit 50321 "eInvoice UBL Document Builder"
         IssueDate.Add('_text', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
         InvoiceObject.Add('cbc:IssueDate', IssueDate);
 
-        // Issue Time - Use current UTC time minus 5 minutes for LHDN compliance
         IssueTime.Add('_text', Format(DT2Time(CurrentDateTime - 300000), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
         InvoiceObject.Add('cbc:IssueTime', IssueTime);
 
