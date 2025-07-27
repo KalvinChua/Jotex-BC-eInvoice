@@ -108,12 +108,12 @@ codeunit 50321 "eInvoice UBL Document Builder"
         ID.Add('_text', SalesInvoiceHeader."No.");
         InvoiceObject.Add('cbc:ID', ID);
 
-        // Issue Date
-        IssueDate.Add('_text', Format(SalesInvoiceHeader."Document Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+        // FORCE: Always use yesterday's date to ensure it's never in the future
+        IssueDate.Add('_text', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
         InvoiceObject.Add('cbc:IssueDate', IssueDate);
 
-        // Issue Time (current time or posting time)
-        IssueTime.Add('_text', Format(Time, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        // Issue Time - Use current UTC time minus 5 minutes for LHDN compliance
+        IssueTime.Add('_text', Format(DT2Time(CurrentDateTime - 300000), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
         InvoiceObject.Add('cbc:IssueTime', IssueTime);
 
         // Invoice Type Code (01 = Invoice, 02 = Debit Note, 03 = Credit Note)

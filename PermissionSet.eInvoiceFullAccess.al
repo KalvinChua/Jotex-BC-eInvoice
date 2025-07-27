@@ -1,19 +1,17 @@
-permissionset 50300 eInvoiceFullAccess
+permissionset 50300 "eInvoice Full Access"
 {
-    Caption = 'e-Invoice Full Access';
     Assignable = true;
+    Caption = 'e-Invoice Full Access';
 
-    Permissions =
-        tabledata eInvoiceSetup = RIMD,
-        tabledata "eInvoice TIN Log" = RIMD,
-        tabledata eInvoiceTypes = RIMD,
-        tabledata eInvoiceUOM = RIMD,
-        tabledata "eInvoice Version" = RIMD,
-        tabledata "Currency Codes" = RIMD,
-        tabledata "MSIC Codes" = RIMD,
-        tabledata "State Codes" = RIMD,
-        tabledata "Country Codes" = RIMD,
-        tabledata "Payment Modes" = RIMD,
-        tabledata "e-Invoice Tax Types" = RIMD,
-        tabledata eInvoiceClassification = RIMD;
+    // ======================================================================================================
+    // MINIMAL PERMISSIONS TO FIX THE IMMEDIATE ERROR
+    // ======================================================================================================
+
+    // Core Business Central tables - CRITICAL for e-Invoice
+    Permissions = tabledata "Sales Invoice Header" = RIMD,
+                  tabledata "Sales Invoice Line" = RIMD,
+                  tabledata Customer = RIMD,
+                  tabledata Vendor = RIMD,
+                  tabledata Item = RIMD,
+                  tabledata "Company Information" = RIMD;
 }
