@@ -40,7 +40,7 @@ codeunit 50321 "eInvoice UBL Document Builder"
 
         // Validate final document structure
         if not ValidateUBLDocument(UBLDocument) then
-            Error('❌ UBL Document validation failed\n\nPlease check document structure and required fields.');
+            Error('UBL Document validation failed\n\nPlease check document structure and required fields.');
     end;
 
     local procedure InitializeUBLStructure(var UBLDocument: JsonObject)

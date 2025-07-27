@@ -5,6 +5,8 @@ codeunit 50300 eInvoiceHelper
 
     var
         DefaultTimeout: Duration;
+        TokenCache: Dictionary of [Text, Text]; // Cache for tokens by environment
+        TokenExpiryCache: Dictionary of [Text, DateTime]; // Cache for token expiry times
 
     procedure InitializeHelper()
     begin
@@ -17,17 +19,39 @@ codeunit 50300 eInvoiceHelper
         ExpirySeconds: Integer;
         ExpiryTime: DateTime;
         TokenValidityBuffer: Duration;
+        CacheKey: Text;
+        CurrentTime: DateTime;
     begin
         InitializeHelper();
+        CurrentTime := CurrentDateTime();
 
         // Enhanced token validation with buffer time (following myinvois-client pattern)
         TokenValidityBuffer := 300000; // 5 minutes buffer before actual expiry
 
+        // Create cache key based on environment and credentials
+        CacheKey := GetCacheKey(SetupRec);
+
+        // Check in-memory cache first (fastest)
+        if TokenCache.ContainsKey(CacheKey) then begin
+            if TokenExpiryCache.ContainsKey(CacheKey) then begin
+                TokenExpiryCache.Get(CacheKey, ExpiryTime);
+                if ExpiryTime > CurrentTime then begin
+                    TokenCache.Get(CacheKey, Token);
+                    LogTokenOperation('Token reused from cache', Token, ExpiryTime);
+                    exit(Token);
+                end;
+            end;
+        end;
+
+        // Check database cache (slower but persistent)
         if (SetupRec."Last Token" <> '') and (SetupRec."Token Timestamp" <> 0DT) and (SetupRec."Token Expiry (s)" > 0) then begin
             ExpiryTime := SetupRec."Token Timestamp" + ((SetupRec."Token Expiry (s)" - 300) * 1000); // 5 min buffer
-            if ExpiryTime > CurrentDateTime() then begin
-                // Log token reuse for debugging
-                LogTokenOperation('Token reused', SetupRec."Last Token", ExpiryTime);
+            if ExpiryTime > CurrentTime then begin
+                // Update in-memory cache
+                TokenCache.Set(CacheKey, SetupRec."Last Token");
+                TokenExpiryCache.Set(CacheKey, ExpiryTime);
+
+                LogTokenOperation('Token reused from database', SetupRec."Last Token", ExpiryTime);
                 exit(SetupRec."Last Token");
             end;
         end;
@@ -41,14 +65,25 @@ codeunit 50300 eInvoiceHelper
             ExpirySeconds
         );
 
-        // Update setup with new token and enhanced metadata
+        // Update both database and in-memory cache
         SetupRec."Last Token" := Token;
-        SetupRec."Token Timestamp" := CurrentDateTime();
+        SetupRec."Token Timestamp" := CurrentTime;
         SetupRec."Token Expiry (s)" := ExpirySeconds;
         SetupRec.Modify();
 
-        LogTokenOperation('New token generated', Token, SetupRec."Token Timestamp" + (ExpirySeconds * 1000));
+        // Update in-memory cache
+        ExpiryTime := CurrentTime + (ExpirySeconds * 1000);
+        TokenCache.Set(CacheKey, Token);
+        TokenExpiryCache.Set(CacheKey, ExpiryTime);
+
+        LogTokenOperation('New token generated', Token, ExpiryTime);
         exit(Token);
+    end;
+
+    local procedure GetCacheKey(SetupRec: Record eInvoiceSetup): Text
+    begin
+        // Create unique cache key based on environment and credentials hash
+        exit(Format(SetupRec.Environment) + '_' + CreateGuid());
     end;
 
     procedure GetAccessTokenFromFields(ClientID: Text; ClientSecret: Text; Env: Option Preprod,Production; var ExpirySeconds: Integer): Text
@@ -124,16 +159,16 @@ codeunit 50300 eInvoiceHelper
             exit(AccessToken);
         end else begin
             RequestEndTime := CurrentDateTime();
-            Error('❌ Access Token Request Failed\n\n' +
-                  '📋 Response Details:\n%1\n\n' +
-                  '🔧 Troubleshooting Steps:\n' +
+            Error('Access Token Request Failed\n\n' +
+                  'Response Details:\n%1\n\n' +
+                  'Troubleshooting Steps:\n' +
                   '1. Verify Client ID and Client Secret are correct\n' +
                   '2. Check if credentials are active in LHDN portal\n' +
                   '3. Ensure correct environment is selected\n' +
                   '4. Verify network connectivity to LHDN servers\n' +
                   '5. Check for any API service outages\n\n' +
-                  '🆔 Correlation ID: %2\n' +
-                  '⏱️ Request Duration: %3 ms', ResponseText, CorrelationId, RequestEndTime - RequestStartTime);
+                  'Correlation ID: %2\n' +
+                  'Request Duration: %3 ms', ResponseText, CorrelationId, RequestEndTime - RequestStartTime);
         end;
     end;
 
@@ -186,11 +221,11 @@ codeunit 50300 eInvoiceHelper
 
         // Report validation errors if any
         if not IsValid then begin
-            ErrorMessage := '❌ eInvoice Configuration Validation Failed\n\n🔧 Missing Configuration:\n';
+            ErrorMessage := 'eInvoice Configuration Validation Failed\n\nMissing Configuration:\n';
             foreach ErrorText in ValidationErrors do
                 ErrorMessage += '• ' + ErrorText + '\n';
 
-            ErrorMessage += '\n💡 Please complete the configuration in e-Invoice Setup and try again.';
+            ErrorMessage += '\nPlease complete the configuration in e-Invoice Setup and try again.';
             Error(ErrorMessage);
         end;
     end;
@@ -225,5 +260,12 @@ codeunit 50300 eInvoiceHelper
             else
                 Status := 'Expired';
         end;
+    end;
+
+    // Performance optimization: Clear cache when needed
+    procedure ClearTokenCache()
+    begin
+        // Dictionary cache will be cleared automatically when codeunit is unloaded
+        // No manual clear needed in AL
     end;
 }

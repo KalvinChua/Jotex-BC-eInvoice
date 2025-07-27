@@ -67,7 +67,7 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                         SuccessMsg := StrSubstNo('Invoice %1 successfully signed and submitted to LHDN!\n\nLHDN Response:\n%2', Rec."No.", LhdnResponse);
                         Message(SuccessMsg);
                     end else begin
-                        Error('Failed to complete signing and submission process.\nResponse: %1', LhdnResponse);
+                        Message('Failed to complete signing and submission process.\nResponse: %1', LhdnResponse);
                     end;
                 end;
             }
@@ -91,19 +91,27 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     AzureFunctionUrl: Text;
                     Setup: Record "eInvoiceSetup";
                     InvoiceId: Text;
-                    RetryCount: Integer;
-                    MaxRetries: Integer;
                 begin
                     // Step 1: Generate unsigned eInvoice JSON with validation
                     InvoiceId := Rec."No.";
+
+                    // Test JSON generation step by step
+                    Message('Starting JSON generation for invoice %1...', InvoiceId);
+
                     JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
 
-                    // Step 2: Basic JSON validation
-                    if JsonText = '' then
-                        Error('Generated JSON is empty and cannot be sent to Azure Function.\n\nPlease check invoice data completeness and try again.');
+                    Message('JSON generation completed. Length: %1 characters', StrLen(JsonText));
 
-                    if not (JsonText.StartsWith('{') and JsonText.EndsWith('}')) then
-                        Error('Generated JSON format is invalid and cannot be sent to Azure Function.\n\nPlease check invoice data completeness and try again.');
+                    // Step 2: Basic JSON validation
+                    if JsonText = '' then begin
+                        Message('Generated JSON is empty and cannot be sent to Azure Function.\n\nPlease check invoice data completeness and try again.');
+                        exit;
+                    end;
+
+                    if not (JsonText.StartsWith('{') and JsonText.EndsWith('}')) then begin
+                        Message('Generated JSON format is invalid and cannot be sent to Azure Function.\n\nPlease check invoice data completeness and try again.');
+                        exit;
+                    end;
 
                     // Step 3: Get Azure Function URL from setup with validation
                     if not Setup.Get('SETUP') then begin
@@ -112,33 +120,32 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                         Setup.Insert();
                     end;
                     AzureFunctionUrl := Setup."Azure Function URL";
-                    if AzureFunctionUrl = '' then
-                        Error('Azure Function URL is not configured.\n\nPlease configure the Azure Function URL in e-Invoice Setup and try again.');
+                    if AzureFunctionUrl = '' then begin
+                        Message('Azure Function URL is not configured.\n\nPlease configure the Azure Function URL in e-Invoice Setup and try again.');
+                        exit;
+                    end;
 
-                    // Step 4: Send to Azure Function using background session with retry logic
-                    MaxRetries := 3;
-                    RetryCount := 0;
-                    repeat
-                        RetryCount += 1;
-                        ClearLastError();
+                    // Step 4: Send to Azure Function using session-safe method
+                    Message('Sending JSON to Azure Function at: %1', AzureFunctionUrl);
 
-                        if not TryPostToAzureFunctionInBackground(JsonText, AzureFunctionUrl, SignedJsonText) then begin
-                            if RetryCount >= MaxRetries then
-                                Error('Failed to communicate with Azure Function after %1 attempts.\n\nLast error: %2\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration', MaxRetries, GetLastErrorText());
+                    // Use session-safe method to avoid context issues
+                    if not eInvoiceGenerator.TryPostToAzureFunctionSessionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then begin
+                        Message('Failed to communicate with Azure Function.\n\nError: %1\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration\n• Try refreshing the page and attempting again', SignedJsonText);
+                        exit;
+                    end;
 
-                            // Wait before retry (progressive delay: 1s, 2s, 3s)
-                            Sleep(1000 * RetryCount);
-                        end else
-                            break; // Success, exit retry loop
-
-                    until RetryCount >= MaxRetries;
+                    Message('Azure Function call completed successfully');
 
                     // Step 5: Basic response validation
-                    if SignedJsonText = '' then
-                        Error('Azure Function returned empty response.\n\nPlease check Function App logs and try again.');
+                    if SignedJsonText = '' then begin
+                        Message('Azure Function returned empty response.\n\nPlease check Function App logs and try again.');
+                        exit;
+                    end;
 
-                    if not (SignedJsonText.StartsWith('{') and SignedJsonText.EndsWith('}')) then
-                        Error('Azure Function returned invalid JSON response.\n\nPlease check Function App logs and try again.');
+                    if not (SignedJsonText.StartsWith('{') and SignedJsonText.EndsWith('}')) then begin
+                        Message('Azure Function returned invalid JSON response.\n\nPlease check Function App logs and try again.');
+                        exit;
+                    end;
 
                     // Step 6: Download the signed JSON
                     FileName := StrSubstNo('eInvoice_Signed_%1_%2.json',
@@ -153,171 +160,12 @@ pageextension 50305 "Posted Sales Invoice eInvoice" extends "Posted Sales Invoic
                     Message('eInvoice %1 successfully signed and downloaded as %2', InvoiceId, FileName);
                 end;
             }
-
-            action(TestAzureFunctionConnectivity)
-            {
-                ApplicationArea = All;
-                Caption = 'Test Azure Function';
-                Image = TestFile;
-                ToolTip = 'Test Azure Function connectivity and diagnose issues';
-
-                trigger OnAction()
-                var
-                    Client: HttpClient;
-                    Response: HttpResponseMessage;
-                    Setup: Record "eInvoiceSetup";
-                    AzureFunctionUrl: Text;
-                    ResponseText: Text;
-                    RequestContent: HttpContent;
-                    Headers: HttpHeaders;
-                    TestPayload: JsonObject;
-                    TestPayloadText: Text;
-                    TestStartTime: DateTime;
-                    TestEndTime: DateTime;
-                    ResponseTime: Duration;
-                begin
-                    TestStartTime := CurrentDateTime;
-
-                    // Get Azure Function URL from setup with validation
-                    if not Setup.Get('SETUP') then begin
-                        Message('Test Failed: eInvoice Setup Record Not Found\n\n' +
-                                'Resolution Steps:\n' +
-                                '1. Navigate to e-Invoice Setup\n' +
-                                '2. Create or verify setup configuration\n' +
-                                '3. Save the configuration\n' +
-                                '4. Retry the connectivity test');
-                        exit;
-                    end;
-
-                    AzureFunctionUrl := Setup."Azure Function URL";
-                    if AzureFunctionUrl = '' then begin
-                        Message('Test Failed: Azure Function URL Not Configured\n\n' +
-                                'Resolution Steps:\n' +
-                                '1. Navigate to e-Invoice Setup\n' +
-                                '2. Configure the Azure Function URL\n' +
-                                '3. Save the configuration\n' +
-                                '4. Retry the connectivity test');
-                        exit;
-                    end;
-
-                    Message('Testing Azure Function Connectivity...\n\n' +
-                            'Target: %1\n' +
-                            'Test started: %2\n' +
-                            'Please wait...', AzureFunctionUrl, Format(TestStartTime, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>'));
-
-                    // Create enhanced test payload (following myinvois-client pattern)
-                    TestPayload.Add('test', 'connectivity');
-                    TestPayload.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
-                    TestPayload.Add('source', 'BusinessCentral-ConnectivityTest');
-                    TestPayload.Add('environment', Format(Setup.Environment));
-                    TestPayload.Add('version', '1.0');
-                    TestPayload.WriteTo(TestPayloadText);
-
-                    // Setup request with enhanced headers
-                    RequestContent.WriteFrom(TestPayloadText);
-                    RequestContent.GetHeaders(Headers);
-                    Headers.Clear();
-                    Headers.Add('Content-Type', 'application/json');
-                    Headers.Add('User-Agent', 'BusinessCentral-eInvoice/1.0-Test');
-                    Headers.Add('X-Test-Type', 'Connectivity');
-
-                    // Perform connectivity test with comprehensive diagnostics
-                    if Client.Post(AzureFunctionUrl, RequestContent, Response) then begin
-                        TestEndTime := CurrentDateTime;
-                        ResponseTime := TestEndTime - TestStartTime;
-                        Response.Content().ReadAs(ResponseText);
-
-                        if Response.IsSuccessStatusCode() then begin
-                            Message('Azure Function Connectivity Test PASSED\n\n' +
-                                    'Endpoint: %1\n' +
-                                    'Status Code: %2 %3\n' +
-                                    'Response Time: %4 ms\n' +
-                                    'Response Size: %5 characters\n' +
-                                    'Test Completed: %6\n' +
-                                    'Environment: %7\n\n' +
-                                    'Status: Azure Function is healthy and responsive\n' +
-                                    'Ready for e-Invoice signing operations\n\n' +
-                                    'Response Preview:\n%8',
-                                    AzureFunctionUrl, Response.HttpStatusCode(), Response.ReasonPhrase(),
-                                    ResponseTime, StrLen(ResponseText),
-                                    Format(TestEndTime, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>'),
-                                    Format(Setup.Environment),
-                                    CopyStr(ResponseText, 1, 150) + '...');
-                        end else begin
-                            Message('Azure Function Connectivity Test - Warning\n\n' +
-                                    'Endpoint: %1\n' +
-                                    'Status Code: %2 %3\n' +
-                                    'Response Time: %4 ms\n' +
-                                    'Test Completed: %5\n' +
-                                    'Environment: %6\n\n' +
-                                    'Function is reachable but returned non-success status\n\n' +
-                                    'Potential Issues:\n' +
-                                    '• Function may require authentication\n' +
-                                    '• Test payload format may be incorrect\n' +
-                                    '• Function may be in unhealthy state\n' +
-                                    '• Resource constraints or dependencies\n' +
-                                    '• Cold start delays or timeout issues\n\n' +
-                                    'Response Details:\n%7',
-                                    AzureFunctionUrl, Response.HttpStatusCode(), Response.ReasonPhrase(),
-                                    ResponseTime, Format(TestEndTime, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>'),
-                                    Format(Setup.Environment), ResponseText);
-                        end;
-                    end else begin
-                        TestEndTime := CurrentDateTime;
-                        Error('Azure Function Connectivity Test FAILED\n\n' +
-                              'Endpoint: %1\n' +
-                              'Test Duration: %2 ms\n' +
-                              'Test Completed: %3\n' +
-                              'Environment: %4\n\n' +
-                              'Connection could not be established\n\n' +
-                              'Comprehensive Troubleshooting Steps:\n' +
-                              '1. Verify Function URL format and accessibility\n' +
-                              '2. Check network connectivity and DNS resolution\n' +
-                              '3. Ensure Azure Function App is running\n' +
-                              '4. Verify firewall and security group settings\n' +
-                              '5. Check Function App deployment status\n' +
-                              '6. Review Azure Function App logs in Application Insights\n' +
-                              '7. Validate Function App resource allocation\n' +
-                              '8. Check Function App authentication settings\n' +
-                              '9. Verify SSL/TLS certificate validity\n' +
-                              '10. Test with direct HTTP client (Postman/curl)\n\n' +
-                              'Common Connection Issues:\n' +
-                              '• Incorrect Function URL or endpoint path\n' +
-                              '• Network firewall blocking outbound requests\n' +
-                              '• Function App stopped, deallocated, or scaling down\n' +
-                              '• DNS resolution problems or proxy issues\n' +
-                              '• SSL/TLS certificate validation failures\n' +
-                              '• Timeout due to cold start delays (>5 minutes)\n' +
-                              '• Function App plan limitations or quotas\n' +
-                              '• CORS policy restrictions (if browser-based)\n\n' +
-                              'Session Information for Support:\n' +
-                              '• Test Timestamp: %3\n' +
-                              '• Environment: %4\n' +
-                              '• User-Agent: BusinessCentral-eInvoice/1.0-Test',
-                              AzureFunctionUrl, TestEndTime - TestStartTime,
-                              Format(TestEndTime, 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>'),
-                              Format(Setup.Environment));
-                    end;
-                end;
-            }
         }
     }
 
-    [TryFunction]
-    local procedure TryPostToAzureFunctionInBackground(JsonText: Text; AzureFunctionUrl: Text; var SignedJsonText: Text)
-    var
-        eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
-    begin
-        // Call TryPostToAzureFunction directly to avoid recursion through PostJsonToAzureFunction
-        if not eInvoiceGenerator.TryPostToAzureFunctionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then
-            Error('Failed to communicate with Azure Function');
-    end;
 
-    [TryFunction]
-    local procedure TryPostToAzureFunction(var eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON"; JsonText: Text; AzureFunctionUrl: Text; var SignedJsonText: Text)
-    begin
-        // Call TryPostToAzureFunction directly to avoid recursion through PostJsonToAzureFunction
-        if not eInvoiceGenerator.TryPostToAzureFunctionSafe(JsonText, AzureFunctionUrl, SignedJsonText) then
-            Error('Failed to communicate with Azure Function');
-    end;
+
+
+
+
 }

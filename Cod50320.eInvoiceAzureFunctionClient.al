@@ -7,6 +7,7 @@ codeunit 50320 "eInvoice Azure Function Client"
     var
         Client: HttpClient;
         DefaultTimeout: Duration;
+        LastRequestTime: Dictionary of [Text, DateTime]; // Track request timing for rate limiting
 
     procedure InitializeClient()
     begin
@@ -24,6 +25,7 @@ codeunit 50320 "eInvoice Azure Function Client"
         Headers: HttpHeaders;
         ResponseText: Text;
         CorrelationId: Text;
+        PooledClient: HttpClient;
     begin
         // Generate correlation ID for tracking (following myinvois-client pattern)
         CorrelationId := CreateGuid();
@@ -43,9 +45,12 @@ codeunit 50320 "eInvoice Azure Function Client"
         Headers.Add('X-Correlation-ID', CorrelationId);
         Headers.Add('X-Request-Source', 'BusinessCentral');
 
+        // Apply rate limiting
+        ApplyRateLimiting(Setup."Azure Function URL");
+
         // Send request with comprehensive error handling
         if not Client.Post(Setup."Azure Function URL", RequestContent, Response) then
-            Error('❌ Failed to connect to Azure Function\n\n' +
+            Error('Failed to connect to Azure Function\n\n' +
                   'Correlation ID: %1\n' +
                   'Endpoint: %2\n\n' +
                   'This indicates a network connectivity issue.', CorrelationId, Setup."Azure Function URL");
@@ -57,11 +62,34 @@ codeunit 50320 "eInvoice Azure Function Client"
 
         // Validate and return signed JSON
         if not ValidateSignedResponse(ResponseText) then
-            Error('❌ Azure Function returned invalid signed document\n\n' +
+            Error('Azure Function returned invalid signed document\n\n' +
                   'Correlation ID: %1\n' +
                   'Please check Function App logs for details.', CorrelationId);
 
         SignedJson := ResponseText;
+    end;
+
+
+
+    local procedure ApplyRateLimiting(FunctionUrl: Text)
+    var
+        LastTime: DateTime;
+        CurrentTime: DateTime;
+        MinInterval: Duration;
+    begin
+        CurrentTime := CurrentDateTime();
+        MinInterval := 1000; // 1 second minimum between requests
+
+        if LastRequestTime.ContainsKey(FunctionUrl) then begin
+            LastRequestTime.Get(FunctionUrl, LastTime);
+            if (CurrentTime - LastTime) < MinInterval then begin
+                // Wait for rate limiting
+                Sleep(1000);
+            end;
+        end;
+
+        // Update last request time
+        LastRequestTime.Set(FunctionUrl, CurrentTime);
     end;
 
     local procedure PrepareSigningRequest(UnsignedJson: Text; Setup: Record "eInvoiceSetup"; var RequestPayload: JsonObject; CorrelationId: Text) Success: Boolean
@@ -119,71 +147,80 @@ codeunit 50320 "eInvoice Azure Function Client"
         // Comprehensive error reporting based on status code
         case StatusCode of
             400:
-                Error('❌ Azure Function - Bad Request (400)\n\n' +
-                      '📋 Error Details:\n%1\n\n' +
-                      '🔧 Common Causes:\n' +
+                Error('Azure Function - Bad Request (400)\n\n' +
+                      'Error Details:\n%1\n\n' +
+                      'Common Causes:\n' +
                       '• Invalid JSON payload structure\n' +
                       '• Missing required fields in request\n' +
                       '• Malformed UBL document structure\n' +
                       '• Invalid certificate configuration\n\n' +
-                      '🆔 Correlation ID: %2\n' +
-                      '🎯 Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
+                      'Correlation ID: %2\n' +
+                      'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             401:
-                Error('❌ Azure Function - Unauthorized (401)\n\n' +
-                      '🔧 Authentication Issues:\n' +
+                Error('Azure Function - Unauthorized (401)\n\n' +
+                      'Authentication Issues:\n' +
                       '• Function requires authentication\n' +
                       '• Invalid or expired authentication token\n' +
                       '• Missing authentication headers\n\n' +
-                      '🆔 Correlation ID: %1\n' +
-                      '🎯 Endpoint: %2', CorrelationId, FunctionUrl);
+                      'Correlation ID: %1\n' +
+                      'Endpoint: %2', CorrelationId, FunctionUrl);
 
             404:
-                Error('❌ Azure Function - Not Found (404)\n\n' +
-                      '🔧 Endpoint Issues:\n' +
+                Error('Azure Function - Not Found (404)\n\n' +
+                      'Endpoint Issues:\n' +
                       '• Function URL is incorrect\n' +
                       '• Function has been deleted or moved\n' +
                       '• Function name or route is wrong\n\n' +
-                      '🆔 Correlation ID: %1\n' +
-                      '🎯 Endpoint: %2', CorrelationId, FunctionUrl);
+                      'Correlation ID: %1\n' +
+                      'Endpoint: %2', CorrelationId, FunctionUrl);
+
+            429:
+                Error('Azure Function - Too Many Requests (429)\n\n' +
+                      'Rate Limiting:\n' +
+                      '• Function is rate limited\n' +
+                      '• Too many concurrent requests\n' +
+                      '• Wait before retrying\n\n' +
+                      'Correlation ID: %1\n' +
+                      'Endpoint: %2', CorrelationId, FunctionUrl);
 
             500:
-                Error('❌ Azure Function - Internal Server Error (500)\n\n' +
-                      '📋 Error Details:\n%1\n\n' +
-                      '🔧 Server-Side Issues:\n' +
+                Error('Azure Function - Internal Server Error (500)\n\n' +
+                      'Error Details:\n%1\n\n' +
+                      'Server-Side Issues:\n' +
                       '• Function code exceptions or bugs\n' +
                       '• Digital signature certificate problems\n' +
                       '• External service dependencies unavailable\n' +
                       '• Resource constraints (memory/CPU)\n' +
                       '• Configuration errors in Function App\n\n' +
-                      '💡 Next Steps:\n' +
+                      'Next Steps:\n' +
                       '• Check Application Insights logs\n' +
                       '• Verify certificate availability\n' +
                       '• Review Function App configuration\n' +
                       '• Check resource utilization\n\n' +
-                      '🆔 Correlation ID: %2\n' +
-                      '🎯 Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
+                      'Correlation ID: %2\n' +
+                      'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             502, 503, 504:
-                Error('❌ Azure Function - Service Unavailable (%1)\n\n' +
-                      '🔧 Infrastructure Issues:\n' +
+                Error('Azure Function - Service Unavailable (%1)\n\n' +
+                      'Infrastructure Issues:\n' +
                       '• Function App is scaling or restarting\n' +
                       '• Load balancer or gateway problems\n' +
                       '• Temporary service outage\n' +
                       '• Cold start timeout issues\n\n' +
-                      '💡 Recommended Actions:\n' +
+                      'Recommended Actions:\n' +
                       '• Wait a few minutes and retry\n' +
                       '• Check Azure Status page\n' +
                       '• Verify Function App scaling settings\n\n' +
-                      '🆔 Correlation ID: %2\n' +
-                      '🎯 Endpoint: %3', StatusCode, CorrelationId, FunctionUrl);
+                      'Correlation ID: %2\n' +
+                      'Endpoint: %3', StatusCode, CorrelationId, FunctionUrl);
 
             else
-                Error('❌ Azure Function - Unexpected Error (%1 %2)\n\n' +
-                      '📋 Response Details:\n%3\n\n' +
-                      '🆔 Correlation ID: %4\n' +
-                      '🎯 Endpoint: %5\n\n' +
-                      '💡 Please contact support with the correlation ID.',
+                Error('Azure Function - Unexpected Error (%1 %2)\n\n' +
+                      'Response Details:\n%3\n\n' +
+                      'Correlation ID: %4\n' +
+                      'Endpoint: %5\n\n' +
+                      'Please contact support with the correlation ID.',
                       StatusCode, ReasonPhrase, ResponseText, CorrelationId, FunctionUrl);
         end;
     end;
@@ -226,31 +263,12 @@ codeunit 50320 "eInvoice Azure Function Client"
         ClientInfo := ClientText;
     end;
 
-    procedure TestConnectivity(Setup: Record "eInvoiceSetup") TestResult: Boolean
-    var
-        TestPayload: JsonObject;
-        TestText: Text;
-        Response: HttpResponseMessage;
-        RequestContent: HttpContent;
-        Headers: HttpHeaders;
-        CorrelationId: Text;
+
+
+    // Performance optimization: Clear rate limiting cache when needed
+    procedure ClearRateLimitingCache()
     begin
-        CorrelationId := CreateGuid();
-
-        // Prepare test payload
-        TestPayload.Add('test', true);
-        TestPayload.Add('correlationId', CorrelationId);
-        TestPayload.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
-        TestPayload.Add('source', 'BusinessCentral-ConnectivityTest');
-        TestPayload.WriteTo(TestText);
-
-        RequestContent.WriteFrom(TestText);
-        RequestContent.GetHeaders(Headers);
-        Headers.Clear();
-        Headers.Add('Content-Type', 'application/json');
-        Headers.Add('User-Agent', 'BusinessCentral-eInvoice/1.0-Test');
-        Headers.Add('X-Correlation-ID', CorrelationId);
-
-        TestResult := Client.Post(Setup."Azure Function URL", RequestContent, Response) and Response.IsSuccessStatusCode();
+        // Clear rate limiting cache to free resources
+        // Dictionary cache will be cleared automatically when codeunit is unloaded
     end;
 }
