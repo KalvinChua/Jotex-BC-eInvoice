@@ -69,9 +69,47 @@ page 50300 eInvoiceSetupCard
                 var
                     Token: Text;
                     MyInvoisHelper: Codeunit eInvoiceHelper;
+                    TokenLength: Integer;
                 begin
                     Token := MyInvoisHelper.GetAccessTokenFromSetup(Rec);
-                    Message('Access token retrieved: %1', CopyStr(Token, 1, 50) + '...');
+                    TokenLength := StrLen(Token);
+
+                    Message('Token Generation Test Results:\n\n' +
+                        'Token Length: %1 characters\n' +
+                        'Token Preview: %2...\n' +
+                        'Token Format: %3\n\n' +
+                        'Note: If token is valid, it should be a JWT token starting with "eyJ"',
+                        TokenLength,
+                        CopyStr(Token, 1, 50),
+                        Token.StartsWith('eyJ') ? 'Valid JWT format' : 'Invalid format - should start with eyJ');
+                end;
+            }
+
+            action(TestLhdnApiConnection)
+            {
+                Caption = 'Test LHDN API Connection';
+                ApplicationArea = All;
+                Image = TestReport;
+                ToolTip = 'Test the actual LHDN API connection using the current token';
+
+                trigger OnAction()
+                var
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    DocumentTypesResponse: Text;
+                begin
+                    // Test by calling the document types API - this will verify the token works
+                    if eInvoiceJsonCodeunit.GetLhdnDocumentTypes(DocumentTypesResponse) then begin
+                        Message('LHDN API Connection Test SUCCESSFUL!\n\n' +
+                            'Token is valid and API is accessible.\n\n' +
+                            'Response preview: %1', CopyStr(DocumentTypesResponse, 1, 200));
+                    end else begin
+                        Message('LHDN API Connection Test FAILED!\n\n' +
+                            'The token may be invalid or expired.\n\n' +
+                            'Please check:\n' +
+                            '1. Client ID and Client Secret are correct\n' +
+                            '2. Environment setting is correct\n' +
+                            '3. LHDN API service is available');
+                    end;
                 end;
             }
 

@@ -2070,15 +2070,30 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         TempBlob.CreateInStream(InStream);
         DownloadFromStream(InStream, 'Debug LHDN Payload', '', 'JSON files (*.json)|*.json', FileName);
 
-        // Get LHDN access token
-        if not GetLhdnAccessToken(AccessToken) then
-            Error('Failed to obtain LHDN access token');
+        // Get LHDN access token using the standardized eInvoiceHelper method
+        AccessToken := GetLhdnAccessTokenFromHelper(eInvoiceSetup);
+
+        // Debug: Log token information (first 50 chars for security)
+        LogDebugInfo('LHDN Token Retrieved Successfully',
+            StrSubstNo('Token Preview: %1...\nToken Length: %2\nEnvironment: %3\nAPI URL: %4',
+                CopyStr(AccessToken, 1, 50),
+                StrLen(AccessToken),
+                Format(eInvoiceSetup.Environment),
+                LhdnApiUrl));
 
         // Determine LHDN API URL based on environment
         if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
             LhdnApiUrl := 'https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions'
         else
             LhdnApiUrl := 'https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions';
+
+        // Debug: Log environment and URL configuration
+        LogDebugInfo('LHDN Environment Configuration',
+            StrSubstNo('Environment: %1\nAPI URL: %2\nClient ID: %3\nClient Secret: %4',
+                Format(eInvoiceSetup.Environment),
+                LhdnApiUrl,
+                eInvoiceSetup."Client ID" <> '' ? 'Configured' : 'MISSING',
+                eInvoiceSetup."Client Secret" <> '' ? 'Configured' : 'MISSING'));
 
         // Show debug info with payload structure validation
         Message('Submitting to LHDN URL: %1\nPayload size: %2 characters\nPayload structure validated: %3\nFirst 1000 chars: %4',
@@ -2099,6 +2114,14 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         RequestHeaders.Add('Accept', 'application/json');
         RequestHeaders.Add('Accept-Language', 'en');
         RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+        // Debug: Log the request details before sending
+        LogDebugInfo('LHDN API Request Details',
+            StrSubstNo('URL: %1\nMethod: POST\nContent-Type: application/json\nAuthorization: Bearer %2...\nPayload Size: %3 characters\nPayload Preview: %4',
+                LhdnApiUrl,
+                CopyStr(AccessToken, 1, 20),
+                StrLen(LhdnPayloadText),
+                CopyStr(LhdnPayloadText, 1, 200)));
 
         // Submit to LHDN
         if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
@@ -2549,6 +2572,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
+    local procedure GetLhdnAccessTokenFromHelper(eInvoiceSetup: Record "eInvoiceSetup"): Text
+    var
+        MyInvoisHelper: Codeunit eInvoiceHelper;
+    begin
+        exit(MyInvoisHelper.GetAccessTokenFromSetup(eInvoiceSetup));
+    end;
+
     local procedure GetLhdnAccessToken(var AccessToken: Text): Boolean
     var
         HttpClient: HttpClient;
@@ -2567,8 +2597,18 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if not eInvoiceSetup.Get('SETUP') then
             Error('eInvoice Setup not found');
 
-        if (eInvoiceSetup."Client ID" = '') or (eInvoiceSetup."Client Secret" = '') then
-            Error('LHDN Client ID and Client Secret must be configured in eInvoice Setup');
+        if (eInvoiceSetup."Client ID" = '') or (eInvoiceSetup."Client Secret" = '') then begin
+            LogDebugInfo('LHDN Token Request Failed - Missing Credentials',
+                StrSubstNo('Client ID: %1\nClient Secret: %2\nEnvironment: %3',
+                    eInvoiceSetup."Client ID" <> '' ? 'Configured' : 'MISSING',
+                    eInvoiceSetup."Client Secret" <> '' ? 'Configured' : 'MISSING',
+                    Format(eInvoiceSetup.Environment)));
+            Error('LHDN Client ID and Client Secret must be configured in eInvoice Setup.\n\n' +
+                'Please go to e-Invoice Setup and configure:\n' +
+                '1. Client ID\n' +
+                '2. Client Secret\n' +
+                '3. Environment (Preprod/Production)');
+        end;
 
         // Prepare OAuth2 token request
         TokenRequestBody := StrSubstNo('grant_type=client_credentials&client_id=%1&client_secret=%2&scope=InvoicingAPI',
@@ -2579,6 +2619,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             TokenUrl := 'https://preprod-api.myinvois.hasil.gov.my/connect/token'
         else
             TokenUrl := 'https://api.myinvois.hasil.gov.my/connect/token';
+
+        // Debug: Log token request details
+        LogDebugInfo('LHDN Token Request Details',
+            StrSubstNo('Token URL: %1\nEnvironment: %2\nClient ID: %3\nScope: InvoicingAPI',
+                TokenUrl,
+                Format(eInvoiceSetup.Environment),
+                eInvoiceSetup."Client ID"));
 
         // Setup OAuth2 token request with standard headers
         HttpRequestMessage.Method := 'POST';
@@ -2604,6 +2651,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 if JsonResponse.ReadFrom(TokenResponse) then begin
                     if JsonResponse.Get('access_token', JsonToken) then begin
                         AccessToken := SafeJsonValueToText(JsonToken);
+
+                        // Debug: Log successful token response
+                        LogDebugInfo('LHDN Token Response Success',
+                            StrSubstNo('Token Length: %1\nToken Preview: %2...\nResponse Keys: %3',
+                                StrLen(AccessToken),
+                                CopyStr(AccessToken, 1, 50),
+                                GetJsonObjectKeys(JsonResponse)));
 
                         // Update setup with new token and expiry
                         eInvoiceSetup."Last Token" := AccessToken;
@@ -3330,26 +3384,39 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     begin
         // 1. Try direct parsing first
         if LhdnPayloadObject.ReadFrom(LhdnPayloadText) then
-            if LhdnPayloadObject.Get('documents', JsonToken) then
+            if LhdnPayloadObject.Get('documents', JsonToken) then begin
+                LhdnResponse := 'Direct JSON parsing successful - submitting to LHDN API';
                 exit(SubmitToLhdnApi(LhdnPayloadObject, SalesInvoiceHeader, LhdnResponse));
+            end;
 
         // 2. Handle as JSON string if direct parsing failed
         if LhdnPayloadText.StartsWith('"') and LhdnPayloadText.EndsWith('"') then
             LhdnPayloadText := CopyStr(LhdnPayloadText, 2, StrLen(LhdnPayloadText) - 2);
 
-        // 3. Unescape the JSON
+        // 3. Unescape the JSON and remove problematic characters
         LhdnPayloadText := LhdnPayloadText.Replace('\"', '"');
-        LhdnPayloadText := LhdnPayloadText.Replace('\\', '\');
+        LhdnPayloadText := LhdnPayloadText.Replace('\\n', '');  // Remove newlines completely
+        LhdnPayloadText := LhdnPayloadText.Replace('\\t', '');  // Remove tabs completely
+        LhdnPayloadText := LhdnPayloadText.Replace('\\r', '');  // Remove carriage returns completely
+        LhdnPayloadText := LhdnPayloadText.Replace('\\\\', '\\'); // Convert \\ to single backslash
+        LhdnPayloadText := LhdnPayloadText.Replace('\n', '');  // Remove any remaining actual newlines
+        LhdnPayloadText := LhdnPayloadText.Replace('\t', '');  // Remove any remaining actual tabs
+        LhdnPayloadText := LhdnPayloadText.Replace('\r', '');  // Remove any remaining actual carriage returns
 
         // 4. Parse the unescaped JSON
-        if not LhdnPayloadObject.ReadFrom(LhdnPayloadText) then
+        if not LhdnPayloadObject.ReadFrom(LhdnPayloadText) then begin
+            LhdnResponse := 'Failed to parse LHDN payload after unescaping. Payload start: ' + CopyStr(LhdnPayloadText, 1, 200);
             exit(false);
+        end;
 
         // 5. Validate structure
-        if not LhdnPayloadObject.Get('documents', JsonToken) then
+        if not LhdnPayloadObject.Get('documents', JsonToken) then begin
+            LhdnResponse := 'LHDN payload missing documents array after parsing. Payload keys: ' + GetJsonObjectKeys(LhdnPayloadObject);
             exit(false);
+        end;
 
         // 6. Submit to LHDN API
+        LhdnResponse := 'JSON parsing successful - submitting to LHDN API';
         exit(SubmitToLhdnApi(LhdnPayloadObject, SalesInvoiceHeader, LhdnResponse));
     end;
 
