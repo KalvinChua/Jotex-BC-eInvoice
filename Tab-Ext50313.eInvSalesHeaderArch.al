@@ -27,6 +27,21 @@ tableextension 50313 eInvSalesHeaderArch extends "Sales Header Archive"
             DataClassification = ToBeClassified;
             InitValue = '1.1';  // Default value
         }
+        field(50304; "eInvoice Submission UID"; Text[100])
+        {
+            Caption = 'e-Invoice Submission UID';
+            DataClassification = ToBeClassified;
+        }
+        field(50305; "eInvoice UUID"; Text[100])
+        {
+            Caption = 'e-Invoice UUID';
+            DataClassification = ToBeClassified;
+        }
+        field(50306; "eInvoice Validation Status"; Text[50])
+        {
+            Caption = 'e-Invoice Validation Status';
+            DataClassification = ToBeClassified;
+        }
     }
     trigger OnInsert()
     begin

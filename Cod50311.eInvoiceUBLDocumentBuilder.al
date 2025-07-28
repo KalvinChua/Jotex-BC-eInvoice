@@ -1,4 +1,4 @@
-codeunit 50321 "eInvoice UBL Document Builder"
+codeunit 50311 "eInvoice UBL Document Builder"
 {
     // Enhanced UBL Document Builder inspired by myinvois-client patterns
     // Provides structured approach to UBL document construction

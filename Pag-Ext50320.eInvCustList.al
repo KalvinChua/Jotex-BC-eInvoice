@@ -65,7 +65,7 @@ pageextension 50320 eInvCustList extends "Customer List"
                     Customer: Record Customer;
                     UpdatedCount: Integer;
                 begin
-                    if Confirm('Do you want to populate e-Invoice State Codes for all customers based on their County?', false) then begin
+                    if Confirm('Do you want to populate e-Invoice State Codes for all customers based on their County?') then begin
                         Customer.SetRange("e-Invoice State Code", '');
                         if Customer.FindSet() then
                             repeat
@@ -76,7 +76,7 @@ pageextension 50320 eInvCustList extends "Customer List"
                                 end;
                             until Customer.Next() = 0;
 
-                        Message('%1 customer(s) had their e-Invoice State Code populated.', UpdatedCount);
+                        Message(StrSubstNo('%1 customer(s) had their e-Invoice State Code populated.', UpdatedCount));
                     end;
                 end;
             }
@@ -93,7 +93,7 @@ pageextension 50320 eInvCustList extends "Customer List"
                     Customer: Record Customer;
                     UpdatedCount: Integer;
                 begin
-                    if Confirm('Do you want to populate e-Invoice Country Codes for all customers?', false) then begin
+                    if Confirm('Do you want to populate e-Invoice Country Codes for all customers?') then begin
                         Customer.SetRange("e-Invoice Country Code", '');
                         if Customer.FindSet() then
                             repeat
@@ -113,7 +113,7 @@ pageextension 50320 eInvCustList extends "Customer List"
                                 end;
                             until Customer.Next() = 0;
 
-                        Message('%1 customer(s) had their e-Invoice Country Code populated.', UpdatedCount);
+                        Message(StrSubstNo('%1 customer(s) had their e-Invoice Country Code populated.', UpdatedCount));
                     end;
                 end;
             }

@@ -1,4 +1,4 @@
-codeunit 50320 "eInvoice Azure Function Client"
+codeunit 50310 "eInvoice Azure Function Client"
 {
     // Enhanced Azure Function Client with patterns inspired by myinvois-client
     // Provides structured approach to Azure Function communication

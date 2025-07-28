@@ -35,6 +35,7 @@
 /// </summary>
 codeunit 50302 "eInvoice 1.0 Invoice JSON"
 {
+    Permissions = tabledata "Sales Invoice Header" = M;
     // ======================================================================================================
     // MAIN AZURE FUNCTION INTEGRATION PROCEDURES
     // ======================================================================================================
@@ -1645,10 +1646,31 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     end;
 
     local procedure GetClassificationCode(SalesInvoiceLine: Record "Sales Invoice Line"): Text
+    var
+        eInvoiceClassification: Record eInvoiceClassification;
+        SalesLineArchive: Record "Sales Line Archive";
     begin
-        // MANDATORY: Return classification code as per LHDN requirement
-        // This should be configured in your item setup or use default
-        // Common codes: 001=Goods, 002=Services, 003=Mixed
+        // First, try to get classification from the regular sales invoice line
+        if SalesInvoiceLine."e-Invoice Classification" <> '' then begin
+            // Verify the classification exists in the eInvoiceClassification table
+            if eInvoiceClassification.Get(SalesInvoiceLine."e-Invoice Classification") then
+                exit(SalesInvoiceLine."e-Invoice Classification")
+            else
+                exit(SalesInvoiceLine."e-Invoice Classification"); // Still use the value even if not found in table
+        end;
+
+        // If not found in regular line, try to get from archived sales line
+        if SalesLineArchive.Get(SalesInvoiceLine."Document No.", SalesInvoiceLine."Line No.") then begin
+            if SalesLineArchive."e-Invoice Classification" <> '' then begin
+                // Verify the classification exists in the eInvoiceClassification table
+                if eInvoiceClassification.Get(SalesLineArchive."e-Invoice Classification") then
+                    exit(SalesLineArchive."e-Invoice Classification")
+                else
+                    exit(SalesLineArchive."e-Invoice Classification"); // Still use the value even if not found in table
+            end;
+        end;
+
+        // Fallback to type-based classification if field is empty in both regular and archived lines
         if SalesInvoiceLine.Type = SalesInvoiceLine.Type::Item then
             exit('001') // Goods
         else
@@ -2063,12 +2085,11 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if not ValidateLhdnPayloadStructure(LhdnPayloadText) then
             Error('LHDN payload does not match required structure for document submissions');
 
-        // DEBUG: Save the LHDN payload to see what we're submitting
-        FileName := StrSubstNo('DEBUG_LHDN_Payload_%1.json', Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2>_<Hours24,2><Minutes,2><Seconds,2>'));
-        TempBlob.CreateOutStream(OutStream);
-        OutStream.WriteText(LhdnPayloadText);
-        TempBlob.CreateInStream(InStream);
-        DownloadFromStream(InStream, 'Debug LHDN Payload', '', 'JSON files (*.json)|*.json', FileName);
+        // DEBUG: Log the LHDN payload structure for debugging (no automatic download)
+        LogDebugInfo('LHDN Payload Ready for Submission',
+            StrSubstNo('Payload Size: %1 characters\nPayload Structure: Validated\nFirst 500 chars: %2',
+                StrLen(LhdnPayloadText),
+                CopyStr(LhdnPayloadText, 1, 500)));
 
         // Get LHDN access token using the standardized eInvoiceHelper method
         AccessToken := GetLhdnAccessTokenFromHelper(eInvoiceSetup);
@@ -2134,6 +2155,13 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             end else begin
                 // Parse and display structured LHDN error response with headers
                 ParseAndDisplayLhdnError(LhdnResponse, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase, HttpResponseMessage);
+
+                // Update validation status to "Rejected" when there's an error
+                SalesInvoiceHeader."eInvoice Validation Status" := 'Rejected';
+                SalesInvoiceHeader.Modify();
+
+                // Log the failed submission
+                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Rejected', LhdnResponse);
             end;
         end else begin
             Error('Failed to send HTTP request to LHDN API at %1', LhdnApiUrl);
@@ -2151,7 +2179,6 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         SubmissionUid: Text;
         AcceptedCount: Integer;
         RejectedCount: Integer;
-        DocumentInfo: Text;
         i: Integer;
         DocumentJson: JsonObject;
         Uuid: Text;
@@ -2160,6 +2187,8 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         RateLimitInfo: Text;
         ResponseHeaders: HttpHeaders;
         HeaderValues: List of [Text];
+        SuccessMessage: Text;
+        DocumentDetails: Text;
     begin
         // Extract LHDN response headers - using Content headers as proxy for response headers
         HttpResponseMessage.Content.GetHeaders(ResponseHeaders);
@@ -2173,7 +2202,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Try to parse the JSON response
         if not ResponseJson.ReadFrom(LhdnResponse) then begin
-            Message('LHDN Submission successful!\nStatus: %1\nRaw Response: %2', StatusCode, LhdnResponse);
+            Message(StrSubstNo('LHDN Submission successful!\nStatus: %1\nRaw Response: %2', StatusCode, LhdnResponse));
             exit;
         end;
 
@@ -2196,31 +2225,12 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         // Process accepted documents
         AcceptedCount := 0;
-        DocumentInfo := '';
+        DocumentDetails := '';
         if ResponseJson.Get('acceptedDocuments', JsonToken) then begin
             AcceptedArray := JsonToken.AsArray();
             AcceptedCount := AcceptedArray.Count;
 
-            for i := 0 to AcceptedArray.Count - 1 do begin
-                AcceptedArray.Get(i, JsonToken);
-                DocumentJson := JsonToken.AsObject();
-
-                // Extract UUID with safe type conversion
-                if DocumentJson.Get('uuid', JsonToken) then
-                    Uuid := SafeJsonValueToText(JsonToken)
-                else
-                    Uuid := 'N/A';
-
-                // Extract Invoice Code Number with safe type conversion
-                if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
-                    InvoiceCodeNumber := SafeJsonValueToText(JsonToken)
-                else
-                    InvoiceCodeNumber := 'N/A';
-
-                if DocumentInfo <> '' then
-                    DocumentInfo += '\n';
-                DocumentInfo += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
-            end;
+            DocumentDetails := BuildDocumentDetails(AcceptedArray, RejectedArray);
         end;
 
         // Process rejected documents
@@ -2228,55 +2238,15 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         if ResponseJson.Get('rejectedDocuments', JsonToken) then begin
             RejectedArray := JsonToken.AsArray();
             RejectedCount := RejectedArray.Count;
-
-            // If there are rejected documents, add their details to DocumentInfo
-            if RejectedCount > 0 then begin
-                if DocumentInfo <> '' then
-                    DocumentInfo += '\n\nRejected Documents:\n';
-
-                for i := 0 to RejectedArray.Count - 1 do begin
-                    RejectedArray.Get(i, JsonToken);
-                    DocumentJson := JsonToken.AsObject();
-
-                    // Extract rejection details with safe type conversion
-                    Uuid := 'N/A';
-                    InvoiceCodeNumber := 'N/A';
-                    if DocumentJson.Get('uuid', JsonToken) then
-                        Uuid := SafeJsonValueToText(JsonToken);
-                    if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
-                        InvoiceCodeNumber := SafeJsonValueToText(JsonToken);
-
-                    DocumentInfo += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
-
-                    // Add error details if available with safe type conversion
-                    if DocumentJson.Get('error', JsonToken) then
-                        DocumentInfo += ' - Error: ' + SafeJsonValueToText(JsonToken);
-                    if DocumentJson.Get('errorCode', JsonToken) then
-                        DocumentInfo += ' (Code: ' + SafeJsonValueToText(JsonToken) + ')';
-
-                    if i < RejectedArray.Count - 1 then
-                        DocumentInfo += '\n';
-                end;
-            end;
         end;
 
-        // Display comprehensive success message
+        // Build success message with proper formatting
         if (AcceptedCount > 0) and (RejectedCount = 0) then begin
             // All documents accepted
-            Message('LHDN Submission Successful!\n\n' +
-                'Submission ID: %1\n' +
-                'Status Code: %2\n' +
-                '%3\n' +
-                '%4\n\n' +
-                'Accepted Documents: %5\n%6\n\n' +
-                'All documents have been successfully submitted to LHDN MyInvois.',
-                SubmissionUid, StatusCode,
-                CorrelationId <> 'N/A' ? StrSubstNo('Correlation ID: %1', CorrelationId) : '',
-                RateLimitInfo <> '' ? StrSubstNo('Rate Limits: %1', RateLimitInfo) : '',
-                AcceptedCount, DocumentInfo);
+            SuccessMessage := FormatLhdnSuccessMessage(SubmissionUid, StatusCode, AcceptedCount, DocumentDetails, CorrelationId, RateLimitInfo);
         end else if (AcceptedCount > 0) and (RejectedCount > 0) then begin
             // Mixed results - some accepted, some rejected
-            Message('LHDN Submission Partially Successful\n\n' +
+            SuccessMessage := StrSubstNo('LHDN Submission Partially Successful\n\n' +
                 'Submission ID: %1\n' +
                 'Status Code: %2\n' +
                 '%3\n' +
@@ -2288,10 +2258,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 SubmissionUid, StatusCode,
                 CorrelationId <> 'N/A' ? StrSubstNo('Correlation ID: %1', CorrelationId) : '',
                 RateLimitInfo <> '' ? StrSubstNo('Rate Limits: %1', RateLimitInfo) : '',
-                AcceptedCount, RejectedCount, DocumentInfo);
+                AcceptedCount, RejectedCount, DocumentDetails);
         end else begin
             // All documents rejected or no documents processed
-            Message('LHDN Submission Failed\n\n' +
+            SuccessMessage := StrSubstNo('LHDN Submission Failed\n\n' +
                 'Submission ID: %1\n' +
                 'Status Code: %2\n' +
                 '%3\n' +
@@ -2304,11 +2274,51 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 SubmissionUid, StatusCode,
                 CorrelationId <> 'N/A' ? StrSubstNo('Correlation ID: %1', CorrelationId) : '',
                 RateLimitInfo <> '' ? StrSubstNo('Rate Limits: %1', RateLimitInfo) : '',
-                AcceptedCount, RejectedCount, DocumentInfo, LhdnResponse);
+                AcceptedCount, RejectedCount, DocumentDetails, LhdnResponse);
         end;
+
+        // Display the formatted message
+        Message(SuccessMessage);
 
         // Update Sales Invoice Header with LHDN response data
         UpdateSalesInvoiceWithLhdnResponse(SalesInvoiceHeader, SubmissionUid, AcceptedArray, AcceptedCount);
+    end;
+
+    local procedure FormatLhdnSuccessMessage(SubmissionUid: Text; StatusCode: Integer; AcceptedCount: Integer; DocumentDetails: Text; CorrelationId: Text; RateLimitInfo: Text): Text
+    var
+        FormattedMessage: Text;
+        CorrelationInfo: Text;
+        RateLimitInfoText: Text;
+    begin
+        // Build correlation info
+        if CorrelationId <> 'N/A' then
+            CorrelationInfo := StrSubstNo('Correlation ID: %1', CorrelationId)
+        else
+            CorrelationInfo := '';
+
+        // Build rate limit info
+        if RateLimitInfo <> '' then
+            RateLimitInfoText := StrSubstNo('Rate Limits: %1', RateLimitInfo)
+        else
+            RateLimitInfoText := '';
+
+        // Build the formatted message with proper line breaks
+        FormattedMessage := 'LHDN Submission Successful!' + '\\' + '\\' +
+            'Submission ID: ' + SubmissionUid + '\\' +
+            'Status Code: ' + Format(StatusCode) + '\\';
+
+        if CorrelationInfo <> '' then
+            FormattedMessage += CorrelationInfo + '\\';
+
+        if RateLimitInfoText <> '' then
+            FormattedMessage += RateLimitInfoText + '\\';
+
+        FormattedMessage += '\\' +
+            'Accepted Documents: ' + Format(AcceptedCount) + '\\' +
+            DocumentDetails + '\\' + '\\' +
+            'All documents have been successfully submitted to LHDN MyInvois.';
+
+        exit(FormattedMessage);
     end;
 
     local procedure UpdateSalesInvoiceWithLhdnResponse(var SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; AcceptedArray: JsonArray; AcceptedCount: Integer)
@@ -2333,6 +2343,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
                 SalesInvoiceHeader."eInvoice UUID" := CopyStr(Uuid, 1, MaxStrLen(SalesInvoiceHeader."eInvoice UUID"));
             end;
 
+            // Set validation status to "Accepted" when documents are accepted
+            SalesInvoiceHeader."eInvoice Validation Status" := 'Accepted';
+
             // Optional: Update invoice code number if different from the original
             if DocumentJson.Get('invoiceCodeNumber', JsonToken) then begin
                 InvoiceCodeNumber := SafeJsonValueToText(JsonToken);
@@ -2346,6 +2359,9 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end else begin
             Message('Warning: Could not save LHDN response data to invoice record.');
         end;
+
+        // Log the submission to the submission log table
+        LogSubmissionToTable(SalesInvoiceHeader, SubmissionUid, Uuid, 'Accepted', '');
     end;
 
     local procedure ParseAndDisplayLhdnError(ErrorResponse: Text; StatusCode: Integer; ReasonPhrase: Text; HttpResponseMessage: HttpResponseMessage)
@@ -2572,7 +2588,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
         end;
     end;
 
-    local procedure GetLhdnAccessTokenFromHelper(eInvoiceSetup: Record "eInvoiceSetup"): Text
+    procedure GetLhdnAccessTokenFromHelper(eInvoiceSetup: Record "eInvoiceSetup"): Text
     var
         MyInvoisHelper: Codeunit eInvoiceHelper;
     begin
@@ -2809,6 +2825,10 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             QueryParams += StrSubstNo('pageSize=%1', PageSize);
         end;
 
+        // Add criteriaLimetInHrs parameter to limit to 120 hours as per LHDN API requirement
+        if QueryParams <> '' then QueryParams += '&';
+        QueryParams += 'criteriaLimetInHrs=120';
+
         // Add language parameter
         if QueryParams <> '' then QueryParams += '&';
         QueryParams += 'language=en';
@@ -2865,7 +2885,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
     begin
         // Try to parse the JSON response
         if not ResponseJson.ReadFrom(NotificationsResponse) then begin
-            Message('LHDN Notifications retrieved successfully!\nStatus: %1\nRaw Response: %2', StatusCode, NotificationsResponse);
+            Message(StrSubstNo('LHDN Notifications retrieved successfully!\nStatus: %1\nRaw Response: %2', StatusCode, NotificationsResponse));
             exit;
         end;
 
@@ -3263,7 +3283,7 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
             if ProcessLhdnPayload(LhdnResponse, SalesInvoiceHeader, LhdnResponse) then begin
                 Message('Test successful! LHDN payload structure is correctly handled.');
             end else begin
-                Message('Test failed! Error: %1', LhdnResponse);
+                Message(StrSubstNo('Test failed! Error: %1', LhdnResponse));
             end;
         end else begin
             Message('Test failed! Could not extract lhdnPayload from Azure response.');
@@ -3456,4 +3476,389 @@ codeunit 50302 "eInvoice 1.0 Invoice JSON"
 
         LastCacheRefresh := CurrentDateTime();
     end;
+
+    /// <summary>
+    /// Parses and displays Azure Function response details in a user-friendly format
+    /// </summary>
+    /// <param name="ResponseText">Raw response from Azure Function</param>
+    /// <returns>Formatted response details for display</returns>
+    procedure ParseAzureFunctionResponse(ResponseText: Text): Text
+    var
+        ResponseObj: JsonObject;
+        JsonToken: JsonToken;
+        Details: Text;
+        CorrelationId: Text;
+        StatusCode: Integer;
+        Message: Text;
+        ProcessingTime: Integer;
+        Timestamp: Text;
+        SignatureInfo: Text;
+    begin
+        if not ResponseObj.ReadFrom(ResponseText) then
+            exit('Invalid JSON response from Azure Function');
+
+        Details := '=== Azure Function Response Analysis ===\n\n';
+
+        // Extract basic information
+        if ResponseObj.Get('success', JsonToken) then
+            Details += '[SUCCESS] Status: Success\n'
+        else
+            Details += '[FAILED] Status: Failed\n';
+
+        if ResponseObj.Get('correlationId', JsonToken) then begin
+            CorrelationId := SafeJsonValueToText(JsonToken);
+            Details += '[ID] Correlation ID: ' + CorrelationId + '\n';
+        end;
+
+        if ResponseObj.Get('statusCode', JsonToken) then begin
+            StatusCode := JsonToken.AsValue().AsInteger();
+            Details += '[CODE] Status Code: ' + Format(StatusCode) + '\n';
+        end;
+
+        if ResponseObj.Get('message', JsonToken) then begin
+            Message := SafeJsonValueToText(JsonToken);
+            Details += '[MSG] Message: ' + Message + '\n';
+        end;
+
+        if ResponseObj.Get('processingTimeMs', JsonToken) then begin
+            ProcessingTime := JsonToken.AsValue().AsInteger();
+            Details += '[TIME] Processing Time: ' + Format(ProcessingTime) + 'ms\n';
+        end;
+
+        if ResponseObj.Get('timestamp', JsonToken) then begin
+            Timestamp := SafeJsonValueToText(JsonToken);
+            Details += '[DATE] Timestamp: ' + Timestamp + '\n';
+        end;
+
+        // Extract signature information
+        if ResponseObj.Get('signature', JsonToken) then begin
+            SignatureInfo := ExtractSignatureInfo(JsonToken.AsObject());
+            Details += '\n=== Digital Signature Details ===\n' + SignatureInfo;
+        end;
+
+        // Check for LHDN payload
+        if ResponseObj.Get('lhdnPayload', JsonToken) then begin
+            Details += '\n[OK] LHDN Payload: Available (ready for submission)\n';
+        end else begin
+            Details += '\n[WARNING] LHDN Payload: Not found in response\n';
+        end;
+
+        // Check for signed JSON
+        if ResponseObj.Get('signedJson', JsonToken) then begin
+            Details += '[OK] Signed JSON: Available (ready for download)\n';
+        end else begin
+            Details += '[WARNING] Signed JSON: Not found in response\n';
+        end;
+
+        exit(Details);
+    end;
+
+    /// <summary>
+    /// Extracts signature information from the response
+    /// </summary>
+    /// <param name="SignatureObj">Signature JSON object</param>
+    /// <returns>Formatted signature details</returns>
+    local procedure ExtractSignatureInfo(SignatureObj: JsonObject): Text
+    var
+        JsonToken: JsonToken;
+        Details: Text;
+        Algorithm: Text;
+        Subject: Text;
+        Issuer: Text;
+        SerialNumber: Text;
+        SigningTime: Text;
+        IsCompliant: Boolean;
+    begin
+        if SignatureObj.Get('algorithm', JsonToken) then
+            Algorithm := SafeJsonValueToText(JsonToken);
+
+        if SignatureObj.Get('certificateSubject', JsonToken) then
+            Subject := SafeJsonValueToText(JsonToken);
+
+        if SignatureObj.Get('certificateIssuer', JsonToken) then
+            Issuer := SafeJsonValueToText(JsonToken);
+
+        if SignatureObj.Get('certificateSerialNumber', JsonToken) then
+            SerialNumber := SafeJsonValueToText(JsonToken);
+
+        if SignatureObj.Get('signatureTime', JsonToken) then
+            SigningTime := SafeJsonValueToText(JsonToken);
+
+        if SignatureObj.Get('isLhdnCompliant', JsonToken) then
+            IsCompliant := JsonToken.AsValue().AsBoolean();
+
+        Details := '[ALGO] Algorithm: ' + Algorithm + '\n';
+        Details += '[CERT] Certificate Subject: ' + Subject + '\n';
+        Details += '[ISSUER] Certificate Issuer: ' + Issuer + '\n';
+        Details += '[SERIAL] Serial Number: ' + SerialNumber + '\n';
+        Details += '[TIME] Signing Time: ' + SigningTime + '\n';
+
+        if IsCompliant then
+            Details += '[OK] LHDN Compliance: Compliant\n'
+        else
+            Details += '[WARNING] LHDN Compliance: Non-compliant\n';
+
+        exit(Details);
+    end;
+
+    local procedure BuildDocumentDetails(AcceptedArray: JsonArray; RejectedArray: JsonArray): Text
+    var
+        DocumentDetails: Text;
+        i: Integer;
+        JsonToken: JsonToken;
+        DocumentJson: JsonObject;
+        Uuid: Text;
+        InvoiceCodeNumber: Text;
+    begin
+        DocumentDetails := '';
+
+        // Process accepted documents
+        for i := 0 to AcceptedArray.Count - 1 do begin
+            AcceptedArray.Get(i, JsonToken);
+            DocumentJson := JsonToken.AsObject();
+
+            // Extract UUID with safe type conversion
+            if DocumentJson.Get('uuid', JsonToken) then
+                Uuid := SafeJsonValueToText(JsonToken)
+            else
+                Uuid := 'N/A';
+
+            // Extract Invoice Code Number with safe type conversion
+            if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                InvoiceCodeNumber := SafeJsonValueToText(JsonToken)
+            else
+                InvoiceCodeNumber := 'N/A';
+
+            if DocumentDetails <> '' then
+                DocumentDetails += '\\';
+            DocumentDetails += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
+        end;
+
+        // Process rejected documents
+        if RejectedArray.Count > 0 then begin
+            if DocumentDetails <> '' then
+                DocumentDetails += '\\' + '\\Rejected Documents:' + '\\';
+
+            for i := 0 to RejectedArray.Count - 1 do begin
+                RejectedArray.Get(i, JsonToken);
+                DocumentJson := JsonToken.AsObject();
+
+                // Extract rejection details with safe type conversion
+                Uuid := 'N/A';
+                InvoiceCodeNumber := 'N/A';
+                if DocumentJson.Get('uuid', JsonToken) then
+                    Uuid := SafeJsonValueToText(JsonToken);
+                if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                    InvoiceCodeNumber := SafeJsonValueToText(JsonToken);
+
+                DocumentDetails += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
+
+                // Add error details if available with safe type conversion
+                if DocumentJson.Get('error', JsonToken) then
+                    DocumentDetails += ' - Error: ' + SafeJsonValueToText(JsonToken);
+                if DocumentJson.Get('errorCode', JsonToken) then
+                    DocumentDetails += ' (Code: ' + SafeJsonValueToText(JsonToken) + ')';
+
+                if i < RejectedArray.Count - 1 then
+                    DocumentDetails += '\\';
+            end;
+        end;
+
+        exit(DocumentDetails);
+    end;
+
+    procedure GetSubmissionStatus(SubmissionUid: Text; var SubmissionDetails: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestMessage: HttpRequestMessage;
+        ResponseText: Text;
+        Url: Text;
+        Setup: Record "eInvoiceSetup";
+        AccessToken: Text;
+        Headers: HttpHeaders;
+    begin
+        SubmissionDetails := '';
+
+        // Get setup configuration
+        if not Setup.Get('SETUP') then begin
+            SubmissionDetails := 'Error: eInvoice Setup not found.';
+            exit(false);
+        end;
+
+        // Get access token
+        if not GetLhdnAccessToken(AccessToken) then begin
+            SubmissionDetails := 'Error: Failed to obtain access token.';
+            exit(false);
+        end;
+
+        // Build the URL for Get Submission API - use preprod or production URL based on environment
+        if Setup.Environment = Setup.Environment::Preprod then
+            Url := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=100', SubmissionUid)
+        else
+            Url := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=100', SubmissionUid);
+
+        // Set up HTTP request
+        RequestMessage.Method('GET');
+        RequestMessage.SetRequestUri(Url);
+
+        // Set headers
+        RequestMessage.GetHeaders(Headers);
+        Headers.Add('Authorization', StrSubstNo('Bearer %1', AccessToken));
+        Headers.Add('Content-Type', 'application/json');
+        Headers.Add('Accept', 'application/json');
+
+        // Send request
+        if not HttpClient.Send(RequestMessage, HttpResponseMessage) then begin
+            SubmissionDetails := 'Error: Failed to send HTTP request.';
+            exit;
+        end;
+
+        // Get response
+        HttpResponseMessage.Content().ReadAs(ResponseText);
+
+        // Check status code
+        if HttpResponseMessage.IsSuccessStatusCode() then begin
+            SubmissionDetails := ParseSubmissionResponse(ResponseText);
+            exit(true);
+        end else begin
+            SubmissionDetails := StrSubstNo('Error: HTTP %1 - %2',
+                HttpResponseMessage.HttpStatusCode(),
+                ResponseText);
+            exit(false);
+        end;
+    end;
+
+    local procedure ParseSubmissionResponse(ResponseText: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        FormattedResponse: Text;
+        SubmissionUid: Text;
+        DocumentCount: Integer;
+        DateTimeReceived: Text;
+        OverallStatus: Text;
+        i: Integer;
+        DocumentJson: JsonObject;
+        Uuid: Text;
+        Status: Text;
+        TotalPayableAmount: Decimal;
+        DateTimeIssued: Text;
+        IssuerName: Text;
+        ReceiverName: Text;
+    begin
+        FormattedResponse := '';
+
+        // Parse the JSON response
+        if not ResponseJson.ReadFrom(ResponseText) then begin
+            exit('Error: Invalid JSON response from LHDN API.');
+        end;
+
+        // Extract submission details
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := SafeJsonValueToText(JsonToken);
+        if ResponseJson.Get('documentCount', JsonToken) then
+            if Evaluate(DocumentCount, SafeJsonValueToText(JsonToken)) then
+                DocumentCount := DocumentCount
+            else
+                DocumentCount := 0;
+        if ResponseJson.Get('dateTimeReceived', JsonToken) then
+            DateTimeReceived := SafeJsonValueToText(JsonToken);
+        if ResponseJson.Get('overallStatus', JsonToken) then
+            OverallStatus := SafeJsonValueToText(JsonToken);
+
+        // Build formatted response
+        FormattedResponse := 'Submission Details:' + '\\' +
+            'Submission UID: ' + SubmissionUid + '\\' +
+            'Document Count: ' + Format(DocumentCount) + '\\' +
+            'Date Time Received: ' + DateTimeReceived + '\\' +
+            'Overall Status: ' + OverallStatus + '\\' + '\\';
+
+        // Extract document summary
+        if ResponseJson.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            if DocumentSummaryArray.Count > 0 then begin
+                FormattedResponse += 'Document Summary:' + '\\';
+
+                for i := 0 to DocumentSummaryArray.Count - 1 do begin
+                    DocumentSummaryArray.Get(i, JsonToken);
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Extract document details
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        Uuid := SafeJsonValueToText(JsonToken);
+                    if DocumentJson.Get('status', JsonToken) then
+                        Status := SafeJsonValueToText(JsonToken);
+                    if DocumentJson.Get('totalPayableAmount', JsonToken) then
+                        if Evaluate(TotalPayableAmount, SafeJsonValueToText(JsonToken)) then
+                            TotalPayableAmount := TotalPayableAmount
+                        else
+                            TotalPayableAmount := 0;
+                    if DocumentJson.Get('dateTimeIssued', JsonToken) then
+                        DateTimeIssued := SafeJsonValueToText(JsonToken);
+                    if DocumentJson.Get('issuerName', JsonToken) then
+                        IssuerName := SafeJsonValueToText(JsonToken);
+                    if DocumentJson.Get('receiverName', JsonToken) then
+                        ReceiverName := SafeJsonValueToText(JsonToken);
+
+                    FormattedResponse += StrSubstNo('  Document %1:', i + 1) + '\\' +
+                        '    UUID: ' + Uuid + '\\' +
+                        '    Status: ' + Status + '\\' +
+                        '    Total Payable Amount: ' + Format(TotalPayableAmount) + '\\' +
+                        '    Date Time Issued: ' + DateTimeIssued + '\\' +
+                        '    Issuer: ' + IssuerName + '\\' +
+                        '    Receiver: ' + ReceiverName + '\\' + '\\';
+                end;
+            end;
+        end;
+
+        exit(FormattedResponse);
+    end;
+
+    /// <summary>
+    /// Logs e-Invoice submission details to the submission log table
+    /// </summary>
+    /// <param name="SalesInvoiceHeader">The sales invoice header record</param>
+    /// <param name="SubmissionUid">LHDN submission UID</param>
+    /// <param name="DocumentUuid">Document UUID from LHDN</param>
+    /// <param name="Status">Submission status</param>
+    /// <param name="ErrorMessage">Error message if any</param>
+    local procedure LogSubmissionToTable(SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; DocumentUuid: Text; Status: Text; ErrorMessage: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        eInvoiceSetup: Record "eInvoiceSetup";
+    begin
+        // Create new log entry
+        SubmissionLog.Init();
+        SubmissionLog."Entry No." := 0; // Auto-increment
+        SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
+        SubmissionLog."Submission UID" := SubmissionUid;
+        SubmissionLog."Document UUID" := DocumentUuid;
+        SubmissionLog.Status := Status;
+        SubmissionLog."Submission Date" := CurrentDateTime;
+        SubmissionLog."Response Date" := CurrentDateTime;
+        SubmissionLog."Last Updated" := CurrentDateTime;
+        SubmissionLog."User ID" := UserId;
+        SubmissionLog."Company Name" := CompanyName;
+        SubmissionLog."Error Message" := ErrorMessage;
+
+        // Set environment based on setup
+        if eInvoiceSetup.Get('SETUP') then
+            SubmissionLog.Environment := eInvoiceSetup.Environment
+        else
+            SubmissionLog.Environment := SubmissionLog.Environment::Preprod;
+
+        // Insert the log entry
+        if SubmissionLog.Insert() then begin
+            // Successfully logged
+        end else begin
+            // Log error silently to avoid disrupting the main flow
+            LogDebugInfo('Submission Log Error',
+                StrSubstNo('Failed to insert log entry for invoice %1. Error: %2',
+                    SalesInvoiceHeader."No.", GetLastErrorText()));
+        end;
+    end;
+
 }

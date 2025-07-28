@@ -74,10 +74,10 @@ page 50300 eInvoiceSetupCard
                     Token := MyInvoisHelper.GetAccessTokenFromSetup(Rec);
                     TokenLength := StrLen(Token);
 
-                    Message('Token Generation Test Results:\n\n' +
-                        'Token Length: %1 characters\n' +
-                        'Token Preview: %2...\n' +
-                        'Token Format: %3\n\n' +
+                    Message('Token Generation Test Results:' + '\\' + '\\' +
+                        'Token Length: %1 characters' + '\\' +
+                        'Token Preview: %2...' + '\\' +
+                        'Token Format: %3' + '\\' + '\\' +
                         'Note: If token is valid, it should be a JWT token starting with "eyJ"',
                         TokenLength,
                         CopyStr(Token, 1, 50),
@@ -99,15 +99,15 @@ page 50300 eInvoiceSetupCard
                 begin
                     // Test by calling the document types API - this will verify the token works
                     if eInvoiceJsonCodeunit.GetLhdnDocumentTypes(DocumentTypesResponse) then begin
-                        Message('LHDN API Connection Test SUCCESSFUL!\n\n' +
-                            'Token is valid and API is accessible.\n\n' +
+                        Message('LHDN API Connection Test SUCCESSFUL!' + '\\' + '\\' +
+                            'Token is valid and API is accessible.' + '\\' + '\\' +
                             'Response preview: %1', CopyStr(DocumentTypesResponse, 1, 200));
                     end else begin
-                        Message('LHDN API Connection Test FAILED!\n\n' +
-                            'The token may be invalid or expired.\n\n' +
-                            'Please check:\n' +
-                            '1. Client ID and Client Secret are correct\n' +
-                            '2. Environment setting is correct\n' +
+                        Message('LHDN API Connection Test FAILED!' + '\\' + '\\' +
+                            'The token may be invalid or expired.' + '\\' + '\\' +
+                            'Please check:' + '\\' +
+                            '1. Client ID and Client Secret are correct' + '\\' +
+                            '2. Environment setting is correct' + '\\' +
                             '3. LHDN API service is available');
                     end;
                 end;
@@ -155,6 +155,15 @@ page 50300 eInvoiceSetupCard
                     end;
                     // Error handling is done in the procedure
                 end;
+            }
+
+            action(SubmissionLog)
+            {
+                Caption = 'Submission Log';
+                ApplicationArea = All;
+                Image = Log;
+                ToolTip = 'View e-Invoice submission log and history';
+                RunObject = Page "e-Invoice Submission Log";
             }
 
             action(TestPayloadFormat)
@@ -214,7 +223,7 @@ page 50300 eInvoiceSetupCard
                                 Error('Generated payload is not valid JSON');
 
                             // Show first 500 characters in a message
-                            Message('Azure Function Payload Preview (first 500 chars):\n\n%1\n\n[Full payload will be downloaded as file]',
+                            Message('Azure Function Payload Preview (first 500 chars):' + '\\' + '\\' + '%1' + '\\' + '\\' + '[Full payload will be downloaded as file]',
                                 CopyStr(PayloadText, 1, 500));
 
                             // Download full payload for inspection
