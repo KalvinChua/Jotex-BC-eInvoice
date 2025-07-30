@@ -12,7 +12,7 @@ codeunit 50312 "eInvoice Submission Status"
         eInvoiceSetup: Record "eInvoiceSetup";
         Url: Text;
         Headers: HttpHeaders;
-        eInvoiceJson: Codeunit "eInvoice 1.0 Invoice JSON";
+        eInvoiceJson: Codeunit "eInvoice JSON Generator";
         TimeSinceLastRequest: Duration;
     begin
         SubmissionDetails := '';

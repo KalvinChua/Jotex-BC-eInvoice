@@ -142,7 +142,7 @@ Your Azure Function should:
 
 ```al
 var
-    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
     LhdnResponse: Text;
     Success: Boolean;
 begin

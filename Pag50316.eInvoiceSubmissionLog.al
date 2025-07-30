@@ -76,7 +76,7 @@ page 50316 "e-Invoice Submission Log"
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     SubmissionDetails: Text;
                     ApiSuccess: Boolean;
                     UpdatedCount: Integer;

@@ -33,7 +33,7 @@
 /// Version: 2.0 - Enhanced with Azure Function integration and comprehensive error handling
 /// Last Updated: July 2025
 /// </summary>
-codeunit 50302 "eInvoice 1.0 Invoice JSON"
+codeunit 50302 "eInvoice JSON Generator"
 {
     Permissions = tabledata "Sales Invoice Header" = M;
     // ======================================================================================================

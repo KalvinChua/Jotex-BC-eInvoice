@@ -86,7 +86,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     TempBlob: Codeunit "Temp Blob";
                     FileName: Text;
                     JsonText: Text;
@@ -123,7 +123,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     LhdnResponse: Text;
                     Success: Boolean;
                     ConfirmMsg: Text;

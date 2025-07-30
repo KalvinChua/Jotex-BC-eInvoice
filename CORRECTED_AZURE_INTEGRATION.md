@@ -86,7 +86,7 @@ graph TD
 #### From Business Central AL Code:
 ```al
 var
-    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
     JsonText: Text;
     ResponseText: Text;
     AzureFunctionUrl: Text;

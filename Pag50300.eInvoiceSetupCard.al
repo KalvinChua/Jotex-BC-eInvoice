@@ -94,7 +94,7 @@ page 50300 eInvoiceSetupCard
 
                 trigger OnAction()
                 var
-                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice JSON Generator";
                     DocumentTypesResponse: Text;
                 begin
                     // Test by calling the document types API - this will verify the token works
@@ -122,7 +122,7 @@ page 50300 eInvoiceSetupCard
 
                 trigger OnAction()
                 var
-                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice JSON Generator";
                     DocumentTypesResponse: Text;
                 begin
                     if eInvoiceJsonCodeunit.GetLhdnDocumentTypes(DocumentTypesResponse) then begin
@@ -141,7 +141,7 @@ page 50300 eInvoiceSetupCard
 
                 trigger OnAction()
                 var
-                    eInvoiceJsonCodeunit: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceJsonCodeunit: Codeunit "eInvoice JSON Generator";
                     NotificationsResponse: Text;
                     DateFrom: Date;
                     DateTo: Date;
@@ -175,7 +175,7 @@ page 50300 eInvoiceSetupCard
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     SalesInvoiceHeader: Record "Sales Invoice Header";
                     JsonText: Text;
                     PayloadObject: JsonObject;
@@ -251,7 +251,7 @@ page 50300 eInvoiceSetupCard
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice 1.0 Invoice JSON";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     DiagnosticResult: Text;
                 begin
                     if Rec."Azure Function URL" = '' then begin
