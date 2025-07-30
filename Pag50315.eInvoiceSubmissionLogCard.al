@@ -107,16 +107,24 @@ page 50315 "e-Invoice Submission Log Card"
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                     SubmissionDetails: Text;
                     ApiSuccess: Boolean;
+                    ConfirmMsg: Text;
                 begin
                     if Rec."Submission UID" = '' then begin
                         Message('No submission UID found for this entry.');
                         exit;
                     end;
 
-                    ApiSuccess := eInvoiceGenerator.GetSubmissionStatus(Rec."Submission UID", SubmissionDetails);
+                    ConfirmMsg := StrSubstNo('This will check the current status of submission %1 using the LHDN Get Submission API.' + '\\' + '\\' +
+                                           'Note: LHDN recommends 3-5 second intervals between requests.' + '\\' + '\\' +
+                                           'Proceed?', Rec."Submission UID");
+
+                    if not Confirm(ConfirmMsg) then
+                        exit;
+
+                    ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus(Rec."Submission UID", SubmissionDetails);
 
                     if ApiSuccess then begin
                         // Update the log entry with current status
@@ -191,8 +199,30 @@ page 50315 "e-Invoice Submission Log Card"
     local procedure ExtractStatusFromResponse(ResponseText: Text): Text
     var
         Status: Text;
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
     begin
-        // Extract status from the response text
+        // Try to parse JSON response first for more accurate status extraction
+        if JsonObject.ReadFrom(ResponseText) then begin
+            if JsonObject.Get('overallStatus', JsonToken) then begin
+                Status := JsonToken.AsValue().AsText();
+                // Convert API status to display format
+                case Status of
+                    'valid':
+                        exit('Valid');
+                    'invalid':
+                        exit('Invalid');
+                    'in progress':
+                        exit('In Progress');
+                    'partially valid':
+                        exit('Partially Valid');
+                    else
+                        exit(Status);
+                end;
+            end;
+        end;
+
+        // Fallback to text parsing if JSON parsing fails
         if ResponseText.Contains('Overall Status: valid') then
             Status := 'Valid'
         else if ResponseText.Contains('Overall Status: invalid') then

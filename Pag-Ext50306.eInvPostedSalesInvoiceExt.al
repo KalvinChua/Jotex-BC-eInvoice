@@ -65,11 +65,13 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 {
                     ApplicationArea = All;
                     Caption = 'e-Invoice Validation Status';
-                    ToolTip = 'Shows the validation status returned by LHDN (Accepted/Rejected).';
+                    ToolTip = 'Shows the validation status returned by LHDN (Submitted/Submission Failed for initial submission, or valid/invalid/in progress/partially valid for processing status).';
                     Visible = IsJotexCompany;
                 }
             }
         }
+
+
     }
 
     actions
@@ -136,7 +138,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
 
                     if Success then begin
-                        SuccessMsg := StrSubstNo('Invoice %1 successfully signed and submitted to LHDN!' + '\\' + '\\' + 'LHDN Response:' + '\\' + '%2', Rec."No.", LhdnResponse);
+                        SuccessMsg := StrSubstNo('Invoice %1 successfully signed and submitted to LHDN!' + '\\' + '\\' + 'LHDN Response:' + '\\' + '%2', Rec."No.", FormatLhdnResponse(LhdnResponse));
                         Message(SuccessMsg);
                     end else begin
                         Message(StrSubstNo('Failed to complete signing and submission process.' + '\\' + 'Response: %1', LhdnResponse));
@@ -177,6 +179,43 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     end;
                 end;
             }
+
+            action(CheckStatusWithPolling)
+            {
+                ApplicationArea = All;
+                Caption = 'Check Status with Auto-Polling';
+                Image = Refresh;
+                ToolTip = 'Check submission status with automatic polling (recommended for monitoring processing)';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SubmissionDetails: Text;
+                    ApiSuccess: Boolean;
+                    ConfirmMsg: Text;
+                begin
+                    if Rec."eInvoice Submission UID" = '' then begin
+                        Message('No submission UID found for this invoice.' + '\\' + 'Please submit the invoice to LHDN first.');
+                        exit;
+                    end;
+
+                    ConfirmMsg := StrSubstNo('This will check the status of submission %1 with automatic polling.' + '\\' + '\\' +
+                                           'The system will make up to 5 attempts with 4-second intervals (total 20 seconds).' + '\\' + '\\' +
+                                           'This is recommended for monitoring documents that are still being processed.' + '\\' + '\\' +
+                                           'Proceed?', Rec."eInvoice Submission UID");
+                    if not Confirm(ConfirmMsg) then
+                        exit;
+
+                    ApiSuccess := SubmissionStatusCU.GetSubmissionStatusWithAutoPolling(Rec."eInvoice Submission UID", SubmissionDetails);
+
+                    if ApiSuccess then begin
+                        Message(StrSubstNo('Submission Status (with polling) for %1:' + '\\' + '\\' + '%2', Rec."eInvoice Submission UID", SubmissionDetails));
+                    end else begin
+                        Message(StrSubstNo('Failed to get submission status after polling attempts.' + '\\' + '\\' + 'Error: %1' + '\\' + '\\' + 'The submission may still be processing. Please try again later.', SubmissionDetails));
+                    end;
+                end;
+            }
         }
     }
 
@@ -188,5 +227,126 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         CompanyInfo: Record "Company Information";
     begin
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+    end;
+
+    /// <summary>
+    /// Formats LHDN response JSON into a clean, readable format
+    /// </summary>
+    /// <param name="RawResponse">Raw JSON response from LHDN</param>
+    /// <returns>Formatted response text</returns>
+    local procedure FormatLhdnResponse(RawResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        AcceptedArray: JsonArray;
+        RejectedArray: JsonArray;
+        SubmissionUid: Text;
+        AcceptedCount: Integer;
+        RejectedCount: Integer;
+        i: Integer;
+        DocumentJson: JsonObject;
+        Uuid: Text;
+        InvoiceCodeNumber: Text;
+        FormattedResponse: Text;
+    begin
+        // Try to parse the JSON response
+        if not ResponseJson.ReadFrom(RawResponse) then begin
+            // If parsing fails, return a simplified version of the raw response
+            exit('Raw Response: ' + CopyStr(RawResponse, 1, 200) + '...');
+        end;
+
+        // Extract submission UID
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        // Extract accepted documents
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            AcceptedArray := JsonToken.AsArray();
+            AcceptedCount := AcceptedArray.Count();
+
+            if AcceptedCount > 0 then begin
+                FormattedResponse := 'Submission ID: ' + SubmissionUid + '\\' +
+                                   'Accepted Documents: ' + Format(AcceptedCount) + '\\';
+
+                for i := 0 to AcceptedCount - 1 do begin
+                    AcceptedArray.Get(i, JsonToken);
+                    if JsonToken.IsObject() then begin
+                        DocumentJson := JsonToken.AsObject();
+
+                        if DocumentJson.Get('uuid', JsonToken) then
+                            Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                        if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                            InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        FormattedResponse += StrSubstNo('• Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
+                        if i < AcceptedCount - 1 then
+                            FormattedResponse += '\\';
+                    end;
+                end;
+            end;
+        end;
+
+        // Extract rejected documents
+        if ResponseJson.Get('rejectedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            RejectedArray := JsonToken.AsArray();
+            RejectedCount := RejectedArray.Count();
+
+            if RejectedCount > 0 then begin
+                if FormattedResponse <> '' then
+                    FormattedResponse += '\\';
+                FormattedResponse += 'Rejected Documents: ' + Format(RejectedCount);
+            end;
+        end;
+
+        // If no structured data found, return simplified raw response
+        if FormattedResponse = '' then begin
+            FormattedResponse := 'Raw Response: ' + CopyStr(RawResponse, 1, 200) + '...';
+        end;
+
+        exit(FormattedResponse);
+    end;
+
+    /// <summary>
+    /// Removes surrounding quotes from text values
+    /// </summary>
+    /// <param name="InputText">Text that may contain surrounding quotes</param>
+    /// <returns>Text with quotes removed</returns>
+    local procedure CleanQuotesFromText(InputText: Text): Text
+    var
+        CleanText: Text;
+    begin
+        if InputText = '' then
+            exit('');
+
+        CleanText := InputText;
+
+        // Remove leading quote if present
+        if StrPos(CleanText, '"') = 1 then
+            CleanText := CopyStr(CleanText, 2);
+
+        // Remove trailing quote if present
+        if StrLen(CleanText) > 0 then
+            if CopyStr(CleanText, StrLen(CleanText), 1) = '"' then
+                CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
+
+        exit(CleanText);
+    end;
+
+    /// <summary>
+    /// Safely converts JSON token to text
+    /// </summary>
+    /// <param name="JsonToken">JSON token to convert</param>
+    /// <returns>Text representation of the JSON value</returns>
+    local procedure SafeJsonValueToText(JsonToken: JsonToken): Text
+    begin
+        if JsonToken.IsValue() then begin
+            exit(Format(JsonToken.AsValue()));
+        end else if JsonToken.IsObject() then begin
+            exit('JSON Object');
+        end else if JsonToken.IsArray() then begin
+            exit('JSON Array');
+        end else begin
+            exit('Unknown');
+        end;
     end;
 }

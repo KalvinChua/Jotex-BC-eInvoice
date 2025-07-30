@@ -2116,9 +2116,7 @@ codeunit 50302 "eInvoice JSON Generator"
                 eInvoiceSetup."Client ID" <> '' ? 'Configured' : 'MISSING',
                 eInvoiceSetup."Client Secret" <> '' ? 'Configured' : 'MISSING'));
 
-        // Show debug info with payload structure validation
-        Message('Submitting to LHDN URL: %1\nPayload size: %2 characters\nPayload structure validated: %3\nFirst 1000 chars: %4',
-            LhdnApiUrl, StrLen(LhdnPayloadText), ValidateLhdnPayloadStructure(LhdnPayloadText), CopyStr(LhdnPayloadText, 1, 1000));
+        // Debug: Log the request details before sending
 
         // Setup LHDN API request with standard headers
         HttpRequestMessage.Method := 'POST';
@@ -2156,12 +2154,12 @@ codeunit 50302 "eInvoice JSON Generator"
                 // Parse and display structured LHDN error response with headers
                 ParseAndDisplayLhdnError(LhdnResponse, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase, HttpResponseMessage);
 
-                // Update validation status to "Rejected" when there's an error
-                SalesInvoiceHeader."eInvoice Validation Status" := 'Rejected';
+                // Update validation status to "Submission Failed" when there's an error
+                SalesInvoiceHeader."eInvoice Validation Status" := 'Submission Failed';
                 SalesInvoiceHeader.Modify();
 
                 // Log the failed submission
-                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Rejected', LhdnResponse);
+                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Submission Failed', LhdnResponse);
             end;
         end else begin
             Error('Failed to send HTTP request to LHDN API at %1', LhdnApiUrl);
@@ -2302,20 +2300,20 @@ codeunit 50302 "eInvoice JSON Generator"
         else
             RateLimitInfoText := '';
 
-        // Build the formatted message with proper line breaks
-        FormattedMessage := 'LHDN Submission Successful!' + '\\' + '\\' +
-            'Submission ID: ' + SubmissionUid + '\\' +
-            'Status Code: ' + Format(StatusCode) + '\\';
+        // Build the formatted message with concise formatting
+        FormattedMessage := 'LHDN Submission Successful!' + '\\' +
+            'Submission ID: ' + CleanQuotesFromText(SubmissionUid) + '\\' +
+            'Status Code: ' + Format(StatusCode);
 
         if CorrelationInfo <> '' then
-            FormattedMessage += CorrelationInfo + '\\';
+            FormattedMessage += '\\' + CorrelationInfo;
 
         if RateLimitInfoText <> '' then
-            FormattedMessage += RateLimitInfoText + '\\';
+            FormattedMessage += '\\' + RateLimitInfoText;
 
         FormattedMessage += '\\' +
             'Accepted Documents: ' + Format(AcceptedCount) + '\\' +
-            DocumentDetails + '\\' + '\\' +
+            CleanQuotesFromText(DocumentDetails) + '\\' +
             'All documents have been successfully submitted to LHDN MyInvois.';
 
         exit(FormattedMessage);
@@ -2330,7 +2328,7 @@ codeunit 50302 "eInvoice JSON Generator"
     begin
         // Update the submission UID
         if SubmissionUid <> '' then begin
-            SalesInvoiceHeader."eInvoice Submission UID" := CopyStr(SubmissionUid, 1, MaxStrLen(SalesInvoiceHeader."eInvoice Submission UID"));
+            SalesInvoiceHeader."eInvoice Submission UID" := CopyStr(CleanQuotesFromText(SubmissionUid), 1, MaxStrLen(SalesInvoiceHeader."eInvoice Submission UID"));
         end;
 
         // Update UUID from the first accepted document (if any)
@@ -2340,11 +2338,18 @@ codeunit 50302 "eInvoice JSON Generator"
 
             if DocumentJson.Get('uuid', JsonToken) then begin
                 Uuid := SafeJsonValueToText(JsonToken);
-                SalesInvoiceHeader."eInvoice UUID" := CopyStr(Uuid, 1, MaxStrLen(SalesInvoiceHeader."eInvoice UUID"));
+                SalesInvoiceHeader."eInvoice UUID" := CopyStr(CleanQuotesFromText(Uuid), 1, MaxStrLen(SalesInvoiceHeader."eInvoice UUID"));
             end;
 
-            // Set validation status to "Accepted" when documents are accepted
-            SalesInvoiceHeader."eInvoice Validation Status" := 'Accepted';
+            // Set validation status to "Submitted" when documents are accepted for processing
+            // Note: This is the initial submission status, not the batch processing status
+            // Batch processing status (valid/invalid/in progress/partially valid) is retrieved separately
+            SalesInvoiceHeader."eInvoice Validation Status" := 'Submitted';
+
+            // Set validation status to "Submitted" when documents are accepted for processing
+            // Note: This is the initial submission status, not the batch processing status
+            // Batch processing status (valid/invalid/in progress/partially valid) is retrieved separately
+            SalesInvoiceHeader."eInvoice Validation Status" := 'Submitted';
 
             // Optional: Update invoice code number if different from the original
             if DocumentJson.Get('invoiceCodeNumber', JsonToken) then begin
@@ -2361,7 +2366,7 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
 
         // Log the submission to the submission log table
-        LogSubmissionToTable(SalesInvoiceHeader, SubmissionUid, Uuid, 'Accepted', '');
+        LogSubmissionToTable(SalesInvoiceHeader, SubmissionUid, Uuid, 'Submitted', '');
     end;
 
     local procedure ParseAndDisplayLhdnError(ErrorResponse: Text; StatusCode: Integer; ReasonPhrase: Text; HttpResponseMessage: HttpResponseMessage)
@@ -3619,19 +3624,19 @@ codeunit 50302 "eInvoice JSON Generator"
 
             // Extract UUID with safe type conversion
             if DocumentJson.Get('uuid', JsonToken) then
-                Uuid := SafeJsonValueToText(JsonToken)
+                Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken))
             else
                 Uuid := 'N/A';
 
             // Extract Invoice Code Number with safe type conversion
             if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
-                InvoiceCodeNumber := SafeJsonValueToText(JsonToken)
+                InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken))
             else
                 InvoiceCodeNumber := 'N/A';
 
             if DocumentDetails <> '' then
                 DocumentDetails += '\\';
-            DocumentDetails += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
+            DocumentDetails += StrSubstNo('  • Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
         end;
 
         // Process rejected documents
@@ -3647,11 +3652,11 @@ codeunit 50302 "eInvoice JSON Generator"
                 Uuid := 'N/A';
                 InvoiceCodeNumber := 'N/A';
                 if DocumentJson.Get('uuid', JsonToken) then
-                    Uuid := SafeJsonValueToText(JsonToken);
+                    Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
                 if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
-                    InvoiceCodeNumber := SafeJsonValueToText(JsonToken);
+                    InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                DocumentDetails += StrSubstNo('  • Invoice: %1 (UUID: %2)', InvoiceCodeNumber, Uuid);
+                DocumentDetails += StrSubstNo('  • Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
 
                 // Add error details if available with safe type conversion
                 if DocumentJson.Get('error', JsonToken) then
@@ -3834,8 +3839,8 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
-        SubmissionLog."Submission UID" := SubmissionUid;
-        SubmissionLog."Document UUID" := DocumentUuid;
+        SubmissionLog."Submission UID" := CleanQuotesFromText(SubmissionUid);
+        SubmissionLog."Document UUID" := CleanQuotesFromText(DocumentUuid);
         SubmissionLog.Status := Status;
         SubmissionLog."Submission Date" := CurrentDateTime;
         SubmissionLog."Response Date" := CurrentDateTime;
@@ -3861,4 +3866,29 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
     end;
 
+    /// <summary>
+    /// Removes surrounding quotes from text values
+    /// </summary>
+    /// <param name="InputText">Text that may contain surrounding quotes</param>
+    /// <returns>Text with quotes removed</returns>
+    local procedure CleanQuotesFromText(InputText: Text): Text
+    var
+        CleanText: Text;
+    begin
+        if InputText = '' then
+            exit('');
+
+        CleanText := InputText;
+
+        // Remove leading quote if present
+        if StrPos(CleanText, '"') = 1 then
+            CleanText := CopyStr(CleanText, 2);
+
+        // Remove trailing quote if present
+        if StrLen(CleanText) > 0 then
+            if CopyStr(CleanText, StrLen(CleanText), 1) = '"' then
+                CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
+
+        exit(CleanText);
+    end;
 }
