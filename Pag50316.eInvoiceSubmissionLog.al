@@ -23,6 +23,11 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the invoice number that was submitted.';
                 }
+                field("Customer Name"; Rec."Customer Name")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the customer name for this invoice submission.';
+                }
                 field("Submission UID"; Rec."Submission UID")
                 {
                     ApplicationArea = All;
@@ -94,31 +99,32 @@ page 50316 "e-Invoice Submission Log"
                         until SubmissionLog.Next() = 0;
                     end;
 
-                    DiagnosticInfo += StrSubstNo('\nTotal Log Records: %1', RecordCount);
+                    DiagnosticInfo += StrSubstNo('\\Total Log Records: %1', RecordCount);
 
                     // Check for recent entries
+                    DiagnosticInfo += '\\\\';
                     SubmissionLog.SetRange("Submission Date", CreateDateTime(CalcDate('-7D', Today), 000000T), CurrentDateTime);
                     if SubmissionLog.FindSet() then begin
-                        DiagnosticInfo += StrSubstNo('\nRecords in last 7 days: %1', SubmissionLog.Count);
+                        DiagnosticInfo += StrSubstNo('\\Records in last 7 days: %1', SubmissionLog.Count);
 
                         // Show sample entries
-                        DiagnosticInfo += '\n\nRecent entries:';
+                        DiagnosticInfo += '\\\\Recent entries:';
                         repeat
-                            DiagnosticInfo += StrSubstNo('\n- Entry %1: Invoice %2, Status %3, Date %4',
+                            DiagnosticInfo += StrSubstNo('\\• Entry %1: Invoice %2, Status %3, Date %4',
                                 SubmissionLog."Entry No.",
                                 SubmissionLog."Invoice No.",
                                 SubmissionLog.Status,
-                                Format(SubmissionLog."Submission Date"));
+                                Format(SubmissionLog."Submission Date", 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2> <AM/PM>'));
                         until (SubmissionLog.Next() = 0) or (SubmissionLog.Count > 5);
                     end else begin
-                        DiagnosticInfo += '\nNo records in last 7 days';
+                        DiagnosticInfo += '\\No records in last 7 days';
                     end;
 
                     // Check permissions
-                    DiagnosticInfo += StrSubstNo('\n\nUser ID: %1', UserId);
-                    DiagnosticInfo += StrSubstNo('\nCurrent DateTime: %1', Format(CurrentDateTime));
+                    DiagnosticInfo += StrSubstNo('\\\\User ID: %1', UserId);
+                    DiagnosticInfo += StrSubstNo('\\Current DateTime: %1', Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2> <AM/PM>'));
 
-                    Message('Diagnostic Information:\n%1', DiagnosticInfo);
+                    Message('Diagnostic Information:\\%1', DiagnosticInfo);
                 end;
             }
 
@@ -139,6 +145,7 @@ page 50316 "e-Invoice Submission Log"
                         SubmissionLog.Init();
                         SubmissionLog."Entry No." := 0; // Auto-increment
                         SubmissionLog."Invoice No." := 'TEST-INV-001';
+                        SubmissionLog."Customer Name" := 'Test Customer';
                         SubmissionLog."Submission UID" := CleanQuotesFromText('TEST-SUB-UID-' + Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
                         SubmissionLog."Document UUID" := CleanQuotesFromText('TEST-DOC-UUID-' + Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
                         SubmissionLog.Status := 'Test Status';
@@ -157,10 +164,10 @@ page 50316 "e-Invoice Submission Log"
 
                         // Insert the log entry
                         if SubmissionLog.Insert() then begin
-                            Message('Test entry created successfully!\nEntry No.: %1\nInvoice No.: %2',
+                            Message('Test entry created successfully!\\Entry No.: %1\\Invoice No.: %2',
                                 SubmissionLog."Entry No.", SubmissionLog."Invoice No.");
                         end else begin
-                            Message('Failed to create test entry.\nError: %1', GetLastErrorText());
+                            Message('Failed to create test entry.\\Error: %1', GetLastErrorText());
                         end;
                     end;
                 end;
@@ -175,31 +182,15 @@ page 50316 "e-Invoice Submission Log"
 
                 trigger OnAction()
                 var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SubmissionStatusCU: Codeunit 50312;
                     TestResults: Text;
                 begin
                     TestResults := SubmissionStatusCU.TestSubmissionStatusAccess();
-                    Message('Submission Status Access Test:\n\n%1', TestResults);
+                    Message('Submission Status Access Test:\\\\%1', TestResults);
                 end;
             }
 
-            action(TestSimpleAccess)
-            {
-                ApplicationArea = All;
-                Caption = 'Test Simple Access';
-                Image = Troubleshoot;
-                ToolTip = 'Test basic access without HTTP operations';
 
-                trigger OnAction()
-                var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
-                    TestResults: Text;
-                    ApiSuccess: Boolean;
-                begin
-                    ApiSuccess := SubmissionStatusCU.TestSubmissionStatusSimple('TEST-UID', TestResults);
-                    Message('Simple Access Test:\n\n%1\n\nAPI Success: %2', TestResults, Format(ApiSuccess));
-                end;
-            }
 
             action(TestContextSafeAccess)
             {
@@ -210,17 +201,17 @@ page 50316 "e-Invoice Submission Log"
 
                 trigger OnAction()
                 var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SubmissionStatusCU: Codeunit 50312;
                     SubmissionDetails: Text;
                     ApiSuccess: Boolean;
                     ConfirmMsg: Text;
                 begin
                     ConfirmMsg := 'This will test LHDN API access with enhanced context awareness.' + '\\' + '\\' +
-                                 'The test includes:\n' +
-                                 '• Context restriction detection\n' +
-                                 '• Network connectivity validation\n' +
-                                 '• Detailed error reporting\n' +
-                                 '• Retry logic for transient failures\n\n' +
+                                 'The test includes:\\' +
+                                 '• Context restriction detection\\' +
+                                 '• Network connectivity validation\\' +
+                                 '• Detailed error reporting\\' +
+                                 '• Retry logic for transient failures\\\\' +
                                  'Proceed with test?';
 
                     if not Confirm(ConfirmMsg) then
@@ -229,10 +220,34 @@ page 50316 "e-Invoice Submission Log"
                     ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus('TEST-CONTEXT-UID', SubmissionDetails);
 
                     if ApiSuccess then begin
-                        Message('Context-Safe Access Test: SUCCESS\n\n%1', SubmissionDetails);
+                        Message('Context-Safe Access Test: SUCCESS\\\\%1', SubmissionDetails);
                     end else begin
-                        Message('Context-Safe Access Test: FAILED\n\n%1', SubmissionDetails);
+                        Message('Context-Safe Access Test: FAILED\\\\%1', SubmissionDetails);
                     end;
+                end;
+            }
+
+
+
+            action(TestContextAccess)
+            {
+                ApplicationArea = All;
+                Caption = 'Test Context Access';
+                Image = Troubleshoot;
+                ToolTip = 'Test if HTTP operations are allowed in the current context';
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit 50312;
+                    TestResult: Text;
+                begin
+                    // Test context access
+                    TestResult := SubmissionStatusCU.TestSubmissionStatusAccess();
+
+                    Message('Context Access Test Results\\' +
+                           '========================\\' +
+                           '\\%1',
+                           TestResult);
                 end;
             }
 
@@ -241,70 +256,191 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Refresh Status';
                 Image = Refresh;
-                ToolTip = 'Refresh the status of selected submissions using the LHDN Get Submission API';
+                ToolTip = 'Refresh the status of the selected submission using the LHDN Get Submission API';
 
                 trigger OnAction()
                 var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SubmissionStatusCU: Codeunit 50312;
                     SubmissionDetails: Text;
                     ApiSuccess: Boolean;
                     UpdatedCount: Integer;
                     ConfirmMsg: Text;
                     ErrorMessage: Text;
                     FirstError: Text;
+                    ContextRestrictionDetected: Boolean;
+                    BackgroundJobOption: Integer;
+                    TestResult: Text;
                 begin
-                    ConfirmMsg := 'This will refresh the status of all selected submissions using the LHDN Get Submission API.' + '\\' + '\\' +
-                                 'Note: LHDN recommends 3-5 second intervals between requests to avoid system throttling.' + '\\' + '\\' +
-                                 'Proceed?';
+                    // First, test if HTTP operations are allowed in this context
+                    TestResult := SubmissionStatusCU.TestSubmissionStatusAccess();
 
-                    if not Confirm(ConfirmMsg) then
+                    if TestResult.Contains('Access token not available') or
+                       TestResult.Contains('Context restrictions') then begin
+                        // Context restrictions detected - offer alternatives
+                        BackgroundJobOption := StrMenu('Use Background Job (Recommended),Test Context Access,Cancel', 1, 'Context Restriction Detected - Select Alternative Method');
+
+                        case BackgroundJobOption of
+                            0: // Cancel
+                                exit;
+                            1: // Use Background Job
+                                begin
+                                    CreateBackgroundJobForStatusRefresh();
+                                    Message('Background job created for status refresh.\\' + '\\' +
+                                            'The job will process your submissions in the background\\' +
+                                            'and update the log entries when complete.\\' + '\\' +
+                                            'You can check the Job Queue to monitor progress.');
+                                    exit;
+                                end;
+                            2: // Test Context Access
+                                begin
+                                    TestResult := SubmissionStatusCU.TestSubmissionStatusAccess();
+                                    Message('Context Access Test:\\%1', TestResult);
+                                    exit;
+                                end;
+                            else
+                                exit;
+                        end;
+                    end;
+
+                    // If we reach here, HTTP operations should be allowed
+                    // Proceed with direct refresh
+
+                    ContextRestrictionDetected := false;
+                    UpdatedCount := 0;
+
+                    // Try to refresh status for selected entry only
+                    if Rec."Submission UID" <> '' then begin
+                        // Try direct API call first to get real status
+                        ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus(Rec."Submission UID", SubmissionDetails);
+
+                        if ApiSuccess then begin
+                            // Update the log entry with current status from LHDN API
+                            Rec."Status" := ExtractStatusFromResponse(SubmissionDetails);
+                            Rec."Response Date" := CurrentDateTime;
+                            Rec."Last Updated" := CurrentDateTime;
+                            Rec."Error Message" := CopyStr(SubmissionDetails, 1, 250);
+                            Rec.Modify();
+                            UpdatedCount += 1;
+                        end else begin
+                            // Check if it's a context restriction
+                            if SubmissionDetails.Contains('Context Restriction Detected') or
+                               SubmissionDetails.Contains('Context Restriction Error') then begin
+                                ContextRestrictionDetected := true;
+                                // Log the error but continue processing
+                                Rec."Error Message" := CopyStr(SubmissionDetails, 1, 250);
+                                Rec."Last Updated" := CurrentDateTime;
+                                Rec.Modify();
+                            end else begin
+                                // Log the error but continue processing
+                                Rec."Error Message" := CopyStr(SubmissionDetails, 1, 250);
+                                Rec."Last Updated" := CurrentDateTime;
+                                Rec.Modify();
+
+                                // Capture first error for context restriction detection
+                                if FirstError = '' then
+                                    FirstError := SubmissionDetails;
+                            end;
+                        end;
+                    end else begin
+                        Message('No Submission UID found for the selected entry.\\Entry No.: %1\\Invoice No.: %2', Rec."Entry No.", Rec."Invoice No.");
                         exit;
+                    end;
 
-                    // Try to refresh statuses directly
+                    if UpdatedCount > 0 then
+                        Message('Status refresh completed.' + '\\' + 'Updated %1 submission.', UpdatedCount)
+                    else if ContextRestrictionDetected then begin
+                        Message('Context Restriction Detected\\\\' +
+                                'HTTP operations are not allowed in the current context.\\\\' +
+                                'Alternative Solutions:\\' +
+                                '1. Use "Background Status Refresh" for background processing\\' +
+                                '2. Use "Manual Status Update" to set status manually\\' +
+                                '3. Try running from a different page or action\\' +
+                                '4. Contact your system administrator\\' +
+                                '5. Use "Export to Excel" to get current data\\\\' +
+                                'Session Details:\\' +
+                                '• User ID: %1\\' +
+                                '• Company: %2\\' +
+                                '• Current Time: %3\\' +
+                                '• Session ID: c34d2514-2068-4b19-9607-298463aa417e\\\\' +
+                                'LHDN API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
+                                UserId, CompanyName, Format(CurrentDateTime));
+                    end else
+                        Message('No submission was updated. Check error messages for details.');
+                end;
+            }
+
+            action(BackgroundStatusRefresh)
+            {
+                ApplicationArea = All;
+                Caption = 'Background Status Refresh';
+                Image = Process;
+                ToolTip = 'Refresh status using background job to avoid context restrictions';
+
+                trigger OnAction()
+                var
+                    JobQueueEntry: Record "Job Queue Entry";
+                    JobQueueLogEntry: Record "Job Queue Log Entry";
+                    LogEntryNo: Integer;
+                    SelectedCount: Integer;
+                begin
+                    // Count selected entries
                     if Rec.FindSet() then begin
                         repeat
-                            if Rec."Submission UID" <> '' then begin
-                                ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus(Rec."Submission UID", SubmissionDetails);
-
-                                if ApiSuccess then begin
-                                    // Update the log entry with current status
-                                    Rec."Status" := ExtractStatusFromResponse(SubmissionDetails);
-                                    Rec."Response Date" := CurrentDateTime;
-                                    Rec."Last Updated" := CurrentDateTime;
-                                    Rec.Modify();
-                                    UpdatedCount += 1;
-                                end else begin
-                                    // Log the error but continue processing
-                                    Rec."Error Message" := CopyStr(SubmissionDetails, 1, 250);
-                                    Rec."Last Updated" := CurrentDateTime;
-                                    Rec.Modify();
-
-                                    // Capture first error for context restriction detection
-                                    if FirstError = '' then
-                                        FirstError := SubmissionDetails;
-                                end;
-                            end;
+                            if Rec."Submission UID" <> '' then
+                                SelectedCount += 1;
                         until Rec.Next() = 0;
+                    end;
 
-                        if UpdatedCount > 0 then
-                            Message('Status refresh completed.' + '\\' + 'Updated %1 submissions.', UpdatedCount)
-                        else if FirstError.Contains('cannot be performed in this context') then begin
-                            Message('Context Restriction Detected\n\n' +
-                                    'HTTP operations are not allowed in the current context.\n\n' +
-                                    'Alternative Solutions:\n' +
-                                    '1. Use "Manual Status Update" to set status manually\n' +
-                                    '2. Try running from a different page or action\n' +
-                                    '3. Contact your system administrator\n' +
-                                    '4. Use "Export to Excel" to get current data\n\n' +
-                                    'Session Details:\n' +
-                                    '• User ID: %1\n' +
-                                    '• Company: %2\n' +
-                                    '• Current Time: %3',
-                                    UserId, CompanyName, Format(CurrentDateTime));
-                        end else
-                            Message('No submissions were updated. Check error messages for details.');
-                    end else
-                        Message('No log entries found to refresh.');
+                    if SelectedCount = 0 then begin
+                        Message('No submissions with UIDs found to refresh.');
+                        exit;
+                    end;
+
+                    if not Confirm('This will create a background job to refresh %1 submissions.\\' + '\\' +
+                                  'The job will run in the background and update the log entries when complete.\\' + '\\' +
+                                  'Proceed?', false, SelectedCount) then
+                        exit;
+
+                    // Create job queue entry for background processing
+                    JobQueueEntry.Init();
+                    JobQueueEntry."Object Type to Run" := JobQueueEntry."Object Type to Run"::Codeunit;
+                    JobQueueEntry."Object ID to Run" := 50312;
+                    JobQueueEntry."Job Queue Category Code" := 'EINVOICE';
+                    JobQueueEntry."Description" := StrSubstNo('eInvoice Status Refresh - %1 submissions', SelectedCount);
+                    JobQueueEntry."Parameter String" := 'BACKGROUND_REFRESH';
+                    JobQueueEntry."User ID" := UserId;
+                    JobQueueEntry."Earliest Start Date/Time" := CurrentDateTime;
+                    JobQueueEntry.Status := JobQueueEntry.Status::Ready;
+                    JobQueueEntry."Maximum No. of Attempts to Run" := 1;
+
+                    if JobQueueEntry.Insert(true) then begin
+                        // Log the job creation
+                        if JobQueueLogEntry.FindLast() then
+                            LogEntryNo := JobQueueLogEntry."Entry No." + 1
+                        else
+                            LogEntryNo := 1;
+
+                        JobQueueLogEntry.Init();
+                        JobQueueLogEntry."Entry No." := LogEntryNo;
+                        JobQueueLogEntry."Status" := JobQueueLogEntry.Status::Success;
+                        JobQueueLogEntry."Start Date/Time" := CurrentDateTime;
+                        JobQueueLogEntry."End Date/Time" := CurrentDateTime;
+                        JobQueueLogEntry."Object Type to Run" := JobQueueLogEntry."Object Type to Run"::Codeunit;
+                        JobQueueLogEntry."Object ID to Run" := 50312;
+                        JobQueueLogEntry."Job Queue Category Code" := 'EINVOICE';
+                        JobQueueLogEntry."Description" := StrSubstNo('eInvoice Status Refresh - Job Created for %1 submissions', SelectedCount);
+                        JobQueueLogEntry.Insert();
+
+                        Message('Background job created successfully!\\' + '\\' +
+                                'Job Queue Entry: %1\\' +
+                                'Submissions to process: %2\\' +
+                                'Status: Ready\\' + '\\' +
+                                'The job will run in the background and update your log entries when complete.\\' +
+                                'You can monitor progress in the Job Queue.',
+                                JobQueueEntry."Entry No.", SelectedCount);
+                    end else begin
+                        Message('Failed to create background job.\\Error: %1', GetLastErrorText());
+                    end;
                 end;
             }
 
@@ -324,13 +460,14 @@ page 50316 "e-Invoice Submission Log"
                     CsvContent: Text;
                 begin
                     // Generate CSV content
-                    CsvContent := 'Entry No.,Invoice No.,Submission UID,Document UUID,Status,Submission Date,Response Date,Environment,Error Message' + '\\';
+                    CsvContent := 'Entry No.,Invoice No.,Customer Name,Submission UID,Document UUID,Status,Submission Date,Response Date,Environment,Error Message' + '\\';
 
                     if Rec.FindSet() then begin
                         repeat
-                            CsvContent += StrSubstNo('%1,%2,%3,%4,%5,%6,%7,%8,%9' + '\\',
+                            CsvContent += StrSubstNo('%1,%2,%3,%4,%5,%6,%7,%8,%9,%10' + '\\',
                                 Rec."Entry No.",
                                 Rec."Invoice No.",
+                                Rec."Customer Name",
                                 Rec."Submission UID",
                                 Rec."Document UUID",
                                 Rec.Status,
@@ -381,61 +518,11 @@ page 50316 "e-Invoice Submission Log"
                 end;
             }
 
-            action(ManualStatusUpdate)
-            {
-                ApplicationArea = All;
-                Caption = 'Manual Status Update';
-                Image = Edit;
-                ToolTip = 'Manually update status when HTTP operations are blocked';
 
-                trigger OnAction()
-                var
-                    StatusOptions: Text;
-                    SelectedStatus: Integer;
-                    StatusText: Text;
-                    UpdatedCount: Integer;
-                begin
-                    StatusOptions := 'valid,invalid,in progress,partially valid,Unknown';
-                    SelectedStatus := StrMenu(StatusOptions, 1, 'Select Status to Apply');
 
-                    if SelectedStatus = 0 then
-                        exit;
 
-                    // Convert selection to status text (using official LHDN API values)
-                    case SelectedStatus of
-                        1:
-                            StatusText := 'valid';
-                        2:
-                            StatusText := 'invalid';
-                        3:
-                            StatusText := 'in progress';
-                        4:
-                            StatusText := 'partially valid';
-                        5:
-                            StatusText := 'Unknown';
-                        else
-                            StatusText := 'Unknown';
-                    end;
 
-                    UpdatedCount := 0;
 
-                    if Rec.FindSet() then begin
-                        repeat
-                            if Rec."Submission UID" <> '' then begin
-                                Rec."Status" := StatusText;
-                                Rec."Response Date" := CurrentDateTime;
-                                Rec."Last Updated" := CurrentDateTime;
-                                Rec."Error Message" := 'Manually updated - HTTP operations blocked';
-                                Rec.Modify();
-                                UpdatedCount += 1;
-                            end;
-                        until Rec.Next() = 0;
-
-                        Message('Manual status update completed.' + '\\' + 'Updated %1 submissions with status: %2', UpdatedCount, StatusText);
-                    end else
-                        Message('No log entries found to update.');
-                end;
-            }
         }
     }
 
@@ -449,20 +536,31 @@ page 50316 "e-Invoice Submission Log"
         if JsonObject.ReadFrom(ResponseText) then begin
             if JsonObject.Get('overallStatus', JsonToken) then begin
                 Status := JsonToken.AsValue().AsText();
-                // Return the official LHDN API status value directly
-                exit(Status);
+                // Convert to proper capitalization for display
+                case LowerCase(Status) of
+                    'valid':
+                        exit('Valid');
+                    'invalid':
+                        exit('Invalid');
+                    'in progress':
+                        exit('In Progress');
+                    'partially valid':
+                        exit('Partially Valid');
+                    else
+                        exit(Status);
+                end;
             end;
         end;
 
         // Fallback to text parsing if JSON parsing fails
-        if ResponseText.Contains('Overall Status: valid') then
-            Status := 'valid'
-        else if ResponseText.Contains('Overall Status: invalid') then
-            Status := 'invalid'
-        else if ResponseText.Contains('Overall Status: in progress') then
-            Status := 'in progress'
-        else if ResponseText.Contains('Overall Status: partially valid') then
-            Status := 'partially valid'
+        if ResponseText.Contains('Overall Status: valid') or ResponseText.Contains('"overallStatus":"Valid"') then
+            Status := 'Valid'
+        else if ResponseText.Contains('Overall Status: invalid') or ResponseText.Contains('"overallStatus":"Invalid"') then
+            Status := 'Invalid'
+        else if ResponseText.Contains('Overall Status: in progress') or ResponseText.Contains('"overallStatus":"In Progress"') then
+            Status := 'In Progress'
+        else if ResponseText.Contains('Overall Status: partially valid') or ResponseText.Contains('"overallStatus":"Partially Valid"') then
+            Status := 'Partially Valid'
         else
             Status := 'Unknown';
 
@@ -507,7 +605,7 @@ page 50316 "e-Invoice Submission Log"
         // Create job queue entry
         JobQueueEntry.Init();
         JobQueueEntry."Object Type to Run" := JobQueueEntry."Object Type to Run"::Codeunit;
-        JobQueueEntry."Object ID to Run" := Codeunit::"eInvoice Submission Status";
+        JobQueueEntry."Object ID to Run" := 50312;
         JobQueueEntry."Job Queue Category Code" := 'EINVOICE';
         JobQueueEntry."Description" := 'eInvoice Status Refresh';
         JobQueueEntry."Parameter String" := '';
@@ -529,11 +627,13 @@ page 50316 "e-Invoice Submission Log"
         JobQueueLogEntry."Start Date/Time" := CurrentDateTime;
         JobQueueLogEntry."End Date/Time" := CurrentDateTime;
         JobQueueLogEntry."Object Type to Run" := JobQueueLogEntry."Object Type to Run"::Codeunit;
-        JobQueueLogEntry."Object ID to Run" := Codeunit::"eInvoice Submission Status";
+        JobQueueLogEntry."Object ID to Run" := 50312;
         JobQueueLogEntry."Job Queue Category Code" := 'EINVOICE';
         JobQueueLogEntry."Description" := 'eInvoice Status Refresh - Job Created';
         JobQueueLogEntry.Insert();
     end;
+
+
 
 
 }

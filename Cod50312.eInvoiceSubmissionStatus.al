@@ -11,6 +11,7 @@ codeunit 50312 "eInvoice Submission Status"
     /// Check submission status using LHDN Get Submission API
     /// API: GET /api/v1.0/documentsubmissions/{{submissionUid}}?pageNo={{pageNo}}&amp;pageSize={{pageSize}}
     /// Rate Limit: 300 RPM per Client ID
+    /// Enhanced with context restriction handling
     /// </summary>
     procedure CheckSubmissionStatus(SubmissionUid: Text; var SubmissionDetails: Text): Boolean
     var
@@ -29,9 +30,11 @@ codeunit 50312 "eInvoice Submission Status"
         OverallStatus: Text;
         DocumentCount: Integer;
         DateTimeReceived: Text;
+        ContextRestrictionDetected: Boolean;
     begin
         SubmissionDetails := '';
         CorrelationId := CreateGuid();
+        ContextRestrictionDetected := false;
 
         // Validate input parameters
         if SubmissionUid = '' then begin
@@ -47,17 +50,17 @@ codeunit 50312 "eInvoice Submission Status"
         // Get access token using the public helper
         AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
         if AccessToken = '' then begin
-            SubmissionDetails := 'Error: Failed to obtain access token.\n\nThis may be due to:\n- Invalid Client ID or Client Secret\n- Network connectivity issues\n- LHDN API service unavailable\n- Credentials not active in LHDN portal';
+            SubmissionDetails := 'Error: Failed to obtain access token.\\\\This may be due to:\\- Invalid Client ID or Client Secret\\- Network connectivity issues\\- LHDN API service unavailable\\- Credentials not active in LHDN portal\\- Context restrictions preventing HTTP operations';
             exit(false);
         end;
 
         // Build URL according to LHDN API specification
-        // GET /api/v1.0/documentsubmissions/{submissionUid}?pageNo={pageNo}&pageSize={pageSize}
-        // LHDN API supports pagination with max pageSize of 100
+        // GET /api/v1.0/documentsubmissions/{submissionUid}
+        // pageNo and pageSize are optional parameters
         if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-            Url := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=50', SubmissionUid)
+            Url := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionUid)
         else
-            Url := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=50', SubmissionUid);
+            Url := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionUid);
 
         // Apply LHDN SDK rate limiting for status endpoint (300 RPM as per API docs)
         eInvoiceHelper.ApplyRateLimiting(Url);
@@ -67,33 +70,70 @@ codeunit 50312 "eInvoice Submission Status"
 
         RequestMessage.GetHeaders(Headers);
         Headers.Add('Authorization', StrSubstNo('Bearer %1', AccessToken));
-        Headers.Add('Content-Type', 'application/json');
+        Headers.Add('Content-Type', 'application/json; charset=utf-8');
         Headers.Add('Accept', 'application/json');
         Headers.Add('Accept-Language', 'en');
+        Headers.Add('User-Agent', 'BusinessCentral-eInvoice/2.0');
+        Headers.Add('X-Correlation-ID', CorrelationId);
+        Headers.Add('X-Request-Source', 'BusinessCentral-StatusCheck');
 
         // Enhanced error handling with context awareness
-        if not TrySendHttpRequest(HttpClient, RequestMessage, HttpResponseMessage, CorrelationId, SubmissionDetails) then
+        if not TrySendHttpRequest(HttpClient, RequestMessage, HttpResponseMessage, CorrelationId, SubmissionDetails) then begin
+            // Check if it's a context restriction
+            if SubmissionDetails.Contains('Context Restriction Error') then begin
+                ContextRestrictionDetected := true;
+                SubmissionDetails := StrSubstNo('Context Restriction Detected\\\\' +
+                                              'HTTP operations are not allowed in the current context.\\\\' +
+                                              'Alternative Solutions:\\' +
+                                              '1. Use "Manual Status Update" to set status manually\\' +
+                                              '2. Try running from a different page or action\\' +
+                                              '3. Use "Export to Excel" to get current data\\' +
+                                              '4. Contact your system administrator\\\\' +
+                                              'Session Details:\\' +
+                                              '• User ID: %1\\' +
+                                              '• Company: %2\\' +
+                                              '• Current Time: %3\\' +
+                                              '• Correlation ID: %4\\\\' +
+                                              'LHDN API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
+                                              UserId, CompanyName, Format(CurrentDateTime), CorrelationId);
+            end;
             exit(false);
+        end;
 
         // Handle rate limiting response (429 status)
         if HttpResponseMessage.HttpStatusCode() = 429 then begin
             RetryAfterSeconds := 60; // Default retry time for rate limit
             eInvoiceHelper.HandleRetryAfter(Url, RetryAfterSeconds);
-            SubmissionDetails := StrSubstNo('Rate Limit Exceeded\n\n' +
-                                          'LHDN Get Submission API rate limit reached (300 RPM).\n' +
-                                          'Retry after %1 seconds.\n\n' +
-                                          'Correlation ID: %2\n\n' +
+            SubmissionDetails := StrSubstNo('Rate Limit Exceeded\\\\' +
+                                          'LHDN Get Submission API rate limit reached (300 RPM).\\' +
+                                          'Retry after %1 seconds.\\\\' +
+                                          'Correlation ID: %2\\\\' +
                                           'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/', RetryAfterSeconds, CorrelationId);
             exit(false);
         end;
 
         // Handle other HTTP errors
         if not HttpResponseMessage.IsSuccessStatusCode() then begin
-            SubmissionDetails := StrSubstNo('HTTP Error %1\n\n' +
-                                          'Failed to retrieve submission status.\n' +
-                                          'Correlation ID: %2',
-                                          HttpResponseMessage.HttpStatusCode(), CorrelationId);
-            exit(false);
+            // Read error response for better error details
+            HttpResponseMessage.Content().ReadAs(ResponseText);
+
+            // Try to parse error response for more specific error messages
+            if ParseErrorResponse(ResponseText, SubmissionDetails) then begin
+                // Error response was parsed successfully
+                exit(false);
+            end else begin
+                // Fallback to generic error message
+                SubmissionDetails := StrSubstNo('HTTP Error %1\\\\' +
+                                              'Failed to retrieve submission status.\\' +
+                                              'Correlation ID: %2\\\\' +
+                                              'This may be due to:\\' +
+                                              '• Invalid submission UID\\' +
+                                              '• Authentication issues\\' +
+                                              '• LHDN API service problems\\\\' +
+                                              'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
+                                              HttpResponseMessage.HttpStatusCode(), CorrelationId);
+                exit(false);
+            end;
         end;
 
         // Read response content
@@ -102,18 +142,18 @@ codeunit 50312 "eInvoice Submission Status"
         // Parse JSON response according to LHDN API specification
         if ParseSubmissionResponse(ResponseText, SubmissionDetails, OverallStatus, DocumentCount, DateTimeReceived) then begin
             // Format the response for better readability with official API structure
-            SubmissionDetails := StrSubstNo('LHDN Get Submission API Response\n' +
-                                          '================================\n\n' +
-                                          'Submission UID: %1\n' +
-                                          'Overall Status: %2\n' +
-                                          'Document Count: %3\n' +
-                                          'Date Time Received: %4\n\n' +
-                                          'Status Meanings:\n' +
-                                          '• valid: Document passed all validations\n' +
-                                          '• invalid: Document failed validations\n' +
-                                          '• in progress: Document is being processed\n' +
-                                          '• partially valid: Some documents valid, others not\n\n' +
-                                          'Document Details:\n%5\n\n' +
+            SubmissionDetails := StrSubstNo('LHDN Get Submission API Response\\' +
+                                          '================================\\\\' +
+                                          'Submission UID: %1\\' +
+                                          'Overall Status: %2\\' +
+                                          'Document Count: %3\\' +
+                                          'Date Time Received: %4\\\\' +
+                                          'Status Meanings:\\' +
+                                          '• Valid: Document passed all validations\\' +
+                                          '• Invalid: Document failed validations\\' +
+                                          '• In Progress: Document is being processed\\' +
+                                          '• Partially Valid: Some documents valid, others not\\\\' +
+                                          'Document Details:\\%5\\\\' +
                                           'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
                                           SubmissionUid,
                                           OverallStatus,
@@ -123,7 +163,7 @@ codeunit 50312 "eInvoice Submission Status"
             exit(true);
         end else begin
             // If parsing fails, return raw response
-            SubmissionDetails := StrSubstNo('Raw Response (Parsing Failed):\n%1', ResponseText);
+            SubmissionDetails := StrSubstNo('Raw Response (Parsing Failed):\\%1', ResponseText);
             exit(true);
         end;
     end;
@@ -154,9 +194,78 @@ codeunit 50312 "eInvoice Submission Status"
         end;
 
         // All polling attempts failed
-        SubmissionDetails := StrSubstNo('Polling failed after %1 attempts.\n\nLast Error: %2',
+        SubmissionDetails := StrSubstNo('Polling failed after %1 attempts.\\\\Last Error: %2',
                                        MaxPollingAttempts, SubmissionDetails);
         exit(false);
+    end;
+
+    /// <summary>
+    /// Parse LHDN error response according to their API specification
+    /// Based on actual LHDN API error responses
+    /// </summary>
+    local procedure ParseErrorResponse(ResponseText: Text; var ErrorDetails: Text): Boolean
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        ErrorObject: JsonObject;
+        DetailsArray: JsonArray;
+        DetailObject: JsonObject;
+        ErrorCode: Text;
+        ErrorMessage: Text;
+        Target: Text;
+        DetailMessage: Text;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit(false);
+
+        // Extract error object
+        if not JsonObject.Get('error', JsonToken) then
+            exit(false);
+
+        if not JsonToken.IsObject() then
+            exit(false);
+
+        ErrorObject := JsonToken.AsObject();
+
+        // Extract error code
+        if ErrorObject.Get('code', JsonToken) then
+            ErrorCode := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        // Extract error message
+        if ErrorObject.Get('message', JsonToken) then
+            ErrorMessage := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        // Extract target
+        if ErrorObject.Get('target', JsonToken) then
+            Target := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        // Extract details array
+        if ErrorObject.Get('details', JsonToken) and JsonToken.IsArray() then begin
+            DetailsArray := JsonToken.AsArray();
+            if DetailsArray.Count() > 0 then begin
+                DetailsArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DetailObject := JsonToken.AsObject();
+                    if DetailObject.Get('message', JsonToken) then
+                        DetailMessage := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                end;
+            end;
+        end;
+
+        // Format error details
+        ErrorDetails := StrSubstNo('LHDN API Error\\\\' +
+                                  'Error Code: %1\\' +
+                                  'Target: %2\\' +
+                                  'Message: %3\\\\' +
+                                  'Details: %4\\\\' +
+                                  'This typically means:\\' +
+                                  '• The submission UUID is incorrect or not found\\' +
+                                  '• The submission may have been deleted\\' +
+                                  '• The submission was made in a different environment\\\\' +
+                                  'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
+                                  ErrorCode, Target, ErrorMessage, DetailMessage);
+
+        exit(true);
     end;
 
     /// <summary>
@@ -175,6 +284,9 @@ codeunit 50312 "eInvoice Submission Status"
         Uuid: Text;
         InternalId: Text;
         Status: Text;
+        IssuerName: Text;
+        ReceiverName: Text;
+        TotalAmount: Text;
         DocumentDetails: Text;
     begin
         OverallStatus := '';
@@ -213,10 +325,13 @@ codeunit 50312 "eInvoice Submission Status"
                 if JsonToken.IsObject() then begin
                     DocumentJson := JsonToken.AsObject();
 
-                    // Extract document details according to API spec
+                    // Extract document details according to actual API response
                     Uuid := 'N/A';
                     InternalId := 'N/A';
                     Status := 'N/A';
+                    IssuerName := 'N/A';
+                    ReceiverName := 'N/A';
+                    TotalAmount := 'N/A';
 
                     if DocumentJson.Get('uuid', JsonToken) then
                         Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
@@ -224,10 +339,17 @@ codeunit 50312 "eInvoice Submission Status"
                         InternalId := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
                     if DocumentJson.Get('status', JsonToken) then
                         Status := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                    if DocumentJson.Get('issuerName', JsonToken) then
+                        IssuerName := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                    if DocumentJson.Get('receiverName', JsonToken) then
+                        ReceiverName := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                    if DocumentJson.Get('totalPayableAmount', JsonToken) then
+                        TotalAmount := Format(JsonToken.AsValue().AsDecimal());
 
                     if DocumentDetails <> '' then
                         DocumentDetails += '\\';
-                    DocumentDetails += StrSubstNo('  • Document: %1 (UUID: %2, Status: %3)', InternalId, Uuid, Status);
+                    DocumentDetails += StrSubstNo('  • Document: %1 (UUID: %2, Status: %3)\\    Issuer: %4\\    Receiver: %5\\    Amount: %6',
+                                                InternalId, Uuid, Status, IssuerName, ReceiverName, TotalAmount);
                 end;
             end;
 
@@ -241,6 +363,12 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
+    /// Get submission UID from LHDN API
+    /// Simplified method to get just the submission UID from the API
+    /// </summary>
+
+
+    /// <summary>
     /// Get submission status with automatic polling (recommended approach)
     /// Uses LHDN's recommended 3-5 second intervals
     /// </summary>
@@ -251,110 +379,153 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
-    /// Test procedure to diagnose permission and context issues
+    /// Get submission UID from LHDN API response
+    /// Simplified method to extract just the submission UID from the API response
+    /// </summary>
+
+
+    /// <summary>
+    /// Alternative status check method that doesn't require HTTP operations
+    /// Useful when context restrictions prevent HTTP calls
+    /// </summary>
+    procedure CheckSubmissionStatusAlternative(SubmissionUid: Text; var SubmissionDetails: Text): Boolean
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        LogEntry: Record "eInvoice Submission Log";
+        StatusCount: Integer;
+        ValidCount: Integer;
+        InvalidCount: Integer;
+        InProgressCount: Integer;
+        PartiallyValidCount: Integer;
+        UnknownCount: Integer;
+    begin
+        SubmissionDetails := '';
+
+        // Validate input parameters
+        if SubmissionUid = '' then begin
+            SubmissionDetails := 'Error: Submission UID is required.';
+            exit(false);
+        end;
+
+        // Try to find existing log entries for this submission UID
+        SubmissionLog.SetRange("Submission UID", SubmissionUid);
+        if not SubmissionLog.FindSet() then begin
+            SubmissionDetails := StrSubstNo('No log entries found for submission UID: %1\\\\' +
+                                          'This may mean:\\' +
+                                          '• The submission was not logged\\' +
+                                          '• The submission UID is incorrect\\' +
+                                          '• The submission was made in a different company\\\\' +
+                                          'Alternative Solutions:\\' +
+                                          '1. Check the submission UID is correct\\' +
+                                          '2. Use "Create Test Entry" to add a test record\\' +
+                                          '3. Export current data to Excel for analysis',
+                                          SubmissionUid);
+            exit(false);
+        end;
+
+        // Analyze existing log entries
+        repeat
+            StatusCount += 1;
+            case SubmissionLog.Status of
+                'Valid':
+                    ValidCount += 1;
+                'Invalid':
+                    InvalidCount += 1;
+                'In Progress':
+                    InProgressCount += 1;
+                'Partially Valid':
+                    PartiallyValidCount += 1;
+                else
+                    UnknownCount += 1;
+            end;
+        until SubmissionLog.Next() = 0;
+
+        // Generate status summary
+        SubmissionDetails := StrSubstNo('Submission Status Analysis (Local Data)\\' +
+                                      '=====================================\\\\' +
+                                      'Submission UID: %1\\' +
+                                      'Total Log Entries: %2\\\\' +
+                                      'Status Breakdown:\\' +
+                                      '• Valid: %3\\' +
+                                      '• Invalid: %4\\' +
+                                      '• In Progress: %5\\' +
+                                      '• Partially Valid: %6\\' +
+                                      '• Unknown: %7\\\\' +
+                                      'Note: This is based on local log data.\\' +
+                                      'For real-time status, try:\\' +
+                                      '1. Running from a different context\\' +
+                                      '2. Using "Refresh Status (Local Analysis)"\\' +
+                                      '3. Contacting system administrator\\\\' +
+                                      'LHDN API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
+                                      SubmissionUid,
+                                      StatusCount,
+                                      ValidCount,
+                                      InvalidCount,
+                                      InProgressCount,
+                                      PartiallyValidCount,
+                                      UnknownCount);
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Test submission status access without making HTTP calls
+    /// Useful for diagnosing context restrictions
     /// </summary>
     procedure TestSubmissionStatusAccess(): Text
     var
         eInvoiceSetup: Record "eInvoiceSetup";
-        TestDetails: Text;
+        TestResults: Text;
+        AccessToken: Text;
     begin
-        TestDetails := 'Diagnostic Test Results:\n';
-        TestDetails += '========================\n\n';
+        TestResults := 'Submission Status Access Test\\' +
+                      '===========================\\' +
+                      '\\';
 
-        // Test 1: Check if setup record exists
+        // Test 1: Check if setup exists
         if eInvoiceSetup.Get('SETUP') then begin
-            TestDetails += '✅ Setup record found\n';
-            TestDetails += StrSubstNo('Environment: %1\n', Format(eInvoiceSetup.Environment));
+            TestResults += 'eInvoice Setup found\\';
+            TestResults += StrSubstNo('  Environment: %1\\', eInvoiceSetup.Environment);
         end else begin
-            TestDetails += '❌ Setup record not found\n';
-            exit(TestDetails);
+            TestResults += 'eInvoice Setup not found\\';
+            TestResults += '  Please configure eInvoice Setup first\\';
         end;
 
-        // Test 2: Check if we can read the setup
-        if eInvoiceSetup."Client ID" <> '' then begin
-            TestDetails += '✅ Client ID is configured\n';
-        end else begin
-            TestDetails += '❌ Client ID is empty\n';
+        // Test 2: Check access token (without HTTP call)
+        if eInvoiceSetup.Get('SETUP') then begin
+            AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+            if AccessToken <> '' then begin
+                TestResults += 'Access token available\\';
+            end else begin
+                TestResults += 'Access token not available\\';
+                TestResults += '  This may be due to context restrictions\\';
+            end;
         end;
 
-        if eInvoiceSetup."Client Secret" <> '' then begin
-            TestDetails += '✅ Client Secret is configured\n';
-        end else begin
-            TestDetails += '❌ Client Secret is empty\n';
-        end;
+        // Test 3: Check permissions
+        TestResults += StrSubstNo('\\User Information:\\');
+        TestResults += StrSubstNo('• User ID: %1\\', UserId);
+        TestResults += StrSubstNo('• Company: %2\\', CompanyName);
+        TestResults += StrSubstNo('• Current Time: %3\\', Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2> <AM/PM>'));
 
-        // Test 3: Check permissions without HTTP operations
-        TestDetails += '\nTesting basic permissions...\n';
-        TestDetails += '✅ Table access permissions working\n';
-        TestDetails += '✅ Codeunit permissions working\n';
+        // Test 4: Context information
+        TestResults += '\\Context Analysis:\\';
+        TestResults += '• HTTP operations may be restricted in current context\\';
+        TestResults += '• Try running from a different page or action\\';
+        TestResults += '• Use "Refresh Status (Local Analysis)" as alternative\\';
 
-        // Test 4: Check if we can create a test log entry
-        TestDetails += '\nTesting log table access...\n';
-        if TestLogTableAccess() then begin
-            TestDetails += '✅ Log table access working\n';
-        end else begin
-            TestDetails += '❌ Log table access failed\n';
-        end;
+        TestResults += '\\Recommendations:\\';
+        TestResults += '1. Try running from the main e-Invoice Submission Log page\\';
+        TestResults += '2. Use "Export to Excel" to get current data\\';
+        TestResults += '3. Contact system administrator for HTTP permissions\\';
+        TestResults += '4. Check LHDN API documentation for troubleshooting\\';
 
-        exit(TestDetails);
+        TestResults += '\\API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/';
+
+        exit(TestResults);
     end;
 
-    /// <summary>
-    /// Test log table access without HTTP operations
-    /// </summary>
-    local procedure TestLogTableAccess(): Boolean
-    var
-        SubmissionLog: Record "eInvoice Submission Log";
-        TestEntryNo: Integer;
-    begin
-        // Try to find the highest entry number to test read access
-        if SubmissionLog.FindLast() then begin
-            TestEntryNo := SubmissionLog."Entry No.";
-            exit(true);
-        end else begin
-            // If no records exist, that's also valid
-            exit(true);
-        end;
-    end;
 
-    /// <summary>
-    /// Simple test version without HTTP operations
-    /// </summary>
-    procedure TestSubmissionStatusSimple(SubmissionUid: Text; var SubmissionDetails: Text): Boolean
-    var
-        eInvoiceSetup: Record "eInvoiceSetup";
-    begin
-        SubmissionDetails := 'Simple Test Results:\n';
-        SubmissionDetails += '===================\n\n';
-
-        // Test 1: Check setup
-        if not eInvoiceSetup.Get('SETUP') then begin
-            SubmissionDetails += '❌ Setup not found\n';
-            exit(false);
-        end;
-
-        SubmissionDetails += '✅ Setup found\n';
-        SubmissionDetails += StrSubstNo('Environment: %1\n', Format(eInvoiceSetup.Environment));
-        SubmissionDetails += StrSubstNo('Submission UID: %1\n', SubmissionUid);
-
-        // Test 2: Check credentials
-        if eInvoiceSetup."Client ID" = '' then begin
-            SubmissionDetails += '❌ Client ID empty\n';
-            exit(false);
-        end;
-
-        if eInvoiceSetup."Client Secret" = '' then begin
-            SubmissionDetails += '❌ Client Secret empty\n';
-            exit(false);
-        end;
-
-        SubmissionDetails += '✅ Credentials configured\n';
-        SubmissionDetails += '✅ Basic permissions working\n';
-        SubmissionDetails += '❌ HTTP operations blocked (context restriction)\n\n';
-        SubmissionDetails += 'Recommendation: Check network/firewall settings\n';
-
-        exit(false); // Always false since we can't make HTTP calls
-    end;
 
     /// <summary>
     /// Enhanced HTTP request sending with context awareness and retry logic
@@ -383,19 +554,19 @@ codeunit 50312 "eInvoice Submission Status"
             // Check if it's a context restriction error
             if ErrorMessage.Contains('cannot be performed in this context') or
                ErrorMessage.Contains('context') then begin
-                SubmissionDetails := StrSubstNo('Context Restriction Error\n\n' +
-                                              'HTTP operations are not allowed in the current context.\n' +
-                                              'This typically happens when:\n' +
-                                              '• Running in background operations\n' +
-                                              '• Operating in restricted UI contexts\n' +
-                                              '• User lacks HTTP operation permissions\n\n' +
-                                              'Correlation ID: %1\n' +
-                                              'Attempt: %2 of %3\n\n' +
-                                              'Recommendations:\n' +
-                                              '1. Try running from a different context (e.g., from a page action)\n' +
-                                              '2. Check user permissions for HTTP operations\n' +
-                                              '3. Contact system administrator\n' +
-                                              '4. Use the "Test Simple Access" action for basic connectivity testing',
+                SubmissionDetails := StrSubstNo('Context Restriction Error\\\\' +
+                                              'HTTP operations are not allowed in the current context.\\' +
+                                              'This typically happens when:\\' +
+                                              '• Running in background operations\\' +
+                                              '• Operating in restricted UI contexts\\' +
+                                              '• User lacks HTTP operation permissions\\\\' +
+                                              'Correlation ID: %1\\' +
+                                              'Attempt: %2 of %3\\\\' +
+                                              'Recommendations:\\' +
+                                              '1. Try running from a different context (e.g., from a page action)\\' +
+                                              '2. Check user permissions for HTTP operations\\' +
+                                              '3. Contact system administrator\\' +
+                                              '4. Use the "Test Context Access" action for basic connectivity testing',
                                               CorrelationId, RetryAttempt, MaxRetries);
                 exit(false);
             end;
@@ -408,17 +579,17 @@ codeunit 50312 "eInvoice Submission Status"
                     Sleep(RetryDelayMs);
                     continue;
                 end else begin
-                    SubmissionDetails := StrSubstNo('Network Connectivity Error\n\n' +
-                                                  'Failed to connect to LHDN API after %1 attempts.\n' +
-                                                  'Correlation ID: %2\n\n' +
-                                                  'This may be due to:\n' +
-                                                  '• Network connectivity issues\n' +
-                                                  '• Firewall restrictions\n' +
-                                                  '• LHDN API service unavailable\n\n' +
-                                                  'Troubleshooting:\n' +
-                                                  '1. Check internet connectivity\n' +
-                                                  '2. Verify firewall allows outbound HTTPS\n' +
-                                                  '3. Ensure LHDN API endpoints are accessible\n' +
+                    SubmissionDetails := StrSubstNo('Network Connectivity Error\\\\' +
+                                                  'Failed to connect to LHDN API after %1 attempts.\\' +
+                                                  'Correlation ID: %2\\\\' +
+                                                  'This may be due to:\\' +
+                                                  '• Network connectivity issues\\' +
+                                                  '• Firewall restrictions\\' +
+                                                  '• LHDN API service unavailable\\\\' +
+                                                  'Troubleshooting:\\' +
+                                                  '1. Check internet connectivity\\' +
+                                                  '2. Verify firewall allows outbound HTTPS\\' +
+                                                  '3. Ensure LHDN API endpoints are accessible\\' +
                                                   '4. Try again in a few seconds',
                                                   MaxRetries, CorrelationId);
                     exit(false);
@@ -430,14 +601,14 @@ codeunit 50312 "eInvoice Submission Status"
                 Sleep(RetryDelayMs);
                 continue;
             end else begin
-                SubmissionDetails := StrSubstNo('HTTP Request Failed\n\n' +
-                                              'Failed to send HTTP request after %1 attempts.\n' +
-                                              'Correlation ID: %2\n' +
-                                              'Error: %3\n\n' +
-                                              'Troubleshooting:\n' +
-                                              '1. Check network connectivity\n' +
-                                              '2. Verify firewall settings\n' +
-                                              '3. Ensure LHDN API is accessible\n' +
+                SubmissionDetails := StrSubstNo('HTTP Request Failed\\\\' +
+                                              'Failed to send HTTP request after %1 attempts.\\' +
+                                              'Correlation ID: %2\\' +
+                                              'Error: %3\\\\' +
+                                              'Troubleshooting:\\' +
+                                              '1. Check network connectivity\\' +
+                                              '2. Verify firewall settings\\' +
+                                              '3. Ensure LHDN API is accessible\\' +
                                               '4. Try again later',
                                               MaxRetries, CorrelationId, ErrorMessage);
                 exit(false);
@@ -541,40 +712,118 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
-    /// Extract status from submission response
+    /// Handle background job processing for status refresh
+    /// This procedure is called by the Job Queue to process status refresh in the background
     /// </summary>
-    local procedure ExtractStatusFromResponse(SubmissionDetails: Text): Text
+    procedure ProcessBackgroundStatusRefresh()
     var
-        StatusStart: Integer;
-        StatusEnd: Integer;
-        StatusText: Text;
+        SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionDetails: Text;
+        ApiSuccess: Boolean;
+        UpdatedCount: Integer;
+        ProcessedCount: Integer;
+        ErrorCount: Integer;
+        BackgroundLog: Record "eInvoice Submission Log";
     begin
-        // Look for "Overall Status:" in the response
-        StatusStart := StrPos(SubmissionDetails, 'Overall Status:');
-        if StatusStart > 0 then begin
-            StatusStart := StatusStart + StrLen('Overall Status:');
-            StatusEnd := StrPos(CopyStr(SubmissionDetails, StatusStart), '\');
-            if StatusEnd > 0 then
-                StatusText := CopyStr(SubmissionDetails, StatusStart, StatusEnd - 1)
-            else
-                StatusText := CopyStr(SubmissionDetails, StatusStart);
+        UpdatedCount := 0;
+        ProcessedCount := 0;
+        ErrorCount := 0;
 
-            // Clean up the status text
-            StatusText := DelChr(StatusText, '<>');
-            exit(StatusText);
+        // Find all log entries with submission UIDs that need status refresh
+        SubmissionLog.SetRange("Submission UID", '');
+        SubmissionLog.SetFilter("Submission UID", '<>%1', '');
+
+        if SubmissionLog.FindSet() then begin
+            repeat
+                ProcessedCount += 1;
+
+                // Check status using LHDN API
+                ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
+
+                if ApiSuccess then begin
+                    // Update the log entry with current status
+                    SubmissionLog."Status" := ExtractStatusFromResponse(SubmissionDetails);
+                    SubmissionLog."Response Date" := CurrentDateTime;
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    SubmissionLog."Error Message" := '';
+
+                    if SubmissionLog.Modify() then
+                        UpdatedCount += 1;
+                end else begin
+                    // Log the error
+                    SubmissionLog."Error Message" := CopyStr(SubmissionDetails, 1, 250);
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    SubmissionLog.Modify();
+                    ErrorCount += 1;
+                end;
+
+                // Add delay between requests to respect LHDN rate limiting
+                Sleep(4000); // 4 seconds between requests
+
+            until SubmissionLog.Next() = 0;
         end;
 
-        // Fallback: look for common status keywords (using official LHDN API values)
-        if SubmissionDetails.Contains('valid') then
-            exit('valid')
-        else if SubmissionDetails.Contains('invalid') then
-            exit('invalid')
-        else if SubmissionDetails.Contains('in progress') then
-            exit('in progress')
-        else if SubmissionDetails.Contains('partially valid') then
-            exit('partially valid')
+        // Create a log entry to record the background job completion
+        BackgroundLog.Init();
+        BackgroundLog."Entry No." := 0; // Auto-increment
+        BackgroundLog."Invoice No." := 'BACKGROUND-JOB';
+        BackgroundLog."Customer Name" := 'System';
+        BackgroundLog."Submission UID" := 'BACKGROUND-' + Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>');
+        BackgroundLog."Document UUID" := '';
+        BackgroundLog.Status := 'Completed';
+        BackgroundLog."Submission Date" := CurrentDateTime;
+        BackgroundLog."Response Date" := CurrentDateTime;
+        BackgroundLog."Last Updated" := CurrentDateTime;
+        BackgroundLog."User ID" := UserId;
+        BackgroundLog."Company Name" := CompanyName;
+        BackgroundLog."Error Message" := StrSubstNo('Background job completed. Processed: %1, Updated: %2, Errors: %3',
+                                                   ProcessedCount, UpdatedCount, ErrorCount);
+        BackgroundLog.Environment := BackgroundLog.Environment::Preprod;
+        BackgroundLog.Insert();
+    end;
+
+    /// <summary>
+    /// Extract status from response text with proper capitalization
+    /// </summary>
+    local procedure ExtractStatusFromResponse(ResponseText: Text): Text
+    var
+        Status: Text;
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+    begin
+        // Try to parse JSON response first for more accurate status extraction
+        if JsonObject.ReadFrom(ResponseText) then begin
+            if JsonObject.Get('overallStatus', JsonToken) then begin
+                Status := JsonToken.AsValue().AsText();
+                // Convert to proper capitalization for display
+                case Status of
+                    'valid':
+                        exit('Valid');
+                    'invalid':
+                        exit('Invalid');
+                    'in progress':
+                        exit('In Progress');
+                    'partially valid':
+                        exit('Partially Valid');
+                    else
+                        exit(Status);
+                end;
+            end;
+        end;
+
+        // Fallback to text parsing if JSON parsing fails
+        if ResponseText.Contains('Overall Status: valid') then
+            Status := 'Valid'
+        else if ResponseText.Contains('Overall Status: invalid') then
+            Status := 'Invalid'
+        else if ResponseText.Contains('Overall Status: in progress') then
+            Status := 'In Progress'
+        else if ResponseText.Contains('Overall Status: partially valid') then
+            Status := 'Partially Valid'
         else
-            exit('Unknown');
+            Status := 'Unknown';
+
+        exit(Status);
     end;
 
     /// <summary>
@@ -610,4 +859,6 @@ codeunit 50312 "eInvoice Submission Status"
     begin
         RefreshSubmissionStatusesBackground();
     end;
+
+
 }

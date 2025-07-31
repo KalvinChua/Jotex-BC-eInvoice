@@ -23,6 +23,11 @@ page 50315 "e-Invoice Submission Log Card"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the invoice number that was submitted.';
                 }
+                field("Customer Name"; Rec."Customer Name")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the customer name for this invoice submission.';
+                }
                 field("Status"; Rec.Status)
                 {
                     ApplicationArea = All;

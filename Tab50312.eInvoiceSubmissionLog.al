@@ -73,6 +73,11 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Company Name';
             DataClassification = CustomerContent;
         }
+        field(14; "Customer Name"; Text[100])
+        {
+            Caption = 'Customer Name';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

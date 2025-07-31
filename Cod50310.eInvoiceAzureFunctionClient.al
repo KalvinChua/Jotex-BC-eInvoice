@@ -50,9 +50,9 @@ codeunit 50310 "eInvoice Azure Function Client"
 
         // Send request with comprehensive error handling
         if not Client.Post(Setup."Azure Function URL", RequestContent, Response) then
-            Error('Failed to connect to Azure Function\n\n' +
-                  'Correlation ID: %1\n' +
-                  'Endpoint: %2\n\n' +
+            Error('Failed to connect to Azure Function\\\\' +
+                  'Correlation ID: %1\\' +
+                  'Endpoint: %2\\\\' +
                   'This indicates a network connectivity issue.', CorrelationId, Setup."Azure Function URL");
 
         Response.Content().ReadAs(ResponseText);
@@ -62,8 +62,8 @@ codeunit 50310 "eInvoice Azure Function Client"
 
         // Validate and return signed JSON
         if not ValidateSignedResponse(ResponseText) then
-            Error('Azure Function returned invalid signed document\n\n' +
-                  'Correlation ID: %1\n' +
+            Error('Azure Function returned invalid signed document\\\\' +
+                  'Correlation ID: %1\\' +
                   'Please check Function App logs for details.', CorrelationId);
 
         SignedJson := ResponseText;
@@ -147,79 +147,79 @@ codeunit 50310 "eInvoice Azure Function Client"
         // Comprehensive error reporting based on status code
         case StatusCode of
             400:
-                Error('Azure Function - Bad Request (400)\n\n' +
-                      'Error Details:\n%1\n\n' +
-                      'Common Causes:\n' +
-                      '• Invalid JSON payload structure\n' +
-                      '• Missing required fields in request\n' +
-                      '• Malformed UBL document structure\n' +
-                      '• Invalid certificate configuration\n\n' +
-                      'Correlation ID: %2\n' +
+                Error('Azure Function - Bad Request (400)\\\\' +
+                      'Error Details:\\%1\\\\' +
+                      'Common Causes:\\' +
+                      '• Invalid JSON payload structure\\' +
+                      '• Missing required fields in request\\' +
+                      '• Malformed UBL document structure\\' +
+                      '• Invalid certificate configuration\\\\' +
+                      'Correlation ID: %2\\' +
                       'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             401:
-                Error('Azure Function - Unauthorized (401)\n\n' +
-                      'Authentication Issues:\n' +
-                      '• Function requires authentication\n' +
-                      '• Invalid or expired authentication token\n' +
-                      '• Missing authentication headers\n\n' +
-                      'Correlation ID: %1\n' +
+                Error('Azure Function - Unauthorized (401)\\\\' +
+                      'Authentication Issues:\\' +
+                      '• Function requires authentication\\' +
+                      '• Invalid or expired authentication token\\' +
+                      '• Missing authentication headers\\\\' +
+                      'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
             404:
-                Error('Azure Function - Not Found (404)\n\n' +
-                      'Endpoint Issues:\n' +
-                      '• Function URL is incorrect\n' +
-                      '• Function has been deleted or moved\n' +
-                      '• Function name or route is wrong\n\n' +
-                      'Correlation ID: %1\n' +
+                Error('Azure Function - Not Found (404)\\\\' +
+                      'Endpoint Issues:\\' +
+                      '• Function URL is incorrect\\' +
+                      '• Function has been deleted or moved\\' +
+                      '• Function name or route is wrong\\\\' +
+                      'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
             429:
-                Error('Azure Function - Too Many Requests (429)\n\n' +
-                      'Rate Limiting:\n' +
-                      '• Function is rate limited\n' +
-                      '• Too many concurrent requests\n' +
-                      '• Wait before retrying\n\n' +
-                      'Correlation ID: %1\n' +
+                Error('Azure Function - Too Many Requests (429)\\\\' +
+                      'Rate Limiting:\\' +
+                      '• Function is rate limited\\' +
+                      '• Too many concurrent requests\\' +
+                      '• Wait before retrying\\\\' +
+                      'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
             500:
-                Error('Azure Function - Internal Server Error (500)\n\n' +
-                      'Error Details:\n%1\n\n' +
-                      'Server-Side Issues:\n' +
-                      '• Function code exceptions or bugs\n' +
-                      '• Digital signature certificate problems\n' +
-                      '• External service dependencies unavailable\n' +
-                      '• Resource constraints (memory/CPU)\n' +
-                      '• Configuration errors in Function App\n\n' +
-                      'Next Steps:\n' +
-                      '• Check Application Insights logs\n' +
-                      '• Verify certificate availability\n' +
-                      '• Review Function App configuration\n' +
-                      '• Check resource utilization\n\n' +
-                      'Correlation ID: %2\n' +
+                Error('Azure Function - Internal Server Error (500)\\\\' +
+                      'Error Details:\\%1\\\\' +
+                      'Server-Side Issues:\\' +
+                      '• Function code exceptions or bugs\\' +
+                      '• Digital signature certificate problems\\' +
+                      '• External service dependencies unavailable\\' +
+                      '• Resource constraints (memory/CPU)\\' +
+                      '• Configuration errors in Function App\\\\' +
+                      'Next Steps:\\' +
+                      '• Check Application Insights logs\\' +
+                      '• Verify certificate availability\\' +
+                      '• Review Function App configuration\\' +
+                      '• Check resource utilization\\\\' +
+                      'Correlation ID: %2\\' +
                       'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             502, 503, 504:
-                Error('Azure Function - Service Unavailable (%1)\n\n' +
-                      'Infrastructure Issues:\n' +
-                      '• Function App is scaling or restarting\n' +
-                      '• Load balancer or gateway problems\n' +
-                      '• Temporary service outage\n' +
-                      '• Cold start timeout issues\n\n' +
-                      'Recommended Actions:\n' +
-                      '• Wait a few minutes and retry\n' +
-                      '• Check Azure Status page\n' +
-                      '• Verify Function App scaling settings\n\n' +
-                      'Correlation ID: %2\n' +
+                Error('Azure Function - Service Unavailable (%1)\\\\' +
+                      'Infrastructure Issues:\\' +
+                      '• Function App is scaling or restarting\\' +
+                      '• Load balancer or gateway problems\\' +
+                      '• Temporary service outage\\' +
+                      '• Cold start timeout issues\\\\' +
+                      'Recommended Actions:\\' +
+                      '• Wait a few minutes and retry\\' +
+                      '• Check Azure Status page\\' +
+                      '• Verify Function App scaling settings\\\\' +
+                      'Correlation ID: %2\\' +
                       'Endpoint: %3', StatusCode, CorrelationId, FunctionUrl);
 
             else
-                Error('Azure Function - Unexpected Error (%1 %2)\n\n' +
-                      'Response Details:\n%3\n\n' +
-                      'Correlation ID: %4\n' +
-                      'Endpoint: %5\n\n' +
+                Error('Azure Function - Unexpected Error (%1 %2)\\\\' +
+                      'Response Details:\\%3\\\\' +
+                      'Correlation ID: %4\\' +
+                      'Endpoint: %5\\\\' +
                       'Please contact support with the correlation ID.',
                       StatusCode, ReasonPhrase, ResponseText, CorrelationId, FunctionUrl);
         end;
