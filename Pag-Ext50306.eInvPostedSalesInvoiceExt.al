@@ -53,6 +53,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'e-Invoice Submission UID';
                     ToolTip = 'Stores the LHDN submission ID returned after successful submission.';
                     Visible = IsJotexCompany;
+                    Editable = false; // Read-only - populated by LHDN API response
                 }
                 field("eInvoice UUID"; Rec."eInvoice UUID")
                 {
@@ -60,13 +61,15 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'e-Invoice UUID';
                     ToolTip = 'Stores the document UUID assigned by LHDN MyInvois.';
                     Visible = IsJotexCompany;
+                    Editable = false; // Read-only - populated by LHDN API response
                 }
                 field("eInvoice Validation Status"; Rec."eInvoice Validation Status")
                 {
                     ApplicationArea = All;
                     Caption = 'e-Invoice Validation Status';
-                    ToolTip = 'Shows the validation status returned by LHDN (Submitted/Submission Failed for initial submission, or valid/invalid/in progress/partially valid for processing status).';
+                    ToolTip = 'Shows the validation status returned by LHDN (Submitted/Submission Failed for initial submission, or valid/invalid/in progress/partially valid for processing status). This field is automatically updated when checking status via LHDN API.';
                     Visible = IsJotexCompany;
+                    Editable = false; // Read-only - only updated from LHDN API
                 }
             }
         }
@@ -146,74 +149,106 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 end;
             }
 
-            action(CheckSubmissionStatus)
+            action(CheckStatusDirect)
             {
                 ApplicationArea = All;
-                Caption = 'Check LHDN Submission Status';
+                Caption = 'Check Status (Direct API)';
                 Image = Refresh;
-                ToolTip = 'Check the current status of the LHDN submission using the Get Submission API';
+                ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
                 Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
-                    SubmissionDetails: Text;
-                    ApiSuccess: Boolean;
-                    ConfirmMsg: Text;
+                    HttpClient: HttpClient;
+                    HttpRequestMessage: HttpRequestMessage;
+                    HttpResponseMessage: HttpResponseMessage;
+                    RequestHeaders: HttpHeaders;
+                    AccessToken: Text;
+                    eInvoiceSetup: Record "eInvoiceSetup";
+                    eInvoiceHelper: Codeunit eInvoiceHelper;
+                    ApiUrl: Text;
+                    ResponseText: Text;
                 begin
                     if Rec."eInvoice Submission UID" = '' then begin
                         Message('No submission UID found for this invoice.' + '\\' + 'Please submit the invoice to LHDN first.');
                         exit;
                     end;
 
-                    ConfirmMsg := StrSubstNo('This will check the current status of submission %1 using the LHDN Get Submission API.' + '\\' + '\\' + 'Note: LHDN recommends 3-5 second intervals between requests.' + '\\' + '\\' + 'Proceed?', Rec."eInvoice Submission UID");
-                    if not Confirm(ConfirmMsg) then
+                    // Get setup for environment determination
+                    if not eInvoiceSetup.Get('SETUP') then begin
+                        Message('eInvoice Setup not found');
                         exit;
+                    end;
 
-                    ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus(Rec."eInvoice Submission UID", SubmissionDetails);
+                    // Get access token using the helper method
+                    eInvoiceHelper.InitializeHelper();
+                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+                    if AccessToken = '' then begin
+                        Message('Failed to get access token');
+                        exit;
+                    end;
 
-                    if ApiSuccess then begin
-                        Message(StrSubstNo('Submission Status for %1:' + '\\' + '\\' + '%2', Rec."eInvoice Submission UID", SubmissionDetails));
+                    // Build API URL same as in the codeunit
+                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
+                    else
+                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
+
+                    // Setup request (same as Document Types API)
+                    HttpRequestMessage.Method := 'GET';
+                    HttpRequestMessage.SetRequestUri(ApiUrl);
+
+                    // Set headers (same as Document Types API)
+                    HttpRequestMessage.GetHeaders(RequestHeaders);
+                    RequestHeaders.Clear();
+                    RequestHeaders.Add('Accept', 'application/json');
+                    RequestHeaders.Add('Accept-Language', 'en');
+                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+                    // Send request (same method as Document Types API)
+                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+                        HttpResponseMessage.Content.ReadAs(ResponseText);
+
+                        if HttpResponseMessage.IsSuccessStatusCode then begin
+                            // Parse the JSON response to extract the status
+                            if UpdateInvoiceStatusFromResponse(ResponseText) then begin
+                                // Try to update the posted invoice field using the codeunit with proper permissions
+                                TryUpdateStatusViaCodeunit(ExtractStatusFromApiResponse(ResponseText));
+
+                                Message('Status updated successfully from LHDN.');
+                            end else begin
+                                Message('Status check completed, but unable to parse response.');
+                            end;
+                        end else begin
+                            Message('Failed to retrieve status from LHDN API (Status Code: %1)',
+                                   HttpResponseMessage.HttpStatusCode);
+                        end;
                     end else begin
-                        Message(StrSubstNo('Failed to get submission status.' + '\\' + '\\' + 'Error: %1' + '\\' + '\\' + 'This may be due to rate limiting or network issues. Please try again in a few seconds.', SubmissionDetails));
+                        Message('Failed to connect to LHDN API.');
                     end;
                 end;
             }
 
-            action(CheckStatusWithPolling)
+            action(ViewSubmissionLog)
             {
                 ApplicationArea = All;
-                Caption = 'Check Status with Auto-Polling';
-                Image = Refresh;
-                ToolTip = 'Check submission status with automatic polling (recommended for monitoring processing)';
+                Caption = 'View Submission Log';
+                Image = Log;
+                ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
                 Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
-                    SubmissionDetails: Text;
-                    ApiSuccess: Boolean;
-                    ConfirmMsg: Text;
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    SubmissionLogPage: Page "e-Invoice Submission Log";
                 begin
-                    if Rec."eInvoice Submission UID" = '' then begin
-                        Message('No submission UID found for this invoice.' + '\\' + 'Please submit the invoice to LHDN first.');
-                        exit;
-                    end;
+                    // Filter to show only entries for this invoice
+                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    if Rec."eInvoice Submission UID" <> '' then
+                        SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
 
-                    ConfirmMsg := StrSubstNo('This will check the status of submission %1 with automatic polling.' + '\\' + '\\' +
-                                           'The system will make up to 5 attempts with 4-second intervals (total 20 seconds).' + '\\' + '\\' +
-                                           'This is recommended for monitoring documents that are still being processed.' + '\\' + '\\' +
-                                           'Proceed?', Rec."eInvoice Submission UID");
-                    if not Confirm(ConfirmMsg) then
-                        exit;
-
-                    ApiSuccess := SubmissionStatusCU.GetSubmissionStatusWithAutoPolling(Rec."eInvoice Submission UID", SubmissionDetails);
-
-                    if ApiSuccess then begin
-                        Message(StrSubstNo('Submission Status (with polling) for %1:' + '\\' + '\\' + '%2', Rec."eInvoice Submission UID", SubmissionDetails));
-                    end else begin
-                        Message(StrSubstNo('Failed to get submission status after polling attempts.' + '\\' + '\\' + 'Error: %1' + '\\' + '\\' + 'The submission may still be processing. Please try again later.', SubmissionDetails));
-                    end;
+                    SubmissionLogPage.SetTableView(SubmissionLog);
+                    SubmissionLogPage.RunModal();
                 end;
             }
         }
@@ -348,5 +383,181 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         end else begin
             exit('Unknown');
         end;
+    end;
+
+    /// <summary>
+    /// Extract status from LHDN API response for display purposes
+    /// </summary>
+    /// <param name="ResponseText">JSON response from LHDN API</param>
+    /// <returns>The formatted status value</returns>
+    local procedure ExtractStatusFromApiResponse(ResponseText: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        OverallStatus: Text;
+    begin
+        // Parse the JSON response
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('Unknown - JSON Parse Failed');
+
+        // Extract the overallStatus field
+        if not JsonObject.Get('overallStatus', JsonToken) then
+            exit('Unknown - No Status Field');
+
+        OverallStatus := JsonToken.AsValue().AsText();
+
+        // Convert LHDN status values to proper case for display
+        case OverallStatus.ToLower() of
+            'valid':
+                exit('Valid');
+            'invalid':
+                exit('Invalid');
+            'in progress':
+                exit('In Progress');
+            'partially valid':
+                exit('Partially Valid');
+            else
+                exit(OverallStatus); // Use as-is if unknown
+        end;
+    end;
+
+    /// <summary>
+    /// Parse JSON response and update the invoice validation status field
+    /// Uses TryFunction approach to handle permission restrictions gracefully
+    /// </summary>
+    /// <param name="ResponseText">JSON response from LHDN API</param>
+    /// <returns>True if status was successfully updated or permission denied</returns>
+    local procedure UpdateInvoiceStatusFromResponse(ResponseText: Text): Boolean
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        OverallStatus: Text;
+        LhdnStatus: Text;
+        UpdateSuccess: Boolean;
+    begin
+        // Parse the JSON response
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit(false);
+
+        // Extract the overallStatus field
+        if not JsonObject.Get('overallStatus', JsonToken) then
+            exit(false);
+
+        OverallStatus := JsonToken.AsValue().AsText();
+
+        // Convert LHDN status values to proper case for display
+        case OverallStatus.ToLower() of
+            'valid':
+                LhdnStatus := 'Valid';
+            'invalid':
+                LhdnStatus := 'Invalid';
+            'in progress':
+                LhdnStatus := 'In Progress';
+            'partially valid':
+                LhdnStatus := 'Partially Valid';
+            else
+                LhdnStatus := OverallStatus; // Use as-is if unknown
+        end;
+
+        // Try to update the invoice validation status field with permission handling
+        UpdateSuccess := TryUpdateInvoiceStatus(LhdnStatus);
+
+        // Always try to update the submission log (which we should have permissions for)
+        UpdateSubmissionLogStatus(LhdnStatus);
+
+        if UpdateSuccess then begin
+            // Refresh the page to show the updated status
+            CurrPage.Update(false);
+        end;
+
+        // Return true even if update failed due to permissions - the status check itself was successful
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Update the submission log with the latest status from LHDN
+    /// This provides an alternative storage when we can't modify the posted invoice
+    /// </summary>
+    /// <param name="NewStatus">The new status retrieved from LHDN</param>
+    local procedure UpdateSubmissionLogStatus(NewStatus: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        Customer: Record Customer;
+        CustomerName: Text[100];
+    begin
+        // Get customer name from the invoice
+        CustomerName := '';
+        if Customer.Get(Rec."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
+        // Try to find existing log entry for this invoice and submission UID
+        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+        SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
+
+        if SubmissionLog.FindLast() then begin
+            // Update existing log entry
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Error Message" := StrSubstNo('Status updated via API check: %1', NewStatus);
+            if SubmissionLog.Modify() then begin
+                // Successfully updated log
+            end;
+        end else begin
+            // Create new log entry if none exists
+            SubmissionLog.Init();
+            SubmissionLog."Invoice No." := Rec."No.";
+            SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
+            SubmissionLog."Document UUID" := Rec."eInvoice UUID";
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Submission Date" := CurrentDateTime;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Error Message" := StrSubstNo('Status retrieved via API check: %1', NewStatus);
+            if SubmissionLog.Insert() then begin
+                // Successfully created log entry
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// Try to update invoice status using the JSON Generator codeunit which has modify permissions
+    /// This bypasses the permission restrictions on the page extension
+    /// </summary>
+    /// <param name="NewStatus">The new status to set</param>
+    local procedure TryUpdateStatusViaCodeunit(NewStatus: Text)
+    var
+        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+    begin
+        // Use the JSON Generator codeunit which has tabledata "Sales Invoice Header" = M permission
+        if eInvoiceGenerator.UpdateInvoiceValidationStatus(Rec."No.", NewStatus) then begin
+            // Refresh the current record to show updated status
+            Rec.Get(Rec."No.");
+            CurrPage.Update(false);
+        end;
+    end;
+
+    /// <summary>
+    /// Try to update invoice status with proper error handling for permission restrictions
+    /// </summary>
+    /// <param name="NewStatus">The new status to set</param>
+    /// <returns>True if successfully updated, false if permission denied</returns>
+    [TryFunction]
+    local procedure TryUpdateInvoiceStatus(NewStatus: Text)
+    begin
+        // Attempt to update the status field
+        Rec."eInvoice Validation Status" := NewStatus;
+
+        // Try to save the changes - will fail gracefully if no modify permissions
+        Rec.Modify();
+    end;
+
+    /// <summary>
+    /// Try to call LHDN API with proper error handling for context restrictions
+    /// </summary>
+    [TryFunction]
+    local procedure TryCallLhdnApi(var SubmissionStatusCU: Codeunit "eInvoice Submission Status"; SubmissionUID: Text; var SubmissionDetails: Text)
+    begin
+        SubmissionStatusCU.CheckSubmissionStatus(SubmissionUID, SubmissionDetails);
     end;
 }

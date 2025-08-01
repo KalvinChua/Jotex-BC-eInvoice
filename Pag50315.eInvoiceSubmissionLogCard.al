@@ -5,6 +5,7 @@ page 50315 "e-Invoice Submission Log Card"
     Caption = 'e-Invoice Submission Log Entry';
     UsageCategory = None;
     ApplicationArea = All;
+    Editable = false; // Make entire page read-only to prevent data corruption
 
     layout
     {
@@ -113,34 +114,11 @@ page 50315 "e-Invoice Submission Log Card"
                 trigger OnAction()
                 var
                     SubmissionStatusCU: Codeunit "eInvoice Submission Status";
-                    SubmissionDetails: Text;
-                    ApiSuccess: Boolean;
-                    ConfirmMsg: Text;
                 begin
-                    if Rec."Submission UID" = '' then begin
-                        Message('No submission UID found for this entry.');
-                        exit;
-                    end;
-
-                    ConfirmMsg := StrSubstNo('This will check the current status of submission %1 using the LHDN Get Submission API.' + '\\' + '\\' +
-                                           'Note: LHDN recommends 3-5 second intervals between requests.' + '\\' + '\\' +
-                                           'Proceed?', Rec."Submission UID");
-
-                    if not Confirm(ConfirmMsg) then
-                        exit;
-
-                    ApiSuccess := SubmissionStatusCU.CheckSubmissionStatus(Rec."Submission UID", SubmissionDetails);
-
-                    if ApiSuccess then begin
-                        // Update the log entry with current status
-                        Rec."Status" := ExtractStatusFromResponse(SubmissionDetails);
-                        Rec."Response Date" := CurrentDateTime;
-                        Rec."Last Updated" := CurrentDateTime;
-                        Rec.Modify();
-
-                        Message('Status refreshed successfully.' + '\\' + 'New status: %1', Rec.Status);
-                    end else begin
-                        Message('Failed to refresh status.' + '\\' + 'Error: %1', SubmissionDetails);
+                    // Use context-safe refresh method
+                    if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
+                        // If direct method fails due to context restrictions, try alternative approach
+                        SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
                     end;
                 end;
             }

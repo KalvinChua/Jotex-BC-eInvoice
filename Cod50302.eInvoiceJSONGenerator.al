@@ -137,6 +137,24 @@ codeunit 50302 "eInvoice JSON Generator"
     end;
 
     /// <summary>
+    /// Updates the eInvoice Validation Status field in the Posted Sales Invoice
+    /// This procedure has the necessary tabledata permissions to modify the Sales Invoice Header
+    /// </summary>
+    /// <param name="InvoiceNo">The invoice number to update</param>
+    /// <param name="NewStatus">The new validation status from LHDN</param>
+    /// <returns>True if successfully updated, false otherwise</returns>
+    procedure UpdateInvoiceValidationStatus(InvoiceNo: Code[20]; NewStatus: Text): Boolean
+    var
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        if SalesInvoiceHeader.Get(InvoiceNo) then begin
+            SalesInvoiceHeader."eInvoice Validation Status" := CopyStr(NewStatus, 1, MaxStrLen(SalesInvoiceHeader."eInvoice Validation Status"));
+            exit(SalesInvoiceHeader.Modify());
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
     /// Simple connectivity test for Azure Function
     /// </summary>
     procedure TestAzureFunctionConnectivity(AzureFunctionUrl: Text): Text
@@ -152,7 +170,7 @@ codeunit 50302 "eInvoice JSON Generator"
         if HttpClient.Get(TestUrl, HttpResponseMessage) then begin
             if HttpResponseMessage.IsSuccessStatusCode then begin
                 HttpResponseMessage.Content.ReadAs(ResponseText);
-                exit('✅ Azure Function connectivity successful. Response: ' + CopyStr(ResponseText, 1, 200));
+                exit('Azure Function connectivity successful. Response: ' + CopyStr(ResponseText, 1, 200));
             end else begin
                 exit('Function returned error: ' + Format(HttpResponseMessage.HttpStatusCode));
             end;
@@ -213,9 +231,9 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Overall assessment
         if HasHttps and HasAzureWebsites and HasApi and HasCode then
-            Analysis += '• Overall: URL format looks correct ✅'
+            Analysis += '• Overall: URL format looks correct'
         else
-            Analysis += '• Overall: URL format may have issues ⚠️';
+            Analysis += '• Overall: URL format may have issues';
 
         exit(Analysis);
     end;
