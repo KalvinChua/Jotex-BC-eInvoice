@@ -131,13 +131,9 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     LhdnResponse: Text;
                     Success: Boolean;
-                    ConfirmMsg: Text;
                     SuccessMsg: Text;
                 begin
-                    ConfirmMsg := StrSubstNo('This will:' + '\\' + '1. Generate unsigned eInvoice JSON' + '\\' + '2. Send to Azure Function for digital signing' + '\\' + '3. Submit signed invoice directly to LHDN MyInvois API' + '\\' + '\\' + 'Proceed with invoice %1?', Rec."No.");
-                    if not Confirm(ConfirmMsg) then
-                        exit;
-
+                    // Direct submission without confirmation
                     Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
 
                     if Success then begin

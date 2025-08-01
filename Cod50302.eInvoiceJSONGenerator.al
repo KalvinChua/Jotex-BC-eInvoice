@@ -243,6 +243,17 @@ codeunit 50302 "eInvoice JSON Generator"
     /// </summary>
     procedure TryPostToAzureFunctionDirect(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text): Boolean
     var
+        DummySalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        // Backward compatibility version - uses default values
+        exit(TryPostToAzureFunctionDirect(JsonText, AzureFunctionUrl, ResponseText, DummySalesInvoiceHeader));
+    end;
+
+    /// <summary>
+    /// Direct HTTP call to Azure Function with proper implementation using Sales Invoice Header context
+    /// </summary>
+    procedure TryPostToAzureFunctionDirect(JsonText: Text; AzureFunctionUrl: Text; var ResponseText: Text; SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
+    var
         HttpClient: HttpClient;
         HttpRequestMessage: HttpRequestMessage;
         HttpResponseMessage: HttpResponseMessage;
@@ -251,13 +262,32 @@ codeunit 50302 "eInvoice JSON Generator"
         Headers: HttpHeaders;
         RequestId: Text;
         RequestText: Text;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        EnvironmentText: Text;
+        InvoiceTypeCode: Text;
     begin
         RequestId := CreateGuid();
 
+        // Get environment from setup
+        if eInvoiceSetup.Get('SETUP') then begin
+            if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                EnvironmentText := 'PREPROD'
+            else
+                EnvironmentText := 'PRODUCTION';
+        end else begin
+            EnvironmentText := 'PREPROD'; // Default to preprod if setup not found
+        end;
+
+        // Get invoice type from Sales Invoice Header
+        if SalesInvoiceHeader."eInvoice Document Type" <> '' then
+            InvoiceTypeCode := SalesInvoiceHeader."eInvoice Document Type"
+        else
+            InvoiceTypeCode := '01'; // Default to standard invoice
+
         // Create request payload matching Azure Function expectations
         JsonObj.Add('unsignedJson', JsonText);
-        JsonObj.Add('invoiceType', '01');
-        JsonObj.Add('environment', 'PREPROD');
+        JsonObj.Add('invoiceType', InvoiceTypeCode);
+        JsonObj.Add('environment', EnvironmentText);
         JsonObj.Add('submissionId', RequestId);
         JsonObj.Add('correlationId', RequestId);
         JsonObj.Add('requestedBy', UserId());
@@ -451,17 +481,84 @@ codeunit 50302 "eInvoice JSON Generator"
         PeriodObject: JsonObject;
         StartDate: Date;
         EndDate: Date;
+        PeriodDescription: Text;
     begin
-        // Calculate period based on posting date
+        // Only add invoice period if custom fields are populated in the Sales Invoice Header
+        // This makes the period dynamic based on actual invoice data instead of hardcoded values
+
+        // Check if invoice has custom period fields (you can add these fields to Sales Invoice Header if needed)
+        // For now, we'll make it conditional based on document type or other criteria
+
+        if ShouldIncludeInvoicePeriod(SalesInvoiceHeader) then begin
+            GetInvoicePeriodDetails(SalesInvoiceHeader, StartDate, EndDate, PeriodDescription);
+
+            AddBasicField(PeriodObject, 'StartDate', Format(StartDate, 0, '<Year4>-<Month,2>-<Day,2>'));
+            AddBasicField(PeriodObject, 'EndDate', Format(EndDate, 0, '<Year4>-<Month,2>-<Day,2>'));
+            AddBasicField(PeriodObject, 'Description', PeriodDescription);
+
+            PeriodArray.Add(PeriodObject);
+            InvoiceObject.Add('InvoicePeriod', PeriodArray);
+        end;
+        // If no period data available, skip this optional section entirely
+    end;
+
+    local procedure ShouldIncludeInvoicePeriod(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
+    begin
+        // Define business logic for when to include invoice period
+        // Examples:
+        // - Only for specific document types
+        // - Only when custom period fields are populated
+        // - Only for recurring/subscription invoices
+
+        // For now, only include for specific document types that require period information
+        // You can customize this logic based on your business requirements
+
+        case SalesInvoiceHeader."eInvoice Document Type" of
+            '02': // Debit note
+                exit(true);
+            '03': // Credit note  
+                exit(true);
+            '11': // Self-billed invoice
+                exit(true);
+            else
+                exit(false); // Don't include for standard invoices unless specifically needed
+        end;
+    end;
+
+    local procedure GetInvoicePeriodDetails(SalesInvoiceHeader: Record "Sales Invoice Header"; var StartDate: Date; var EndDate: Date; var PeriodDescription: Text)
+    begin
+        // Get period details from invoice data instead of hardcoding
+        // You can customize this based on your business logic
+
+        // Default approach: Use posting date as end date, calculate start based on payment terms or document type
         EndDate := SalesInvoiceHeader."Posting Date";
-        StartDate := CalcDate('<-1M+1D>', EndDate); // Start of the month
 
-        AddBasicField(PeriodObject, 'StartDate', Format(StartDate, 0, '<Year4>-<Month,2>-<Day,2>'));
-        AddBasicField(PeriodObject, 'EndDate', Format(EndDate, 0, '<Year4>-<Month,2>-<Day,2>'));
-        AddBasicField(PeriodObject, 'Description', 'Monthly');
+        // Determine start date based on document type or business logic
+        case SalesInvoiceHeader."eInvoice Document Type" of
+            '02', '03': // Debit/Credit notes - use same month
+                begin
+                    StartDate := CalcDate('<-CM>', EndDate); // Start of current month
+                    PeriodDescription := 'Monthly adjustment';
+                end;
+            '11': // Self-billed - quarterly period
+                begin
+                    StartDate := CalcDate('<-CQ>', EndDate); // Start of current quarter  
+                    PeriodDescription := 'Quarterly self-billing';
+                end;
+            else begin
+                // For other types, use a more dynamic approach
+                StartDate := CalcDate('<-1M+1D>', EndDate); // Previous month
+                PeriodDescription := 'Service period';
+            end;
+        end;
 
-        PeriodArray.Add(PeriodObject);
-        InvoiceObject.Add('InvoicePeriod', PeriodArray);
+        // You can also check for custom fields on Sales Invoice Header if you add them:
+        // if SalesInvoiceHeader."Custom Period Start" <> 0D then
+        //     StartDate := SalesInvoiceHeader."Custom Period Start";
+        // if SalesInvoiceHeader."Custom Period End" <> 0D then  
+        //     EndDate := SalesInvoiceHeader."Custom Period End";
+        // if SalesInvoiceHeader."Custom Period Description" <> '' then
+        //     PeriodDescription := SalesInvoiceHeader."Custom Period Description";
     end;
 
     local procedure AddBillingReference(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -783,8 +880,34 @@ codeunit 50302 "eInvoice JSON Generator"
     var
         PaymentTermsArray: JsonArray;
         PaymentTermsObject: JsonObject;
+        PaymentTerms: Record "Payment Terms";
+        SettlementDiscountArray: JsonArray;
+        SettlementDiscountObject: JsonObject;
+        SettlementPeriodArray: JsonArray;
+        SettlementPeriodObject: JsonObject;
     begin
+        // Add main payment terms note
         AddBasicField(PaymentTermsObject, 'Note', GetPaymentTermsNote(SalesInvoiceHeader));
+
+        // Add settlement discount if available
+        if (SalesInvoiceHeader."Payment Terms Code" <> '') and PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then begin
+            if PaymentTerms."Discount %" > 0 then begin
+                // Settlement discount percentage
+                AddNumericField(SettlementDiscountObject, 'Percent', PaymentTerms."Discount %");
+
+                // Settlement period for discount
+                if Format(PaymentTerms."Discount Date Calculation") <> '' then begin
+                    AddBasicField(SettlementPeriodObject, 'Description', 'Early payment discount period');
+                    // You can add StartDate and EndDate if needed based on invoice date + discount calculation
+                    SettlementPeriodArray.Add(SettlementPeriodObject);
+                    SettlementDiscountObject.Add('SettlementPeriod', SettlementPeriodArray);
+                end;
+
+                SettlementDiscountArray.Add(SettlementDiscountObject);
+                PaymentTermsObject.Add('SettlementDiscountPercent', SettlementDiscountArray);
+            end;
+        end;
+
         PaymentTermsArray.Add(PaymentTermsObject);
         InvoiceObject.Add('PaymentTerms', PaymentTermsArray);
     end;
@@ -1623,9 +1746,67 @@ codeunit 50302 "eInvoice JSON Generator"
     local procedure GetPaymentTermsNote(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
     var
         PaymentTerms: Record "Payment Terms";
+        PaymentTermsText: Text;
+        DueDateText: Text;
+    begin
+        // Get payment terms from Payment Terms Code instead of hardcoding based on payment mode
+        if SalesInvoiceHeader."Payment Terms Code" <> '' then begin
+            if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then begin
+                // Use the actual payment terms description
+                if PaymentTerms.Description <> '' then
+                    PaymentTermsText := PaymentTerms.Description
+                else
+                    PaymentTermsText := SalesInvoiceHeader."Payment Terms Code";
+
+                // Add due date calculation if available
+                if Format(PaymentTerms."Due Date Calculation") <> '' then begin
+                    DueDateText := GetPaymentTermsDueText(PaymentTerms."Due Date Calculation");
+                    if DueDateText <> '' then
+                        PaymentTermsText := PaymentTermsText + ' - ' + DueDateText;
+                end;
+
+                // Add discount terms if available
+                if PaymentTerms."Discount %" > 0 then begin
+                    PaymentTermsText := PaymentTermsText + ' (Discount: ' + Format(PaymentTerms."Discount %") + '%';
+                    if Format(PaymentTerms."Discount Date Calculation") <> '' then
+                        PaymentTermsText := PaymentTermsText + ' if paid within ' + Format(PaymentTerms."Discount Date Calculation");
+                    PaymentTermsText := PaymentTermsText + ')';
+                end;
+
+                exit(PaymentTermsText);
+            end;
+        end;
+
+        // Fallback: Use payment mode if no payment terms code
+        exit(GetPaymentModeDescription(SalesInvoiceHeader));
+    end;
+
+    local procedure GetPaymentTermsDueText(DueDateCalculation: DateFormula): Text
+    begin
+        // Convert date formula to readable text
+        case Format(DueDateCalculation) of
+            '0D':
+                exit('Payment due immediately');
+            '7D', '+7D':
+                exit('Payment due in 7 days');
+            '14D', '+14D':
+                exit('Payment due in 14 days');
+            '30D', '+30D', '+1M':
+                exit('Payment due in 30 days');
+            '+2M':
+                exit('Payment due in 60 days');
+            '+3M':
+                exit('Payment due in 90 days');
+            else
+                exit('Payment due ' + Format(DueDateCalculation));
+        end;
+    end;
+
+    local procedure GetPaymentModeDescription(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
+    var
         PaymentModeCode: Code[10];
     begin
-        // Return payment terms description based on Payment Mode, not Payment Terms Code
+        // Fallback method using payment mode codes
         PaymentModeCode := GetPaymentMeansCode(SalesInvoiceHeader);
 
         case PaymentModeCode of
@@ -1634,23 +1815,15 @@ codeunit 50302 "eInvoice JSON Generator"
             '02':
                 exit('Cheque');
             '03':
-                exit('Payment method is cash');
+                exit('Cash Payment');
             '04':
                 exit('Credit Card');
             '05':
                 exit('Debit Card');
             '06':
                 exit('e-Wallet/Digital Wallet');
-            else begin
-                // Fallback to Payment Terms if available
-                if PaymentTerms.Get(SalesInvoiceHeader."Payment Terms Code") then begin
-                    if PaymentTerms.Description <> '' then
-                        exit(PaymentTerms.Description)
-                    else
-                        exit('Payment due ' + Format(PaymentTerms."Due Date Calculation"));
-                end;
-                exit('Others');
-            end;
+            else
+                exit('Other Payment Method');
         end;
     end;
 
@@ -1773,7 +1946,7 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
 
         // Step 3: Get signed invoice from Azure Function using the working direct method
-        if not TryPostToAzureFunctionDirect(UnsignedJsonText, AzureFunctionUrl, AzureResponseText) then begin
+        if not TryPostToAzureFunctionDirect(UnsignedJsonText, AzureFunctionUrl, AzureResponseText, SalesInvoiceHeader) then begin
             LhdnResponse := 'Failed to communicate with Azure Function. Please check connectivity and try again.';
             exit(false);
         end;
