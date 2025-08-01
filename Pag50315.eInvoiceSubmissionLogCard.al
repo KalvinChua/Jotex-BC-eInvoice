@@ -193,6 +193,37 @@ page 50315 "e-Invoice Submission Log Card"
                         Message('No response details available for this entry.');
                 end;
             }
+
+            action(MarkAsCancelled)
+            {
+                ApplicationArea = All;
+                Caption = 'Mark as Cancelled';
+                Image = Cancel;
+                ToolTip = 'Manually mark this submission as cancelled (use when LHDN cancellation succeeded but local update failed)';
+                Visible = (Rec.Status = 'Valid') and IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    CancellationHelper: Codeunit "eInvoice Cancellation Helper";
+                    CancellationReason: Text;
+                    ConfirmMsg: Label 'Are you sure you want to mark submission %1 as cancelled?\This should only be used when LHDN cancellation succeeded but the local log was not updated.';
+                begin
+                    if not Confirm(ConfirmMsg, false, Rec."Entry No.") then
+                        exit;
+
+                    // Allow user to choose between default reason or custom reason
+                    CancellationReason := SelectManualCancellationReason();
+                    if CancellationReason = '' then
+                        exit; // User cancelled
+
+                    if CancellationHelper.UpdateCancellationStatusByInvoice(Rec."Invoice No.", CancellationReason) then begin
+                        Message('Submission log has been updated to cancelled status with reason: %1', CancellationReason);
+                        CurrPage.Update(false);
+                    end else begin
+                        Message('Failed to update cancellation status. Please contact system administrator.');
+                    end;
+                end;
+            }
         }
     }
 
@@ -235,5 +266,75 @@ page 50315 "e-Invoice Submission Log Card"
             Status := 'Unknown';
 
         exit(Status);
+    end;
+
+    /// <summary>
+    /// Select cancellation reason for manual marking
+    /// </summary>
+    /// <returns>Selected cancellation reason or empty string if cancelled</returns>
+    local procedure SelectManualCancellationReason(): Text
+    var
+        Selection: Integer;
+        CustomReason: Text[500];
+        ReasonText: Text;
+    begin
+        ReasonText := '';
+
+        // Show options for manual cancellation reasons
+        Selection := Dialog.StrMenu('Default - LHDN cancellation completed successfully,System sync issue - LHDN already cancelled,Data correction - Manual administrative action,Enter custom reason', 1, 'Select reason for manual cancellation:');
+
+        case Selection of
+            1:
+                ReasonText := 'Manually marked as cancelled - LHDN cancellation completed successfully';
+            2:
+                ReasonText := 'System synchronization issue - LHDN status already cancelled';
+            3:
+                ReasonText := 'Data correction - Manual administrative cancellation';
+            4:
+                begin
+                    // Get custom reason input from user
+                    CustomReason := GetCustomCancellationReason();
+                    if CustomReason <> '' then
+                        ReasonText := 'Manual cancellation - ' + CustomReason
+                    else
+                        ReasonText := ''; // User cancelled
+                end;
+            else
+                ReasonText := '';
+        end;
+
+        exit(ReasonText);
+    end;
+
+    /// <summary>
+    /// Get custom cancellation reason from user input
+    /// </summary>
+    /// <returns>Custom reason text or empty string if cancelled</returns>
+    local procedure GetCustomCancellationReason(): Text[500]
+    var
+        CustomReasonPage: Page "Custom Cancellation Reason";
+        CustomReason: Text[500];
+    begin
+        // Open the custom reason input page
+        if CustomReasonPage.RunModal() = Action::OK then begin
+            CustomReason := CustomReasonPage.GetCancellationReason();
+
+            // Validate the reason is not empty
+            if CustomReason <> '' then
+                exit(CustomReason);
+        end;
+
+        // Return empty string if cancelled or no reason provided
+        exit('');
+    end;
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
     end;
 }

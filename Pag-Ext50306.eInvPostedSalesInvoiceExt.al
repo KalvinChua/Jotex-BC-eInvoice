@@ -248,6 +248,219 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 end;
             }
 
+            action(DiagnoseCancellationStatus)
+            {
+                ApplicationArea = All;
+                Caption = 'Diagnose Cancellation Status';
+                Image = TestFile;
+                ToolTip = 'Check why cancellation status is not updating locally after LHDN cancellation';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    CompanyInfo: Record "Company Information";
+                    CancellationHelper: Codeunit "eInvoice Cancellation Helper";
+                    DiagnosticMsg: Text;
+                    RecordCount: Integer;
+                    ValidCount: Integer;
+                    CancelledCount: Integer;
+                begin
+                    DiagnosticMsg := StrSubstNo('Cancellation Status Diagnosis for Invoice: %1\\', Rec."No.");
+
+                    // Check company validation
+                    if not CompanyInfo.Get() then
+                        DiagnosticMsg += 'ERROR: Company Info: Cannot retrieve company information\\'
+                    else if CompanyInfo.Name <> 'JOTEX SDN BHD' then
+                        DiagnosticMsg += StrSubstNo('ERROR: Company Name: "%1" (Expected: "JOTEX SDN BHD")\\', CompanyInfo.Name)
+                    else
+                        DiagnosticMsg += 'OK: Company Validation: JOTEX SDN BHD\\';
+
+                    // Check submission log records
+                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    RecordCount := SubmissionLog.Count();
+                    DiagnosticMsg += StrSubstNo('INFO: Total Submission Records: %1\\', RecordCount);
+
+                    if RecordCount = 0 then begin
+                        DiagnosticMsg += 'ERROR: No submission log records found for this invoice\\';
+                    end else begin
+                        // Count by status
+                        SubmissionLog.SetRange(Status, 'Valid');
+                        ValidCount := SubmissionLog.Count();
+
+                        SubmissionLog.SetRange(Status, 'Cancelled');
+                        CancelledCount := SubmissionLog.Count();
+
+                        DiagnosticMsg += StrSubstNo('   - Valid Status: %1 records\\', ValidCount);
+                        DiagnosticMsg += StrSubstNo('   - Cancelled Status: %2 records\\', CancelledCount);
+
+                        // Show latest record details
+                        SubmissionLog.SetRange(Status);
+                        if SubmissionLog.FindLast() then begin
+                            DiagnosticMsg += StrSubstNo('LATEST: Latest Record Status: "%1"\\', SubmissionLog.Status);
+                            DiagnosticMsg += StrSubstNo('   Entry No: %1\\', SubmissionLog."Entry No.");
+                            if SubmissionLog."Cancellation Reason" <> '' then
+                                DiagnosticMsg += StrSubstNo('   Cancellation Reason: %1\\', SubmissionLog."Cancellation Reason");
+                            if SubmissionLog."Cancellation Date" <> 0DT then
+                                DiagnosticMsg += StrSubstNo('   Cancellation Date: %1\\', SubmissionLog."Cancellation Date");
+                        end;
+                    end;
+
+                    // Test update capability
+                    DiagnosticMsg += '\\TEST: Testing Update Capability...\\';
+                    if CancellationHelper.UpdateCancellationStatusByInvoice(Rec."No.", 'Test diagnostic - no actual change') then
+                        DiagnosticMsg += 'OK: Helper can update records successfully'
+                    else
+                        DiagnosticMsg += 'ERROR: Helper cannot update records - check permissions or data integrity';
+
+                    // Add recommendation for status sync
+                    DiagnosticMsg += '\\\\RECOMMENDATION: Status Sync Recommendation:\\';
+                    DiagnosticMsg += 'Use "Check Status (Direct API)" to sync with LHDN\\';
+                    DiagnosticMsg += 'This will check document-level status for cancellation\\\\';
+
+                    // Show current invoice UUID for debugging
+                    DiagnosticMsg += StrSubstNo('DEBUG: Invoice UUID: "%1"\\', Rec."eInvoice UUID");
+                    DiagnosticMsg += StrSubstNo('DEBUG: Submission UID: "%1"', Rec."eInvoice Submission UID");
+                    Message(DiagnosticMsg);
+                end;
+            }
+
+            action(TestLhdnStatusParsing)
+            {
+                ApplicationArea = All;
+                Caption = 'Test LHDN Status Parsing';
+                Image = TestDatabase;
+                ToolTip = 'Test how LHDN API response is being parsed for status detection';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    HttpClient: HttpClient;
+                    HttpRequestMessage: HttpRequestMessage;
+                    HttpResponseMessage: HttpResponseMessage;
+                    RequestHeaders: HttpHeaders;
+                    AccessToken: Text;
+                    eInvoiceSetup: Record "eInvoiceSetup";
+                    eInvoiceHelper: Codeunit eInvoiceHelper;
+                    ApiUrl: Text;
+                    ResponseText: Text;
+                    JsonObject: JsonObject;
+                    JsonToken: JsonToken;
+                    DocumentSummaryArray: JsonArray;
+                    DocumentJson: JsonObject;
+                    DiagnosticMsg: Text;
+                    OverallStatus: Text;
+                    DocumentStatus: Text;
+                    DocumentUuid: Text;
+                    i: Integer;
+                begin
+                    if Rec."eInvoice Submission UID" = '' then begin
+                        Message('No submission UID found for this invoice.');
+                        exit;
+                    end;
+
+                    // Get setup and access token
+                    if not eInvoiceSetup.Get('SETUP') then begin
+                        Message('eInvoice Setup not found');
+                        exit;
+                    end;
+
+                    eInvoiceHelper.InitializeHelper();
+                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+                    if AccessToken = '' then begin
+                        Message('Failed to get access token');
+                        exit;
+                    end;
+
+                    // Build API URL
+                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
+                    else
+                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
+
+                    // Make API call
+                    HttpRequestMessage.Method := 'GET';
+                    HttpRequestMessage.SetRequestUri(ApiUrl);
+                    HttpRequestMessage.GetHeaders(RequestHeaders);
+                    RequestHeaders.Clear();
+                    RequestHeaders.Add('Accept', 'application/json');
+                    RequestHeaders.Add('Accept-Language', 'en');
+                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+                        HttpResponseMessage.Content.ReadAs(ResponseText);
+
+                        if HttpResponseMessage.IsSuccessStatusCode then begin
+                            DiagnosticMsg := StrSubstNo('LHDN API Status Parsing Test for Invoice: %1\\\\', Rec."No.");
+
+                            // Parse the JSON response
+                            if JsonObject.ReadFrom(ResponseText) then begin
+                                // Check submission-level status
+                                if JsonObject.Get('overallStatus', JsonToken) then begin
+                                    OverallStatus := JsonToken.AsValue().AsText();
+                                    DiagnosticMsg += StrSubstNo('INFO: Submission Level Status (overallStatus): "%1"\\', OverallStatus);
+                                end else begin
+                                    DiagnosticMsg += 'ERROR: No overallStatus field found\\';
+                                end;
+
+                                // Check document-level status
+                                if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+                                    DocumentSummaryArray := JsonToken.AsArray();
+                                    DiagnosticMsg += StrSubstNo('LATEST: Document Summary Array Count: %1\\\\', DocumentSummaryArray.Count());
+
+                                    // Show details for each document
+                                    for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                                        DocumentSummaryArray.Get(i, JsonToken);
+                                        if JsonToken.IsObject() then begin
+                                            DocumentJson := JsonToken.AsObject();
+
+                                            // Get document details
+                                            DocumentUuid := '';
+                                            DocumentStatus := '';
+
+                                            if DocumentJson.Get('uuid', JsonToken) then
+                                                DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                            if DocumentJson.Get('status', JsonToken) then
+                                                DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                                            DiagnosticMsg += StrSubstNo('Document %1:\\', i + 1);
+                                            DiagnosticMsg += StrSubstNo('   UUID: "%1"\\', DocumentUuid);
+                                            DiagnosticMsg += StrSubstNo('   Status: "%1"\\', DocumentStatus);
+
+                                            // Check if this matches our invoice
+                                            if DocumentUuid = Rec."eInvoice UUID" then
+                                                DiagnosticMsg += '   OK: This matches our invoice UUID\\';
+
+                                            DiagnosticMsg += '\\';
+                                        end;
+                                    end;
+
+                                    DiagnosticMsg += StrSubstNo('DEBUG: Our Invoice UUID: "%1"\\', Rec."eInvoice UUID");
+                                    DiagnosticMsg += '\\Conclusion: ';
+
+                                    // Test the actual parsing logic
+                                    if (DocumentUuid = Rec."eInvoice UUID") and (DocumentStatus <> '') then
+                                        DiagnosticMsg += StrSubstNo('Document-level status "%1" should be used', DocumentStatus)
+                                    else
+                                        DiagnosticMsg += StrSubstNo('Fallback to submission-level status "%1"', OverallStatus);
+
+                                end else begin
+                                    DiagnosticMsg += 'ERROR: No documentSummary array found';
+                                end;
+                            end else begin
+                                DiagnosticMsg += 'ERROR: Failed to parse JSON response';
+                            end;
+
+                            Message(DiagnosticMsg);
+                        end else begin
+                            Message('Failed to retrieve status from LHDN API (Status Code: %1)', HttpResponseMessage.HttpStatusCode);
+                        end;
+                    end else begin
+                        Message('Failed to connect to LHDN API.');
+                    end;
+                end;
+            }
+
             action(CancelEInvoice)
             {
                 ApplicationArea = All;
@@ -374,7 +587,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                         if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
                             InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                        FormattedResponse += StrSubstNo('• Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
+                        FormattedResponse += StrSubstNo('- Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
                         if i < AcceptedCount - 1 then
                             FormattedResponse += '\\';
                     end;
@@ -448,6 +661,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
     /// <summary>
     /// Extract status from LHDN API response for display purposes
+    /// Checks both submission-level overallStatus and document-level status for accurate cancellation detection
     /// </summary>
     /// <param name="ResponseText">JSON response from LHDN API</param>
     /// <returns>The formatted status value</returns>
@@ -455,19 +669,60 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     var
         JsonObject: JsonObject;
         JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
         OverallStatus: Text;
+        DocumentStatus: Text;
+        DocumentUuid: Text;
+        i: Integer;
     begin
         // Parse the JSON response
         if not JsonObject.ReadFrom(ResponseText) then
             exit('Unknown - JSON Parse Failed');
 
-        // Extract the overallStatus field
-        if not JsonObject.Get('overallStatus', JsonToken) then
+        // Extract the overallStatus field (submission level)
+        if JsonObject.Get('overallStatus', JsonToken) then
+            OverallStatus := JsonToken.AsValue().AsText()
+        else
             exit('Unknown - No Status Field');
 
-        OverallStatus := JsonToken.AsValue().AsText();
+        // Check document-level status for cancellation detection
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
 
-        // Convert LHDN status values to proper case for display
+            // Look for our specific document by UUID match
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Get document UUID and status
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                    // If this is our document (UUID match), check its individual status
+                    if (DocumentUuid = Rec."eInvoice UUID") and DocumentJson.Get('status', JsonToken) then begin
+                        DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        // Document-level status takes precedence for cancellation
+                        case DocumentStatus.ToLower() of
+                            'cancelled':
+                                exit('Cancelled');
+                            'valid':
+                                exit('Valid');
+                            'invalid':
+                                exit('Invalid');
+                            'rejected':
+                                exit('Rejected');
+                            else
+                                exit(DocumentStatus); // Use document status as-is
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fall back to overall status if no document-specific status found
         case OverallStatus.ToLower() of
             'valid':
                 exit('Valid');
@@ -485,6 +740,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     /// <summary>
     /// Parse JSON response and update the invoice validation status field
     /// Uses TryFunction approach to handle permission restrictions gracefully
+    /// Enhanced to detect document-level cancellation status
     /// </summary>
     /// <param name="ResponseText">JSON response from LHDN API</param>
     /// <returns>True if status was successfully updated or permission denied</returns>
@@ -492,32 +748,75 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     var
         JsonObject: JsonObject;
         JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
         OverallStatus: Text;
+        DocumentStatus: Text;
+        DocumentUuid: Text;
         LhdnStatus: Text;
         UpdateSuccess: Boolean;
+        i: Integer;
     begin
         // Parse the JSON response
         if not JsonObject.ReadFrom(ResponseText) then
             exit(false);
 
-        // Extract the overallStatus field
+        // Extract the overallStatus field (submission level)
         if not JsonObject.Get('overallStatus', JsonToken) then
             exit(false);
 
         OverallStatus := JsonToken.AsValue().AsText();
 
-        // Convert LHDN status values to proper case for display
-        case OverallStatus.ToLower() of
-            'valid':
-                LhdnStatus := 'Valid';
-            'invalid':
-                LhdnStatus := 'Invalid';
-            'in progress':
-                LhdnStatus := 'In Progress';
-            'partially valid':
-                LhdnStatus := 'Partially Valid';
-            else
-                LhdnStatus := OverallStatus; // Use as-is if unknown
+        // Check document-level status for accurate cancellation detection
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            // Look for our specific document by UUID match
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Get document UUID and status
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                    // If this is our document (UUID match), use its individual status
+                    if (DocumentUuid = Rec."eInvoice UUID") and DocumentJson.Get('status', JsonToken) then begin
+                        DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        // Convert document-level LHDN status values to proper case for display
+                        case DocumentStatus.ToLower() of
+                            'cancelled':
+                                LhdnStatus := 'Cancelled';
+                            'valid':
+                                LhdnStatus := 'Valid';
+                            'invalid':
+                                LhdnStatus := 'Invalid';
+                            'rejected':
+                                LhdnStatus := 'Rejected';
+                            else
+                                LhdnStatus := DocumentStatus; // Use document status as-is
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fall back to overall status if no document-specific status found
+        if LhdnStatus = '' then begin
+            case OverallStatus.ToLower() of
+                'valid':
+                    LhdnStatus := 'Valid';
+                'invalid':
+                    LhdnStatus := 'Invalid';
+                'in progress':
+                    LhdnStatus := 'In Progress';
+                'partially valid':
+                    LhdnStatus := 'Partially Valid';
+                else
+                    LhdnStatus := OverallStatus; // Use as-is if unknown
+            end;
         end;
 
         // Try to update the invoice validation status field with permission handling
@@ -623,20 +922,19 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     end;
 
     /// <summary>
-    /// Shows a dialog to select cancellation reason
+    /// Shows a dialog to select cancellation reason with option for custom input
     /// </summary>
     /// <returns>Selected cancellation reason or empty string if cancelled</returns>
     local procedure SelectCancellationReason(): Text
     var
-        ReasonOptions: Dialog;
         Selection: Integer;
-        CustomReason: Text;
+        CustomReason: Text[500];
         ReasonText: Text;
     begin
         ReasonText := '';
 
-        // Show options dialog
-        Selection := Dialog.StrMenu('Wrong buyer,Wrong invoice details,Duplicate invoice,Technical error,Buyer cancellation request,Other business reason', 1, 'Select cancellation reason:');
+        // Show options dialog with custom input option
+        Selection := Dialog.StrMenu('Wrong buyer,Wrong invoice details,Duplicate invoice,Technical error,Buyer cancellation request,Other business reason,Enter custom reason', 1, 'Select cancellation reason:');
 
         case Selection of
             1:
@@ -650,14 +948,42 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             5:
                 ReasonText := 'Cancellation requested by buyer';
             6:
+                ReasonText := 'Other business reason - Contact support for details';
+            7:
                 begin
-                    // For custom reason, we'll use a predefined text since we can't easily prompt for input
-                    ReasonText := 'Other business reason - Contact support for details';
+                    // Get custom reason input from user
+                    CustomReason := GetCustomCancellationReason();
+                    if CustomReason <> '' then
+                        ReasonText := CustomReason
+                    else
+                        ReasonText := ''; // User cancelled
                 end;
             else
                 ReasonText := '';
         end;
 
         exit(ReasonText);
+    end;
+
+    /// <summary>
+    /// Get custom cancellation reason from user input
+    /// </summary>
+    /// <returns>Custom reason text or empty string if cancelled</returns>
+    local procedure GetCustomCancellationReason(): Text[500]
+    var
+        CustomReasonPage: Page "Custom Cancellation Reason";
+        CustomReason: Text[500];
+    begin
+        // Open the custom reason input page
+        if CustomReasonPage.RunModal() = Action::OK then begin
+            CustomReason := CustomReasonPage.GetCancellationReason();
+
+            // Validate the reason is not empty
+            if CustomReason <> '' then
+                exit(CustomReason);
+        end;
+
+        // Return empty string if cancelled or no reason provided
+        exit('');
     end;
 }

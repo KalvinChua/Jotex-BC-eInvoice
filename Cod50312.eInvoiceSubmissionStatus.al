@@ -55,9 +55,9 @@ codeunit 50312 "eInvoice Submission Status"
         if not ValidateSubmissionUid(SubmissionUid) then begin
             SubmissionDetails := StrSubstNo('Error: Invalid Submission UID format: %1\\\\' +
                                           'Submission UID should be:\\' +
-                                          '• 10-50 characters long\\' +
-                                          '• Contain only letters, numbers, hyphens, and underscores\\' +
-                                          '• Not be empty\\\\' +
+                                          '- 10-50 characters long\\' +
+                                          '- Contain only letters, numbers, hyphens, and underscores\\' +
+                                          '- Not be empty\\\\' +
                                           'Example: HJSD135P2S7D8IU or ABC-123_XYZ',
                                           SubmissionUid);
             exit(false);
@@ -127,9 +127,9 @@ codeunit 50312 "eInvoice Submission Status"
                                                   'Failed to retrieve submission status.\\' +
                                                   'Correlation ID: %2\\\\' +
                                                   'This may be due to:\\' +
-                                                  '• Invalid submission UID\\' +
-                                                  '• Authentication issues\\' +
-                                                  '• LHDN API service problems\\\\' +
+                                                  '- Invalid submission UID\\' +
+                                                  '- Authentication issues\\' +
+                                                  '- LHDN API service problems\\\\' +
                                                   'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
                                                   HttpResponseMessage.HttpStatusCode(), CorrelationId);
                     exit(false);
@@ -142,14 +142,14 @@ codeunit 50312 "eInvoice Submission Status"
                                           'Correlation ID: %1\\' +
                                           'Error: %2\\\\' +
                                           'This may indicate:\\' +
-                                          '• Network connectivity issues\\' +
-                                          '• HTTP context restrictions\\' +
-                                          '• Authentication/authorization issues\\' +
-                                          '• LHDN service temporarily unavailable\\\\' +
+                                          '- Network connectivity issues\\' +
+                                          '- HTTP context restrictions\\' +
+                                          '- Authentication/authorization issues\\' +
+                                          '- LHDN service temporarily unavailable\\\\' +
                                           'LHDN References:\\' +
-                                          '• Error Codes: https://sdk.myinvois.hasil.gov.my/standard-error-response/\\' +
-                                          '• Headers: https://sdk.myinvois.hasil.gov.my/standard-header-parameters/\\' +
-                                          '• API Docs: https://sdk.myinvois.hasil.gov.my/api/',
+                                          '- Error Codes: https://sdk.myinvois.hasil.gov.my/standard-error-response/\\' +
+                                          '- Headers: https://sdk.myinvois.hasil.gov.my/standard-header-parameters/\\' +
+                                          '- API Docs: https://sdk.myinvois.hasil.gov.my/api/',
                                           CorrelationId, GetLastErrorText());
             exit(false);
         end;
@@ -181,9 +181,9 @@ codeunit 50312 "eInvoice Submission Status"
                                               'Failed to retrieve submission status.\\' +
                                               'Correlation ID: %2\\\\' +
                                               'This may be due to:\\' +
-                                              '• Invalid submission UID\\' +
-                                              '• Authentication issues\\' +
-                                              '• LHDN API service problems\\\\' +
+                                              '- Invalid submission UID\\' +
+                                              '- Authentication issues\\' +
+                                              '- LHDN API service problems\\\\' +
                                               'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
                                               HttpResponseMessage.HttpStatusCode(), CorrelationId);
                 exit(false);
@@ -203,10 +203,10 @@ codeunit 50312 "eInvoice Submission Status"
                                           'Document Count: %3\\' +
                                           'Date Time Received: %4\\\\' +
                                           'Status Meanings:\\' +
-                                          '• in progress: Documents are being processed\\' +
-                                          '• valid: All documents passed validations\\' +
-                                          '• invalid: All documents failed validations\\' +
-                                          '• partially valid: Some documents valid, others invalid\\\\' +
+                                          '- in progress: Documents are being processed\\' +
+                                          '- valid: All documents passed validations\\' +
+                                          '- invalid: All documents failed validations\\' +
+                                          '- partially valid: Some documents valid, others invalid\\\\' +
                                           'Document Summary:\\%5\\\\' +
                                           'Note: For large submissions with many documents, \\' +
                                           'use "Get Complete Submission" for paginated results.\\\\' +
@@ -223,9 +223,9 @@ codeunit 50312 "eInvoice Submission Status"
                                           'Correlation ID: %1\\' +
                                           'Response Text: %2\\\\' +
                                           'This may indicate:\\' +
-                                          '• API response format has changed\\' +
-                                          '• Network connectivity issues\\' +
-                                          '• Invalid JSON response\\\\' +
+                                          '- API response format has changed\\' +
+                                          '- Network connectivity issues\\' +
+                                          '- Invalid JSON response\\\\' +
                                           'Please check LHDN API documentation for updates.',
                                           CorrelationId, ResponseText);
             exit(true);
@@ -341,10 +341,10 @@ codeunit 50312 "eInvoice Submission Status"
                                       'Total Pages: %5\\' +
                                       'Date Time Received: %6\\\\' +
                                       'Status Values:\\' +
-                                      '• in progress: Documents being processed\\' +
-                                      '• valid: All documents passed validations\\' +
-                                      '• invalid: All documents failed validations\\' +
-                                      '• partially valid: Mixed document statuses\\\\' +
+                                      '- in progress: Documents being processed\\' +
+                                      '- valid: All documents passed validations\\' +
+                                      '- invalid: All documents failed validations\\' +
+                                      '- partially valid: Mixed document statuses\\\\' +
                                       'Complete Document Summary:\\%7\\\\' +
                                       'Rate Limiting: 4-second intervals used between page requests\\' +
                                       'API Reference: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/',
@@ -546,9 +546,9 @@ codeunit 50312 "eInvoice Submission Status"
                                       'Message: %2\\' +
                                       'Target: %3\\\\' +
                                       'Common causes:\\' +
-                                      '• Submission UID not found or invalid\\' +
-                                      '• Wrong environment (Preprod vs Production)\\' +
-                                      '• Authentication or authorization issues\\\\' +
+                                      '- Submission UID not found or invalid\\' +
+                                      '- Wrong environment (Preprod vs Production)\\' +
+                                      '- Authentication or authorization issues\\\\' +
                                       'API Reference: https://sdk.myinvois.hasil.gov.my/standard-error-response/',
                                       ErrorCode, ErrorMessage, Target);
             exit(true);
@@ -684,23 +684,23 @@ codeunit 50312 "eInvoice Submission Status"
 
                     // Format document details according to LHDN API structure
                     DocumentDetails += StrSubstNo('Document %1: %2\\', i + 1, InternalId);
-                    DocumentDetails += StrSubstNo('  • UUID: %1\\', Uuid);
-                    DocumentDetails += StrSubstNo('  • Status: %1\\', Status);
-                    DocumentDetails += StrSubstNo('  • Type: %1 v%2\\', TypeName, TypeVersionName);
-                    DocumentDetails += StrSubstNo('  • Issuer: %1 (TIN: %2)\\', IssuerName, IssuerTin);
-                    DocumentDetails += StrSubstNo('  • Receiver: %1 (ID: %2)\\', ReceiverName, ReceiverId);
-                    DocumentDetails += StrSubstNo('  • Amount: MYR %1\\', TotalPayableAmount);
-                    DocumentDetails += StrSubstNo('  • Issued: %1\\', DateTimeIssued);
+                    DocumentDetails += StrSubstNo('  - UUID: %1\\', Uuid);
+                    DocumentDetails += StrSubstNo('  - Status: %1\\', Status);
+                    DocumentDetails += StrSubstNo('  - Type: %1 v%2\\', TypeName, TypeVersionName);
+                    DocumentDetails += StrSubstNo('  - Issuer: %1 (TIN: %2)\\', IssuerName, IssuerTin);
+                    DocumentDetails += StrSubstNo('  - Receiver: %1 (ID: %2)\\', ReceiverName, ReceiverId);
+                    DocumentDetails += StrSubstNo('  - Amount: MYR %1\\', TotalPayableAmount);
+                    DocumentDetails += StrSubstNo('  - Issued: %1\\', DateTimeIssued);
                     if DateTimeValidated <> 'N/A' then
-                        DocumentDetails += StrSubstNo('  • Validated: %1\\', DateTimeValidated);
+                        DocumentDetails += StrSubstNo('  - Validated: %1\\', DateTimeValidated);
                     if LongId <> 'N/A' then
-                        DocumentDetails += StrSubstNo('  • Long ID: %1\\', LongId);
+                        DocumentDetails += StrSubstNo('  - Long ID: %1\\', LongId);
                     if DocumentStatusReason <> '' then
-                        DocumentDetails += StrSubstNo('  • Status Reason: %1\\', DocumentStatusReason);
+                        DocumentDetails += StrSubstNo('  - Status Reason: %1\\', DocumentStatusReason);
                     if CancelDateTime <> '' then
-                        DocumentDetails += StrSubstNo('  • Cancelled: %1\\', CancelDateTime);
+                        DocumentDetails += StrSubstNo('  - Cancelled: %1\\', CancelDateTime);
                     if RejectRequestDateTime <> '' then
-                        DocumentDetails += StrSubstNo('  • Reject Requested: %1\\', RejectRequestDateTime);
+                        DocumentDetails += StrSubstNo('  - Reject Requested: %1\\', RejectRequestDateTime);
                 end;
             end;
 
@@ -921,9 +921,9 @@ codeunit 50312 "eInvoice Submission Status"
                                         'Searched Pages: %3\\' +
                                         'Total Documents in Submission: %4\\\\' +
                                         'This may mean:\\' +
-                                        '• The document internal ID is incorrect\\' +
-                                        '• The document was not part of this submission\\' +
-                                        '• The document was processed in a different batch\\\\' +
+                                        '- The document internal ID is incorrect\\' +
+                                        '- The document was not part of this submission\\' +
+                                        '- The document was processed in a different batch\\\\' +
                                         'Try checking the complete submission details first.',
                                         SubmissionUid,
                                         DocumentInternalId,
@@ -968,9 +968,9 @@ codeunit 50312 "eInvoice Submission Status"
         if not SubmissionLog.FindSet() then begin
             SubmissionDetails := StrSubstNo('No log entries found for submission UID: %1\\\\' +
                                           'This may mean:\\' +
-                                          '• The submission was not logged\\' +
-                                          '• The submission UID is incorrect\\' +
-                                          '• The submission was made in a different company\\\\' +
+                                          '- The submission was not logged\\' +
+                                          '- The submission UID is incorrect\\' +
+                                          '- The submission was made in a different company\\\\' +
                                           'Alternative Solutions:\\' +
                                           '1. Check the submission UID is correct\\' +
                                           '2. Use "Create Test Entry" to add a test record\\' +
@@ -1002,11 +1002,11 @@ codeunit 50312 "eInvoice Submission Status"
                                       'Submission UID: %1\\' +
                                       'Total Log Entries: %2\\\\' +
                                       'Status Breakdown:\\' +
-                                      '• Valid: %3\\' +
-                                      '• Invalid: %4\\' +
-                                      '• In Progress: %5\\' +
-                                      '• Partially Valid: %6\\' +
-                                      '• Unknown: %7\\\\' +
+                                      '- Valid: %3\\' +
+                                      '- Invalid: %4\\' +
+                                      '- In Progress: %5\\' +
+                                      '- Partially Valid: %6\\' +
+                                      '- Unknown: %7\\\\' +
                                       'Note: This is based on local log data.\\' +
                                       'For real-time status, try:\\' +
                                       '1. Running from a different context\\' +
@@ -1061,15 +1061,15 @@ codeunit 50312 "eInvoice Submission Status"
 
         // Test 3: Check permissions
         TestResults += StrSubstNo('\\User Information:\\');
-        TestResults += StrSubstNo('• User ID: %1\\', UserId);
-        TestResults += StrSubstNo('• Company: %2\\', CompanyName);
-        TestResults += StrSubstNo('• Current Time: %3\\', Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2> <AM/PM>'));
+        TestResults += StrSubstNo('- User ID: %1\\', UserId);
+        TestResults += StrSubstNo('- Company: %2\\', CompanyName);
+        TestResults += StrSubstNo('- Current Time: %3\\', Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2> <AM/PM>'));
 
         // Test 4: Context information
         TestResults += '\\Context Analysis:\\';
-        TestResults += '• HTTP operations may be restricted in current context\\';
-        TestResults += '• Try running from a different page or action\\';
-        TestResults += '• Use "Refresh Status (Local Analysis)" as alternative\\';
+        TestResults += '- HTTP operations may be restricted in current context\\';
+        TestResults += '- Try running from a different page or action\\';
+        TestResults += '- Use "Refresh Status (Local Analysis)" as alternative\\';
 
         TestResults += '\\Recommendations:\\';
         TestResults += '1. Try running from the main e-Invoice Submission Log page\\';
@@ -1163,8 +1163,8 @@ codeunit 50312 "eInvoice Submission Status"
     /// Extract status from response text with proper capitalization
     /// 
     /// STATUS FLOW EXPLANATION:
-    /// 1. Initially when documents are submitted → Status = "Submitted"
-    /// 2. LHDN processes the submission → Status changes to one of:
+    /// 1. Initially when documents are submitted > Status = "Submitted"
+    /// 2. LHDN processes the submission > Status changes to one of:
     ///    - "Valid": All documents passed validation
     ///    - "Invalid": All documents failed validation  
     ///    - "In Progress": Documents still being processed
@@ -1787,9 +1787,9 @@ codeunit 50312 "eInvoice Submission Status"
                 Message('Failed to refresh status from LHDN.\\\\' +
                        'Error: %1\\\\' +
                        'Please check:\\' +
-                       '• Network connectivity\\' +
-                       '• LHDN API availability\\' +
-                       '• Submission UID validity\\\\' +
+                       '- Network connectivity\\' +
+                       '- LHDN API availability\\' +
+                       '- Submission UID validity\\\\' +
                        'The error has been logged for reference.',
                        SubmissionDetails);
                 exit(false);

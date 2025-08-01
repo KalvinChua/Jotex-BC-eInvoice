@@ -150,37 +150,37 @@ codeunit 50310 "eInvoice Azure Function Client"
                 Error('Azure Function - Bad Request (400)\\\\' +
                       'Error Details:\\%1\\\\' +
                       'Common Causes:\\' +
-                      '• Invalid JSON payload structure\\' +
-                      '• Missing required fields in request\\' +
-                      '• Malformed UBL document structure\\' +
-                      '• Invalid certificate configuration\\\\' +
+                      '- Invalid JSON payload structure\\' +
+                      '- Missing required fields in request\\' +
+                      '- Malformed UBL document structure\\' +
+                      '- Invalid certificate configuration\\\\' +
                       'Correlation ID: %2\\' +
                       'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             401:
                 Error('Azure Function - Unauthorized (401)\\\\' +
                       'Authentication Issues:\\' +
-                      '• Function requires authentication\\' +
-                      '• Invalid or expired authentication token\\' +
-                      '• Missing authentication headers\\\\' +
+                      '- Function requires authentication\\' +
+                      '- Invalid or expired authentication token\\' +
+                      '- Missing authentication headers\\\\' +
                       'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
             404:
                 Error('Azure Function - Not Found (404)\\\\' +
                       'Endpoint Issues:\\' +
-                      '• Function URL is incorrect\\' +
-                      '• Function has been deleted or moved\\' +
-                      '• Function name or route is wrong\\\\' +
+                      '- Function URL is incorrect\\' +
+                      '- Function has been deleted or moved\\' +
+                      '- Function name or route is wrong\\\\' +
                       'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
             429:
                 Error('Azure Function - Too Many Requests (429)\\\\' +
                       'Rate Limiting:\\' +
-                      '• Function is rate limited\\' +
-                      '• Too many concurrent requests\\' +
-                      '• Wait before retrying\\\\' +
+                      '- Function is rate limited\\' +
+                      '- Too many concurrent requests\\' +
+                      '- Wait before retrying\\\\' +
                       'Correlation ID: %1\\' +
                       'Endpoint: %2', CorrelationId, FunctionUrl);
 
@@ -188,30 +188,30 @@ codeunit 50310 "eInvoice Azure Function Client"
                 Error('Azure Function - Internal Server Error (500)\\\\' +
                       'Error Details:\\%1\\\\' +
                       'Server-Side Issues:\\' +
-                      '• Function code exceptions or bugs\\' +
-                      '• Digital signature certificate problems\\' +
-                      '• External service dependencies unavailable\\' +
-                      '• Resource constraints (memory/CPU)\\' +
-                      '• Configuration errors in Function App\\\\' +
+                      '- Function code exceptions or bugs\\' +
+                      '- Digital signature certificate problems\\' +
+                      '- External service dependencies unavailable\\' +
+                      '- Resource constraints (memory/CPU)\\' +
+                      '- Configuration errors in Function App\\\\' +
                       'Next Steps:\\' +
-                      '• Check Application Insights logs\\' +
-                      '• Verify certificate availability\\' +
-                      '• Review Function App configuration\\' +
-                      '• Check resource utilization\\\\' +
+                      '- Check Application Insights logs\\' +
+                      '- Verify certificate availability\\' +
+                      '- Review Function App configuration\\' +
+                      '- Check resource utilization\\\\' +
                       'Correlation ID: %2\\' +
                       'Endpoint: %3', ErrorDetails, CorrelationId, FunctionUrl);
 
             502, 503, 504:
                 Error('Azure Function - Service Unavailable (%1)\\\\' +
                       'Infrastructure Issues:\\' +
-                      '• Function App is scaling or restarting\\' +
-                      '• Load balancer or gateway problems\\' +
-                      '• Temporary service outage\\' +
-                      '• Cold start timeout issues\\\\' +
+                      '- Function App is scaling or restarting\\' +
+                      '- Load balancer or gateway problems\\' +
+                      '- Temporary service outage\\' +
+                      '- Cold start timeout issues\\\\' +
                       'Recommended Actions:\\' +
-                      '• Wait a few minutes and retry\\' +
-                      '• Check Azure Status page\\' +
-                      '• Verify Function App scaling settings\\\\' +
+                      '- Wait a few minutes and retry\\' +
+                      '- Check Azure Status page\\' +
+                      '- Verify Function App scaling settings\\\\' +
                       'Correlation ID: %2\\' +
                       'Endpoint: %3', StatusCode, CorrelationId, FunctionUrl);
 

@@ -172,7 +172,7 @@ codeunit 50300 eInvoiceHelper
             exit(Token);
         end;
 
-        // Token missing, expired, or near expiry – generate new with retry logic
+        // Token missing, expired, or near expiry - generate new with retry logic
         LogTokenOperation('Generating new token (automatic refresh)', '', 0DT);
 
         for RetryAttempt := 1 to MaxRetries do begin
@@ -541,7 +541,7 @@ codeunit 50300 eInvoiceHelper
         if not IsValid then begin
             ErrorMessage := 'eInvoice Configuration Validation Failed\n\nMissing Configuration:\n';
             foreach ErrorText in ValidationErrors do
-                ErrorMessage += '• ' + ErrorText + '\n';
+                ErrorMessage += '- ' + ErrorText + '\n';
 
             ErrorMessage += '\nPlease complete the configuration in e-Invoice Setup and try again.';
             Error(ErrorMessage);

@@ -97,7 +97,7 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
 
         if not Success then begin
-            Error('Failed to communicate with Azure Function.\n\nPlease check:\n• Network connectivity\n• Azure Function availability\n• Azure Function URL configuration\n\nError Details: %1', ResponseText);
+            Error('Failed to communicate with Azure Function.\n\nPlease check:\n- Network connectivity\n- Azure Function availability\n- Azure Function URL configuration\n\nError Details: %1', ResponseText);
         end;
         exit(true);
     end;
@@ -198,23 +198,23 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Check HTTPS
         HasHttps := Url.StartsWith('https://');
-        Analysis += '• HTTPS: ' + Format(HasHttps) + '\n';
+        Analysis += '- HTTPS: ' + Format(HasHttps) + '\n';
 
         // Check Azure Websites domain
         HasAzureWebsites := Url.Contains('azurewebsites.net');
-        Analysis += '• Azure Domain: ' + Format(HasAzureWebsites) + '\n';
+        Analysis += '- Azure Domain: ' + Format(HasAzureWebsites) + '\n';
 
         // Extract app name
         if HasHttps and HasAzureWebsites then begin
             AppName := CopyStr(Url, 9); // Remove https://
             if AppName.Contains('.') then
                 AppName := CopyStr(AppName, 1, AppName.IndexOf('.') - 1);
-            Analysis += '• App Name: ' + AppName + '\n';
+            Analysis += '- App Name: ' + AppName + '\n';
         end;
 
         // Check API path
         HasApi := Url.Contains('/api/');
-        Analysis += '• API Path: ' + Format(HasApi) + '\n';
+        Analysis += '- API Path: ' + Format(HasApi) + '\n';
 
         // Extract function name
         if HasApi then begin
@@ -222,18 +222,18 @@ codeunit 50302 "eInvoice JSON Generator"
             FunctionName := CopyStr(Url, ApiPos + 5);
             if FunctionName.Contains('?') then
                 FunctionName := CopyStr(FunctionName, 1, FunctionName.IndexOf('?') - 1);
-            Analysis += '• Function Name: ' + FunctionName + '\n';
+            Analysis += '- Function Name: ' + FunctionName + '\n';
         end;
 
         // Check function key
         HasCode := Url.Contains('?code=');
-        Analysis += '• Has Function Key: ' + Format(HasCode) + '\n';
+        Analysis += '- Has Function Key: ' + Format(HasCode) + '\n';
 
         // Overall assessment
         if HasHttps and HasAzureWebsites and HasApi and HasCode then
-            Analysis += '• Overall: URL format looks correct'
+            Analysis += '- Overall: URL format looks correct'
         else
-            Analysis += '• Overall: URL format may have issues';
+            Analysis += '- Overall: URL format may have issues';
 
         exit(Analysis);
     end;
@@ -1967,7 +1967,7 @@ codeunit 50302 "eInvoice JSON Generator"
     end;
 
     /// <summary>
-    /// Complete integration workflow: Generate → Sign → Submit to LHDN
+    /// Complete integration workflow: Generate > Sign > Submit to LHDN
     /// Handles the full process from unsigned JSON to LHDN submission with proper error handling
     /// </summary>
     /// <param name="SalesInvoiceHeader">Sales Invoice record to process</param>
@@ -2679,17 +2679,17 @@ codeunit 50302 "eInvoice JSON Generator"
                 // Build error details
                 ErrorDetails := 'Error Details:\n';
                 if ErrorCode <> '' then
-                    ErrorDetails += StrSubstNo('• Error Code: %1\n', ErrorCode);
+                    ErrorDetails += StrSubstNo('- Error Code: %1\n', ErrorCode);
                 if ErrorMessage <> '' then
-                    ErrorDetails += StrSubstNo('• Error (EN): %1\n', ErrorMessage);
+                    ErrorDetails += StrSubstNo('- Error (EN): %1\n', ErrorMessage);
                 if ErrorMS <> '' then
-                    ErrorDetails += StrSubstNo('• Error (MS): %1\n', ErrorMS);
+                    ErrorDetails += StrSubstNo('- Error (MS): %1\n', ErrorMS);
                 if PropertyName <> '' then
-                    ErrorDetails += StrSubstNo('• Property: %1\n', PropertyName);
+                    ErrorDetails += StrSubstNo('- Property: %1\n', PropertyName);
                 if PropertyPath <> '' then
-                    ErrorDetails += StrSubstNo('• Path: %1\n', PropertyPath);
+                    ErrorDetails += StrSubstNo('- Path: %1\n', PropertyPath);
                 if Target <> '' then
-                    ErrorDetails += StrSubstNo('• Target: %1\n', Target);
+                    ErrorDetails += StrSubstNo('- Target: %1\n', Target);
 
                 // Process inner errors if present
                 if ErrorObject.Get('innerError', JsonToken) and JsonToken.IsArray() then begin
@@ -3899,7 +3899,7 @@ codeunit 50302 "eInvoice JSON Generator"
 
             if DocumentDetails <> '' then
                 DocumentDetails += '\\';
-            DocumentDetails += StrSubstNo('  • Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
+            DocumentDetails += StrSubstNo('  - Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
         end;
 
         // Process rejected documents
@@ -3919,7 +3919,7 @@ codeunit 50302 "eInvoice JSON Generator"
                 if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
                     InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                DocumentDetails += StrSubstNo('  • Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
+                DocumentDetails += StrSubstNo('  - Invoice: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
 
                 // Add error details if available with safe type conversion
                 if DocumentJson.Get('error', JsonToken) then

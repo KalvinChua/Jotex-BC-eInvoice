@@ -1,110 +1,66 @@
-# Context Restriction Fix for e-Invoice Cancellation
+# Context Restriction Fix for e-Invoice Cancellation - FINAL SOLUTION
 
-## Issue Description
-When attempting to cancel an e-Invoice from the Posted Sales Invoice page, the following error occurred:
+## Problem Summary
+Despite multiple attempts using TryFunctions and transaction isolation, the error "The requested operation cannot be performed in this context" persisted when trying to update the submission log from page actions.
 
-```
-Error message: The requested operation cannot be performed in this context.
-AL call stack: 
-"eInv Posting Subscribers"(CodeUnit 50305).CancelEInvoiceDocument line 73 - KMAXDev by KMAX version 1.0.0.32
-eInvPostedSalesInvoiceExt(PageExtension 50306)."CancelEInvoice - OnAction"(Trigger) line 34 - KMAXDev by KMAX version 1.0.0.32
-```
+## Final Solution Implemented
 
-## Root Cause
-The error occurs because Business Central has context restrictions when performing database operations (like `Modify()`) directly from page actions. The original code attempted to modify the eInvoice Submission Log record directly within the page action context, which is not allowed.
+### Strategy: Complete Separation of Concerns
+Instead of trying to work around context restrictions, we've completely separated the LHDN API cancellation from local database updates.
 
-## Solution Implemented
+### Key Components Added:
 
-### 1. TryFunction Approach
-- Added `TryUpdateCancellationStatus` as a TryFunction to safely attempt database modifications
-- This allows graceful handling of context restriction errors without crashing the operation
+#### 1. New Helper Codeunit (`Cod50320.eInvoiceCancellationHelper.al`)
+- Handles database updates in isolated context
+- Provides safe methods for updating cancellation status
+- Can be called from different execution contexts
 
-### 2. Enhanced Error Handling
-- The cancellation now succeeds even if the local log update fails
-- Users receive clear feedback about what succeeded and what failed
-- Added telemetry event ID `0000EIV05` for log update failures
+#### 2. Modified Main Cancellation Procedure
+- Focuses solely on LHDN API call success
+- Uses helper codeunit for database updates with TryFunction protection
+- Returns success based on LHDN response, not local database updates
 
-### 3. Alternative Transaction Method
-- Added `CancelEInvoiceDocumentWithIsolation` as a backup method
-- Uses transaction isolation to work around context restrictions
-- Provides a fallback when the primary method encounters context issues
+#### 3. Manual Recovery Action
+- Added "Mark as Cancelled" action to submission log page
+- Allows users to manually update status when automatic update fails
+- Only visible for valid submissions in JOTEX company
 
-### 4. Additional Permissions
-- Added `tabledata "eInvoice Submission Log" = M` permission to the codeunit
-- Ensures the codeunit has proper modify permissions for the submission log
+### Updated User Experience:
 
-### 5. Improved Page Action Logic
-- Primary method: Try standard cancellation with TryFunction protection
-- Fallback method: Use transaction isolation approach
-- Enhanced error reporting with `GetLastErrorText()` integration
+#### Best Case Scenario:
+1. User cancels e-Invoice
+2. LHDN API succeeds
+3. Local database updates automatically
+4. User sees complete success
 
-## Code Changes Summary
+#### Context Restriction Scenario:
+1. User cancels e-Invoice  
+2. LHDN API succeeds ✅
+3. Local update fails due to context restrictions
+4. User informed about LHDN success and manual update option
+5. User can use "Mark as Cancelled" action to complete the process
 
-### Codeunit 50305 Changes:
-1. **Added TryFunction for safe database updates**:
-   ```al
-   [TryFunction]
-   local procedure TryUpdateCancellationStatus(var eInvoiceSubmissionLog: Record "eInvoice Submission Log"; CancellationReason: Text)
-   ```
+### Files Created/Modified:
 
-2. **Added alternative transaction method**:
-   ```al
-   procedure CancelEInvoiceDocumentWithIsolation(SalesInvoiceHeader: Record "Sales Invoice Header"; CancellationReason: Text): Boolean
-   ```
+#### New Files:
+- `Cod50320.eInvoiceCancellationHelper.al` - Database update helper
 
-3. **Enhanced permissions**:
-   ```al
-   Permissions = tabledata "Sales Invoice Header" = M,
-                 tabledata "eInvoice Submission Log" = M;
-   ```
+#### Modified Files:
+- `Cod50305.eInvSalesInvPostingSub.al` - Separated API call from database updates
+- `Pag50315.eInvoiceSubmissionLogCard.al` - Added manual recovery action
+- API endpoint corrected to use `/documents/state/{UUID}/state`
 
-### Page Extension 50306 Changes:
-1. **Enhanced error handling in action trigger**
-2. **Added fallback method call**
-3. **Improved user feedback messages**
+### Benefits:
+✅ **No More Context Errors**: LHDN cancellation always works  
+✅ **Business Continuity**: Critical operations never blocked  
+✅ **User-Friendly**: Clear feedback and recovery options  
+✅ **API Compliant**: Uses correct LHDN endpoint specification  
+✅ **Maintainable**: Clean separation of concerns  
 
-## Expected Behavior After Fix
+### Telemetry Events:
+- `0000EIV03`: Successful LHDN cancellation
+- `0000EIV04`: Failed LHDN cancellation  
+- `0000EIV06`: Database update status tracking
+- `0000EIV07`: Manual status updates
 
-### Successful Cancellation:
-1. User clicks "Cancel e-Invoice"
-2. Confirms cancellation and selects reason
-3. System calls LHDN API successfully
-4. Local submission log is updated
-5. User sees success message
-6. Page refreshes to show updated status
-
-### Partial Success (Context Restriction):
-1. User clicks "Cancel e-Invoice"
-2. Confirms cancellation and selects reason
-3. System calls LHDN API successfully
-4. Local log update fails due to context restrictions
-5. User sees message: "e-Invoice has been cancelled in LHDN system, but failed to update local log. Please refresh the submission log manually."
-6. Cancellation is still considered successful since LHDN accepted it
-
-### Complete Failure:
-1. Clear error message indicating what failed
-2. User guidance on next steps
-3. Proper telemetry logging for troubleshooting
-
-## Testing Recommendations
-
-1. **Test normal cancellation flow** - Should work without errors
-2. **Test context restriction scenarios** - Should use fallback method gracefully
-3. **Verify LHDN API integration** - Ensure actual cancellation occurs in LHDN system
-4. **Check submission log updates** - Verify cancellation details are recorded
-5. **Test error scenarios** - Invalid invoices, network issues, etc.
-
-## Future Improvements
-
-1. **Background Job Processing**: Implement cancellation as a background job to completely avoid context restrictions
-2. **Retry Logic**: Add automatic retry mechanisms for failed log updates
-3. **Batch Cancellation**: Support cancelling multiple invoices at once
-4. **Workflow Integration**: Add approval workflow for cancellations if needed
-
-## Technical Notes
-
-- The fix maintains backward compatibility
-- LHDN API integration remains unchanged
-- Error handling is non-breaking (operations continue even if local updates fail)
-- Telemetry logging provides full audit trail
-- Multiple fallback methods ensure high success rate
+This solution ensures the critical business requirement (LHDN cancellation) always succeeds while providing clear paths for completing local database updates.
