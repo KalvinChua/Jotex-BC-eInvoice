@@ -642,7 +642,7 @@ codeunit 50302 "eInvoice JSON Generator"
         // Postal address
         AddBasicField(PostalAddressObject, 'CityName', CompanyInfo.City);
         AddBasicField(PostalAddressObject, 'PostalZone', CompanyInfo."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(CompanyInfo."City"));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetCompanyStateCode(CompanyInfo));
         AddAddressLines(PostalAddressObject, CompanyInfo.Address, CompanyInfo."Address 2", '');
         AddCountry(PostalAddressObject, GetCountryCode(CompanyInfo."e-Invoice Country Code"));
         PostalAddressArray.Add(PostalAddressObject);
@@ -688,7 +688,7 @@ codeunit 50302 "eInvoice JSON Generator"
         // Postal address
         AddBasicField(PostalAddressObject, 'CityName', Customer.City);
         AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer."City"));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetCustomerStateCode(Customer));
         AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
         AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
         PostalAddressArray.Add(PostalAddressObject);
@@ -746,7 +746,7 @@ codeunit 50302 "eInvoice JSON Generator"
         // Delivery address - use customer address
         AddBasicField(PostalAddressObject, 'CityName', Customer.City);
         AddBasicField(PostalAddressObject, 'PostalZone', Customer."Post Code");
-        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetStateCode(Customer.City));
+        AddBasicField(PostalAddressObject, 'CountrySubentityCode', GetCustomerStateCode(Customer));
         AddAddressLines(PostalAddressObject, Customer.Address, Customer."Address 2", '');
         AddCountry(PostalAddressObject, GetCountryCode(Customer."Country/Region Code"));
         PostalAddressArray.Add(PostalAddressObject);
@@ -868,12 +868,38 @@ codeunit 50302 "eInvoice JSON Generator"
     end;
 
     local procedure GetPaymentMeansCode(SalesInvoiceHeader: Record "Sales Invoice Header"): Code[10]
+    var
+        PaymentMode: Code[10];
     begin
         // Return the payment mode from the invoice header
-        if SalesInvoiceHeader."eInvoice Payment Mode" <> '' then
-            exit(SalesInvoiceHeader."eInvoice Payment Mode")
-        else
-            exit('01'); // Default to bank transfer if not specified
+        PaymentMode := SalesInvoiceHeader."eInvoice Payment Mode";
+
+        // Validate and return appropriate payment mode
+        case PaymentMode of
+            '01':
+                exit('01'); // Cash
+            '02':
+                exit('02'); // Cheque  
+            '03':
+                exit('03'); // Bank Transfer
+            '04':
+                exit('04'); // Credit Card
+            '05':
+                exit('05'); // Debit Card
+            '06':
+                exit('06'); // e-Wallet / Digital Wallet
+            '07':
+                exit('07'); // Digital Bank
+            '08':
+                exit('08'); // Others
+            else begin
+                // Log warning for debugging
+                LogDebugInfo('Payment Mode Warning',
+                    StrSubstNo('Invalid or empty payment mode "%1" for invoice %2. Defaulting to Bank Transfer.',
+                        PaymentMode, SalesInvoiceHeader."No."));
+                exit('03'); // Default to Bank Transfer (code 03) if not specified or invalid
+            end;
+        end;
     end;
 
     local procedure AddPaymentTerms(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -1602,6 +1628,34 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
     end;
 
+    local procedure GetCustomerStateCode(Customer: Record Customer): Text
+    begin
+        // First priority: Use the e-Invoice State Code if populated
+        if Customer."e-Invoice State Code" <> '' then
+            exit(Customer."e-Invoice State Code");
+
+        // Second priority: Use County field and convert to state code
+        if Customer.County <> '' then
+            exit(GetStateCode(Customer.County));
+
+        // Fallback: Return Not Applicable
+        exit('17');
+    end;
+
+    local procedure GetCompanyStateCode(CompanyInfo: Record "Company Information"): Text
+    begin
+        // First priority: Use the e-Invoice State Code if populated
+        if CompanyInfo."e-Invoice State Code" <> '' then
+            exit(CompanyInfo."e-Invoice State Code");
+
+        // Second priority: Use County field and convert to state code (if Company Info has County field)
+        // Note: Standard Company Information table doesn't have County field
+        // You might need to add a County field to your Company Information extension
+
+        // Fallback: Return Not Applicable
+        exit('17');
+    end;
+
     local procedure GetCountryCode(CountryRegionCode: Code[10]): Code[10]
     begin
         case UpperCase(CountryRegionCode) of
@@ -1734,13 +1788,25 @@ codeunit 50302 "eInvoice JSON Generator"
         BankAccount: Record "Bank Account";
     begin
         // Get the company's bank account number for payments
+
+        // Try Company Information first
         if CompanyInformation.Get() then begin
-            // Find the first bank account or use a specific one based on your setup
+            if CompanyInformation."Bank Account No." <> '' then
+                exit(CompanyInformation."Bank Account No.");
+
+            // Find the first non-blocked bank account with actual account number
             BankAccount.SetRange(Blocked, false);
-            if BankAccount.FindFirst() then
-                exit(BankAccount."No.");
+            BankAccount.SetFilter("Bank Account No.", '<>%1', '');
+            if BankAccount.FindFirst() then begin
+                if BankAccount."Bank Account No." <> '' then
+                    exit(BankAccount."Bank Account No.")
+                else if BankAccount."No." <> '' then
+                    exit(BankAccount."No.");
+            end;
         end;
-        exit('1234567890123'); // Default bank account if not found
+
+        // Return empty string if no bank account found
+        exit('');
     end;
 
     local procedure GetPaymentTermsNote(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
@@ -1783,23 +1849,8 @@ codeunit 50302 "eInvoice JSON Generator"
 
     local procedure GetPaymentTermsDueText(DueDateCalculation: DateFormula): Text
     begin
-        // Convert date formula to readable text
-        case Format(DueDateCalculation) of
-            '0D':
-                exit('Payment due immediately');
-            '7D', '+7D':
-                exit('Payment due in 7 days');
-            '14D', '+14D':
-                exit('Payment due in 14 days');
-            '30D', '+30D', '+1M':
-                exit('Payment due in 30 days');
-            '+2M':
-                exit('Payment due in 60 days');
-            '+3M':
-                exit('Payment due in 90 days');
-            else
-                exit('Payment due ' + Format(DueDateCalculation));
-        end;
+        // Return just the code instead of descriptive text
+        exit(Format(DueDateCalculation));
     end;
 
     local procedure GetPaymentModeDescription(SalesInvoiceHeader: Record "Sales Invoice Header"): Text
@@ -1811,19 +1862,23 @@ codeunit 50302 "eInvoice JSON Generator"
 
         case PaymentModeCode of
             '01':
-                exit('Bank Transfer');
+                exit('Cash');
             '02':
                 exit('Cheque');
             '03':
-                exit('Cash Payment');
+                exit('Bank Transfer');
             '04':
                 exit('Credit Card');
             '05':
                 exit('Debit Card');
             '06':
-                exit('e-Wallet/Digital Wallet');
+                exit('e-Wallet / Digital Wallet');
+            '07':
+                exit('Digital Bank');
+            '08':
+                exit('Others');
             else
-                exit('Other Payment Method');
+                exit(''); // Return empty string if no valid payment mode
         end;
     end;
 
@@ -1861,11 +1916,8 @@ codeunit 50302 "eInvoice JSON Generator"
             end;
         end;
 
-        // Fallback to type-based classification if field is empty in both regular and archived lines
-        if SalesInvoiceLine.Type = SalesInvoiceLine.Type::Item then
-            exit('001') // Goods
-        else
-            exit('002'); // Services
+        // Fallback to universal classification if field is empty in both regular and archived lines
+        exit('022'); // Universal fallback classification
     end;
 
     local procedure HasPrepaidAmount(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
@@ -2044,16 +2096,28 @@ codeunit 50302 "eInvoice JSON Generator"
         // Generate correlation ID for tracking
         CorrelationId := CreateGuid();
 
-        // Get setup for environment information
-        if Setup.Get('SETUP') then;
+        // Get setup and validate environment
+        if not Setup.Get('SETUP') then begin
+            ResponseText := 'Error: eInvoice Setup not found';
+            exit(false);
+        end;
+
+        // Validate environment before proceeding
+        if not ValidateEnvironmentBeforeSigning(Setup) then begin
+            ResponseText := 'Error: Environment validation failed';
+            exit(false);
+        end;
 
         // Build BusinessCentralSigningRequest payload matching Azure Function model
         RequestPayload.Add('correlationId', CorrelationId);
-        RequestPayload.Add('environment', Format(Setup.Environment));
         RequestPayload.Add('invoiceType', '01'); // Standard invoice
         RequestPayload.Add('unsignedJson', JsonText);
         RequestPayload.Add('submissionId', CorrelationId);
         RequestPayload.Add('requestedBy', UserId());
+
+        // Enhance payload with validated environment information
+        EnhancePayloadWithEnvironmentInfo(RequestPayload, Setup);
+
         RequestPayload.WriteTo(RequestText);
 
         // Try Microsoft's Azure Functions approach first, then fallback to direct HttpClient
@@ -2062,6 +2126,14 @@ codeunit 50302 "eInvoice JSON Generator"
         if not Success then begin
             // Fallback to direct HttpClient approach
             Success := TryDirectHttpClient(AzureFunctionUrl, RequestText, ResponseText, CorrelationId, MaxRetries);
+        end;
+
+        // Validate the signed response if successful
+        if Success and (ResponseText <> '') then begin
+            if not ValidateSignedResponse(ResponseText, Format(Setup.Environment)) then begin
+                ResponseText := 'Error: Signed response environment validation failed';
+                exit(false);
+            end;
         end;
 
         exit(Success);
@@ -4081,5 +4153,74 @@ codeunit 50302 "eInvoice JSON Generator"
                 CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
 
         exit(CleanText);
+    end;
+
+    /// <summary>
+    /// Validates environment configuration before signing
+    /// Ensures only valid environments (Preprod/Production) are used
+    /// </summary>
+    /// <param name="Setup">eInvoice Setup record</param>
+    /// <returns>True if environment is valid</returns>
+    local procedure ValidateEnvironmentBeforeSigning(Setup: Record "eInvoiceSetup"): Boolean
+    begin
+        if Setup.Environment = Setup.Environment::Preprod then
+            exit(true)
+        else if Setup.Environment = Setup.Environment::Production then
+            exit(true)
+        else
+            Error('Invalid environment configuration. Must be either Preprod or Production.');
+    end;
+
+    /// <summary>
+    /// Gets expected certificate name based on environment
+    /// Used for Azure Function validation
+    /// </summary>
+    /// <param name="Environment">Environment option value</param>
+    /// <returns>Expected certificate name</returns>
+    local procedure GetExpectedCertificateName(Environment: Option): Text
+    begin
+        case Environment of
+            0: // Preprod
+                exit('JOTEX_SDN._BHD..p12');
+            1: // Production
+                exit('CERT_19448802.p12');
+            else
+                exit('UNKNOWN-CERT');
+        end;
+    end;
+
+    /// <summary>
+    /// Validates the signed response from Azure Function
+    /// Ensures the response matches expected environment
+    /// </summary>
+    /// <param name="SignedJson">Signed JSON response from Azure Function</param>
+    /// <param name="ExpectedEnvironment">Expected environment value</param>
+    /// <returns>True if response environment matches expected</returns>
+    local procedure ValidateSignedResponse(SignedJson: Text; ExpectedEnvironment: Text): Boolean
+    var
+        ResponseObject: JsonObject;
+        EnvironmentToken: JsonToken;
+    begin
+        if ResponseObject.ReadFrom(SignedJson) then begin
+            if ResponseObject.Get('environment', EnvironmentToken) then begin
+                exit(EnvironmentToken.AsValue().AsText() = ExpectedEnvironment);
+            end;
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Enhances request payload with environment validation information
+    /// Adds environment details for Azure Function processing
+    /// </summary>
+    /// <param name="RequestPayload">JSON payload to enhance</param>
+    /// <param name="Setup">eInvoice Setup record</param>
+    local procedure EnhancePayloadWithEnvironmentInfo(var RequestPayload: JsonObject; Setup: Record "eInvoiceSetup")
+    begin
+        // Enhanced environment information
+        RequestPayload.Add('environment', Format(Setup.Environment));
+        RequestPayload.Add('environmentValidated', true);
+        RequestPayload.Add('certificateExpected', GetExpectedCertificateName(Setup.Environment));
+        RequestPayload.Add('validationTimestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
     end;
 }

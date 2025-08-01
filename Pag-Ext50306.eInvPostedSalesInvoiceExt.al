@@ -247,6 +247,71 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     SubmissionLogPage.RunModal();
                 end;
             }
+
+            action(CancelEInvoice)
+            {
+                ApplicationArea = All;
+                Caption = 'Cancel e-Invoice';
+                Image = Cancel;
+                Promoted = true;
+                PromotedCategory = Process;
+                ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
+                    CancellationReason: Text;
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
+                    ReasonPrompt: Label 'Please enter the reason for cancellation:';
+                begin
+                    // Verify that the invoice has been submitted and is valid
+                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    SubmissionLog.SetRange(Status, 'Valid');
+                    if not SubmissionLog.FindLast() then begin
+                        Message('This invoice has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
+                        exit;
+                    end;
+
+                    // Check if already cancelled
+                    if SubmissionLog.Status = 'Cancelled' then begin
+                        Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
+                                SubmissionLog."Cancellation Reason",
+                                Format(SubmissionLog."Cancellation Date"));
+                        exit;
+                    end;
+
+                    // Confirm cancellation
+                    if not Confirm(ConfirmMsg, false, Rec."No.") then
+                        exit;
+
+                    // Get cancellation reason
+                    CancellationReason := SelectCancellationReason();
+                    if CancellationReason = '' then
+                        exit;
+
+                    // Proceed with cancellation
+                    ClearLastError();
+                    if eInvPostingSubscribers.CancelEInvoiceDocument(Rec, CancellationReason) then begin
+                        // Refresh the page to show updated status
+                        CurrPage.Update(false);
+                    end else begin
+                        // Try alternative method with transaction isolation
+                        ClearLastError();
+                        if eInvPostingSubscribers.CancelEInvoiceDocumentWithIsolation(Rec, CancellationReason) then begin
+                            Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                            CurrPage.Update(false);
+                        end else begin
+                            // Show any error that occurred
+                            if GetLastErrorText() <> '' then
+                                Message('Cancellation failed with error:\%1', GetLastErrorText())
+                            else
+                                Message('Cancellation operation failed. Please check the submission log for details.');
+                        end;
+                    end;
+                end;
+            }
         }
     }
 
@@ -555,5 +620,44 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     local procedure TryCallLhdnApi(var SubmissionStatusCU: Codeunit "eInvoice Submission Status"; SubmissionUID: Text; var SubmissionDetails: Text)
     begin
         SubmissionStatusCU.CheckSubmissionStatus(SubmissionUID, SubmissionDetails);
+    end;
+
+    /// <summary>
+    /// Shows a dialog to select cancellation reason
+    /// </summary>
+    /// <returns>Selected cancellation reason or empty string if cancelled</returns>
+    local procedure SelectCancellationReason(): Text
+    var
+        ReasonOptions: Dialog;
+        Selection: Integer;
+        CustomReason: Text;
+        ReasonText: Text;
+    begin
+        ReasonText := '';
+
+        // Show options dialog
+        Selection := Dialog.StrMenu('Wrong buyer,Wrong invoice details,Duplicate invoice,Technical error,Buyer cancellation request,Other business reason', 1, 'Select cancellation reason:');
+
+        case Selection of
+            1:
+                ReasonText := 'Wrong buyer information';
+            2:
+                ReasonText := 'Incorrect invoice details';
+            3:
+                ReasonText := 'Duplicate invoice submission';
+            4:
+                ReasonText := 'Technical error during submission';
+            5:
+                ReasonText := 'Cancellation requested by buyer';
+            6:
+                begin
+                    // For custom reason, we'll use a predefined text since we can't easily prompt for input
+                    ReasonText := 'Other business reason - Contact support for details';
+                end;
+            else
+                ReasonText := '';
+        end;
+
+        exit(ReasonText);
     end;
 }

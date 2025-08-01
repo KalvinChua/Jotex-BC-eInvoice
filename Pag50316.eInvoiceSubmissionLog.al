@@ -65,6 +65,18 @@ page 50316 "e-Invoice Submission Log"
                     ToolTip = 'Specifies any error message received from LHDN.';
                     Visible = false;
                 }
+                field("Cancellation Reason"; Rec."Cancellation Reason")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the reason for cancellation if the document was cancelled.';
+                    Visible = Rec.Status = 'Cancelled';
+                }
+                field("Cancellation Date"; Rec."Cancellation Date")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies when the document was cancelled in LHDN.';
+                    Visible = Rec.Status = 'Cancelled';
+                }
             }
         }
     }

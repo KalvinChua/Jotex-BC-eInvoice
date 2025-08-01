@@ -97,6 +97,23 @@ page 50315 "e-Invoice Submission Log Card"
                     MultiLine = true;
                 }
             }
+
+            group(Cancellation)
+            {
+                Caption = 'Cancellation Information';
+                Visible = Rec.Status = 'Cancelled';
+                field("Cancellation Reason"; Rec."Cancellation Reason")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the reason for cancellation.';
+                    MultiLine = true;
+                }
+                field("Cancellation Date"; Rec."Cancellation Date")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies when the document was cancelled in LHDN.';
+                }
+            }
         }
     }
 

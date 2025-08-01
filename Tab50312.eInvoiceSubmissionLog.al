@@ -78,6 +78,16 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Customer Name';
             DataClassification = CustomerContent;
         }
+        field(15; "Cancellation Reason"; Text[500])
+        {
+            Caption = 'Cancellation Reason';
+            DataClassification = CustomerContent;
+        }
+        field(16; "Cancellation Date"; DateTime)
+        {
+            Caption = 'Cancellation Date';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

@@ -43,13 +43,25 @@ codeunit 50306 "eInv Field Population"
 
         // Set default document type for invoices
         if Rec."Document Type" = Rec."Document Type"::Invoice then
-            Rec."eInvoice Document Type" := '01'; // Standard invoice code
+            Rec."eInvoice Document Type" := '01';
         if Rec."Document Type" = Rec."Document Type"::Order then
-            Rec."eInvoice Document Type" := '01'; // Standard invoice code
+            Rec."eInvoice Document Type" := '01';
         if Rec."Document Type" = Rec."Document Type"::"Credit Memo" then
-            Rec."eInvoice Document Type" := '02'; // Credit Note code
+            Rec."eInvoice Document Type" := '02';
         if Rec."Document Type" = Rec."Document Type"::"Return Order" then
-            Rec."eInvoice Document Type" := '04'; // Credit Note code
+            Rec."eInvoice Document Type" := '04';
+
+        // Set default eInvoice Currency Code
+        if Rec."Currency Code" = '' then
+            Rec."eInvoice Currency Code" := 'MYR'
+        else
+            Rec."eInvoice Currency Code" := Rec."Currency Code";
+
+        // Set default eInvoice Currency Code to MYR if Currency Code is empty
+        if Rec."Currency Code" = '' then
+            Rec."eInvoice Currency Code" := 'MYR'
+        else
+            Rec."eInvoice Currency Code" := Rec."Currency Code";
     end;
 
     [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Sell-to Customer No.', false, false)]
@@ -60,7 +72,7 @@ codeunit 50306 "eInv Field Population"
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
             exit;
 
-        // For invoices, always use '01' unless already set
+        // Set default document type if not already set
         if (Rec."Document Type" = Rec."Document Type"::Invoice) and
            (Rec."eInvoice Document Type" = '')
         then
@@ -77,6 +89,33 @@ codeunit 50306 "eInv Field Population"
            (Rec."eInvoice Document Type" = '')
         then
             Rec."eInvoice Document Type" := '02';
+
+        // Set eInvoice Currency Code
+        if Rec."Currency Code" = '' then
+            Rec."eInvoice Currency Code" := 'MYR'
+        else
+            Rec."eInvoice Currency Code" := Rec."Currency Code";
+
+        // Set eInvoice Currency Code based on Currency Code
+        if Rec."Currency Code" = '' then
+            Rec."eInvoice Currency Code" := 'MYR'
+        else
+            Rec."eInvoice Currency Code" := Rec."Currency Code";
+    end;
+
+    [EventSubscriber(ObjectType::Table, Database::"Sales Header", 'OnAfterValidateEvent', 'Currency Code', false, false)]
+    local procedure SetDefaultEInvoiceCurrencyOnCurrencyChange(var Rec: Record "Sales Header"; var xRec: Record "Sales Header"; CurrFieldNo: Integer)
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
+        // Set eInvoice Currency Code based on Currency Code
+        if Rec."Currency Code" = '' then
+            Rec."eInvoice Currency Code" := 'MYR'
+        else
+            Rec."eInvoice Currency Code" := Rec."Currency Code";
     end;
 
     local procedure CopyEInvoiceFieldsFromItem(var SalesLine: Record "Sales Line")
@@ -123,7 +162,7 @@ codeunit 50306 "eInv Field Population"
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
             exit;
 
-        // Only process invoices (skip credit memos)
+        // Only process invoices
         if SalesInvHdrNo = '' then
             exit;
 
