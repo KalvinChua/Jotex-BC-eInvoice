@@ -144,26 +144,14 @@ page 50316 "e-Invoice Submission Log"
                             Rec."Error Message" := 'Status updated via direct API call: ' + LhdnStatus;
                             Rec.Modify();
 
-                            Message('Status refreshed successfully using direct API!\\\\' +
-                                   'Submission UID: %1\\' +
-                                   'New Status: %2\\' +
-                                   'Updated: %3',
-                                   Rec."Submission UID",
-                                   LhdnStatus,
-                                   Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
+                            Message('Status updated successfully.');
                         end else begin
                             // Update error message
                             Rec."Error Message" := CopyStr('Direct API call failed: Status ' + Format(HttpResponseMessage.HttpStatusCode) + ' - ' + ResponseText, 1, MaxStrLen(Rec."Error Message"));
                             Rec."Last Updated" := CurrentDateTime;
                             Rec.Modify();
 
-                            Message('Direct API Call FAILED\\\\' +
-                                   'Submission UID: %1\\' +
-                                   'Status Code: %2\\' +
-                                   'Error Response:\\%3',
-                                   Rec."Submission UID",
-                                   HttpResponseMessage.HttpStatusCode,
-                                   ResponseText);
+                            Message('Failed to retrieve status from LHDN.');
                         end;
                     end else begin
                         // Update error message
@@ -171,10 +159,7 @@ page 50316 "e-Invoice Submission Log"
                         Rec."Last Updated" := CurrentDateTime;
                         Rec.Modify();
 
-                        Message('Failed to send HTTP request to LHDN API\\\\' +
-                               'URL: %1\\' +
-                               'Last Error: %2',
-                               ApiUrl, GetLastErrorText());
+                        Message('Failed to connect to LHDN API.');
                     end;
 
                     CurrPage.Update(false);
