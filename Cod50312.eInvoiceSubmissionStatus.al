@@ -1173,19 +1173,74 @@ codeunit 50312 "eInvoice Submission Status"
     /// This procedure maps LHDN API response values to user-friendly display values
     /// API Note: Get Submission Status API returns info for ONE submission UID 
     /// (which can contain multiple documents), not per individual document
+    /// 
+    /// ENHANCED DOCUMENT-LEVEL STATUS DETECTION:
+    /// When DocumentUuid is provided, checks individual document status first,
+    /// then falls back to submission-level status if no match found.
     /// </summary>
     local procedure ExtractStatusFromResponse(ResponseText: Text): Text
     var
         Status: Text;
         JsonObject: JsonObject;
         JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        DocumentUuid: Text;
+        DocumentStatus: Text;
+        i: Integer;
     begin
         Status := 'Unknown';
 
         // Try to parse JSON response first for more accurate status extraction
         if JsonObject.ReadFrom(ResponseText) then begin
+            // NEW: Check document-level status first (more specific than submission-level)
+            if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+                DocumentSummaryArray := JsonToken.AsArray();
+
+                // If there's only one document in the submission, use its status directly
+                if DocumentSummaryArray.Count() = 1 then begin
+                    DocumentSummaryArray.Get(0, JsonToken);
+                    if JsonToken.IsObject() then begin
+                        DocumentJson := JsonToken.AsObject();
+                        if DocumentJson.Get('status', JsonToken) then begin
+                            DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                            // Convert to proper capitalization
+                            case DocumentStatus of
+                                'valid':
+                                    Status := 'Valid';
+                                'invalid':
+                                    Status := 'Invalid';
+                                'cancelled':
+                                    Status := 'Cancelled';
+                                'in progress':
+                                    Status := 'In Progress';
+                                else
+                                    Status := DocumentStatus; // Keep as-is for unknown statuses
+                            end;
+                            exit(Status); // Return document-level status
+                        end;
+                    end;
+                end else if DocumentSummaryArray.Count() > 1 then begin
+                    // Multiple documents - check if any are cancelled
+                    for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                        DocumentSummaryArray.Get(i, JsonToken);
+                        if JsonToken.IsObject() then begin
+                            DocumentJson := JsonToken.AsObject();
+                            if DocumentJson.Get('status', JsonToken) then begin
+                                DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                if DocumentStatus = 'cancelled' then begin
+                                    Status := 'Partially Valid'; // At least one cancelled
+                                    exit(Status);
+                                end;
+                            end;
+                        end;
+                    end;
+                end;
+            end;
+
+            // Fallback to submission-level status if no document-level status found
             if JsonObject.Get('overallStatus', JsonToken) then begin
-                Status := JsonToken.AsValue().AsText();
+                Status := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
                 // Convert LHDN status to proper capitalization for display
                 case Status of
                     'valid':
@@ -1216,6 +1271,72 @@ codeunit 50312 "eInvoice Submission Status"
             Status := 'Unknown';
 
         exit(Status);
+    end;
+
+    /// <summary>
+    /// Extract status for a specific document within a submission using UUID matching
+    /// This overloaded version prioritizes the status of the document with matching UUID
+    /// </summary>
+    local procedure ExtractStatusFromResponse(ResponseText: Text; DocumentUuidToMatch: Text): Text
+    var
+        Status: Text;
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        DocumentUuid: Text;
+        DocumentStatus: Text;
+        i: Integer;
+    begin
+        Status := 'Unknown';
+
+        // Only proceed if we have a UUID to match
+        if DocumentUuidToMatch = '' then
+            exit(ExtractStatusFromResponse(ResponseText)); // Fall back to regular function
+
+        // Try to parse JSON response and find matching document
+        if JsonObject.ReadFrom(ResponseText) then begin
+            if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+                DocumentSummaryArray := JsonToken.AsArray();
+
+                // Search for document with matching UUID
+                for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                    DocumentSummaryArray.Get(i, JsonToken);
+                    if JsonToken.IsObject() then begin
+                        DocumentJson := JsonToken.AsObject();
+
+                        // Check if this document's UUID matches
+                        if DocumentJson.Get('uuid', JsonToken) then begin
+                            DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                            if DocumentUuid = DocumentUuidToMatch then begin
+                                // Found matching document - get its status
+                                if DocumentJson.Get('status', JsonToken) then begin
+                                    DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                    // Convert to proper capitalization
+                                    case DocumentStatus of
+                                        'valid':
+                                            Status := 'Valid';
+                                        'invalid':
+                                            Status := 'Invalid';
+                                        'cancelled':
+                                            Status := 'Cancelled';
+                                        'in progress':
+                                            Status := 'In Progress';
+                                        else
+                                            Status := DocumentStatus; // Keep as-is for unknown statuses
+                                    end;
+                                    exit(Status); // Return document-specific status
+                                end;
+                            end;
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // If document not found or no match, fall back to regular extraction
+        exit(ExtractStatusFromResponse(ResponseText));
     end;
 
     /// <summary>
@@ -1291,8 +1412,11 @@ codeunit 50312 "eInvoice Submission Status"
                 ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
 
                 if ApiSuccess then begin
-                    // Update the log entry with current status from LHDN
-                    SubmissionLog.Status := ExtractStatusFromResponse(SubmissionDetails);
+                    // Update the log entry with current status from LHDN using Document UUID for precise matching
+                    if SubmissionLog."Document UUID" <> '' then
+                        SubmissionLog.Status := ExtractStatusFromResponse(SubmissionDetails, SubmissionLog."Document UUID")
+                    else
+                        SubmissionLog.Status := ExtractStatusFromResponse(SubmissionDetails);
                     SubmissionLog."Response Date" := CurrentDateTime;
                     SubmissionLog."Last Updated" := CurrentDateTime;
                     SubmissionLog."Error Message" := '';
@@ -1348,7 +1472,11 @@ codeunit 50312 "eInvoice Submission Status"
                     if SubmissionLogRec.FindFirst() then begin
                         // Try the API call with enhanced error handling
                         if TryDirectApiCallForBackground(SubmissionUID, SubmissionDetails) then begin
-                            LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                            // Extract status using Document UUID for precise matching when available
+                            if SubmissionLogRec."Document UUID" <> '' then
+                                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+                            else
+                                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
 
                             SubmissionLogRec.Status := LhdnStatus;
                             SubmissionLogRec."Response Date" := CurrentDateTime;
@@ -1528,8 +1656,11 @@ codeunit 50312 "eInvoice Submission Status"
 
         // Try direct approach first (may fail due to context restrictions)
         if TryDirectApiCallForBackground(SubmissionLogRec."Submission UID", SubmissionDetails) then begin
-            // Success - extract status and update
-            LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+            // Success - extract status and update using Document UUID for precise matching
+            if SubmissionLogRec."Document UUID" <> '' then
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+            else
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
 
             // Update record
             SubmissionLogRec.Status := LhdnStatus;
@@ -1604,8 +1735,11 @@ codeunit 50312 "eInvoice Submission Status"
         ApiSuccess := CheckSubmissionStatus(SubmissionLogRec."Submission UID", SubmissionDetails);
 
         if ApiSuccess then begin
-            // Extract the proper status from LHDN response
-            LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+            // Extract the proper status from LHDN response using Document UUID for precise matching
+            if SubmissionLogRec."Document UUID" <> '' then
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+            else
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
 
             // Update the log entry with the current LHDN status
             SubmissionLogRec.Status := LhdnStatus;
@@ -1736,8 +1870,11 @@ codeunit 50312 "eInvoice Submission Status"
         ApiSuccess := CheckSubmissionStatus(SubmissionLogRec."Submission UID", SubmissionDetails);
 
         if ApiSuccess then begin
-            // Extract and update status
-            LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+            // Extract and update status using Document UUID for precise matching
+            if SubmissionLogRec."Document UUID" <> '' then
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+            else
+                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
 
             // Update the log entry with the current LHDN status
             SubmissionLogRec.Status := LhdnStatus;
