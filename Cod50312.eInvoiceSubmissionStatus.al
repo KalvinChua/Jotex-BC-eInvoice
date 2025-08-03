@@ -1287,8 +1287,13 @@ codeunit 50312 "eInvoice Submission Status"
         DocumentUuid: Text;
         DocumentStatus: Text;
         i: Integer;
+        FoundMatch: Boolean;
+        TotalDocuments: Integer;
+        DebugInfo: Text;
     begin
         Status := 'Unknown';
+        FoundMatch := false;
+        DebugInfo := '';
 
         // Only proceed if we have a UUID to match
         if DocumentUuidToMatch = '' then
@@ -1298,6 +1303,8 @@ codeunit 50312 "eInvoice Submission Status"
         if JsonObject.ReadFrom(ResponseText) then begin
             if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
                 DocumentSummaryArray := JsonToken.AsArray();
+                TotalDocuments := DocumentSummaryArray.Count();
+                DebugInfo := StrSubstNo('Searching %1 documents for UUID: %2. ', TotalDocuments, DocumentUuidToMatch);
 
                 // Search for document with matching UUID
                 for i := 0 to DocumentSummaryArray.Count() - 1 do begin
@@ -1308,11 +1315,14 @@ codeunit 50312 "eInvoice Submission Status"
                         // Check if this document's UUID matches
                         if DocumentJson.Get('uuid', JsonToken) then begin
                             DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                            DebugInfo += StrSubstNo('Doc[%1]: %2. ', i + 1, CopyStr(DocumentUuid, 1, 10));
 
                             if DocumentUuid = DocumentUuidToMatch then begin
+                                FoundMatch := true;
                                 // Found matching document - get its status
                                 if DocumentJson.Get('status', JsonToken) then begin
                                     DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                    DebugInfo += StrSubstNo('MATCH FOUND! Status: %1', DocumentStatus);
                                     // Convert to proper capitalization
                                     case DocumentStatus of
                                         'valid':
@@ -1327,21 +1337,34 @@ codeunit 50312 "eInvoice Submission Status"
                                             Status := DocumentStatus; // Keep as-is for unknown statuses
                                     end;
                                     exit(Status); // Return document-specific status
+                                end else begin
+                                    DebugInfo += 'MATCH FOUND but no status field!';
                                 end;
                             end;
+                        end else begin
+                            DebugInfo += StrSubstNo('Doc[%1]: No UUID. ', i + 1);
                         end;
                     end;
                 end;
+
+                if not FoundMatch then begin
+                    DebugInfo += 'NO MATCH FOUND - using submission status';
+                end;
+            end else begin
+                DebugInfo := 'No documentSummary array found in response';
             end;
+        end else begin
+            DebugInfo := 'Failed to parse JSON response';
         end;
+
+        // Log debug info (you can remove this later)
+        // For now, we'll add it to a global debug log or display it somewhere
 
         // If document not found or no match, fall back to regular extraction
         exit(ExtractStatusFromResponse(ResponseText));
-    end;
-
-    /// <summary>
-    /// Log background job completion for tracking purposes
-    /// </summary>
+    end;    /// <summary>
+            /// Log background job completion for tracking purposes
+            /// </summary>
     local procedure LogBackgroundJobCompletion(UpdatedCount: Integer; ProcessedCount: Integer)
     var
         BackgroundLog: Record "eInvoice Submission Log";
@@ -1414,12 +1437,15 @@ codeunit 50312 "eInvoice Submission Status"
                 if ApiSuccess then begin
                     // Update the log entry with current status from LHDN using Document UUID for precise matching
                     if SubmissionLog."Document UUID" <> '' then
-                        SubmissionLog.Status := ExtractStatusFromResponse(SubmissionDetails, SubmissionLog."Document UUID")
+                        SubmissionLog.Status := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLog."Document UUID")
                     else
-                        SubmissionLog.Status := ExtractStatusFromResponse(SubmissionDetails);
+                        SubmissionLog.Status := ExtractDocumentStatusFromJson(SubmissionDetails);
                     SubmissionLog."Response Date" := CurrentDateTime;
                     SubmissionLog."Last Updated" := CurrentDateTime;
-                    SubmissionLog."Error Message" := '';
+                    SubmissionLog."Error Message" := CopyStr(StrSubstNo('Background refresh: %1. Method: %2',
+                                                                       SubmissionLog.Status,
+                                                                       SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
+                                                             1, MaxStrLen(SubmissionLog."Error Message"));
                     SubmissionLog.Modify();
                     UpdatedCount += 1;
                 end else begin
@@ -1474,9 +1500,9 @@ codeunit 50312 "eInvoice Submission Status"
                         if TryDirectApiCallForBackground(SubmissionUID, SubmissionDetails) then begin
                             // Extract status using Document UUID for precise matching when available
                             if SubmissionLogRec."Document UUID" <> '' then
-                                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+                                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLogRec."Document UUID")
                             else
-                                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
 
                             SubmissionLogRec.Status := LhdnStatus;
                             SubmissionLogRec."Response Date" := CurrentDateTime;
@@ -1531,8 +1557,9 @@ codeunit 50312 "eInvoice Submission Status"
         if JobQueueEntry.FindFirst() then begin
             ParameterString := JobQueueEntry."Parameter String";
 
-            // Check if this is a single submission refresh
+            // Check parameter to determine the type of refresh
             if ParameterString.StartsWith('REFRESH_SINGLE|') then begin
+                // Single submission refresh
                 PipePos := ParameterString.IndexOf('|');
                 if PipePos > 0 then begin
                     SubmissionUID := CopyStr(ParameterString, PipePos + 1);
@@ -1542,7 +1569,11 @@ codeunit 50312 "eInvoice Submission Status"
                     if SubmissionLogRec.FindFirst() then begin
                         // Direct API call - this runs in background context where HTTP is allowed
                         if CheckSubmissionStatus(SubmissionUID, SubmissionDetails) then begin
-                            LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                            // Extract status using Document UUID for precise matching
+                            if SubmissionLogRec."Document UUID" <> '' then
+                                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLogRec."Document UUID")
+                            else
+                                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
 
                             SubmissionLogRec.Status := LhdnStatus;
                             SubmissionLogRec."Response Date" := CurrentDateTime;
@@ -1559,6 +1590,9 @@ codeunit 50312 "eInvoice Submission Status"
                         end;
                     end;
                 end;
+            end else if ParameterString = 'BULK_REFRESH_ALL' then begin
+                // Bulk refresh for all submissions - called from enhanced page action
+                RefreshSubmissionStatusesBackground(); // Use the dedicated background procedure
             end else begin
                 // Default bulk refresh for all submitted entries
                 RefreshAllSubmissionLogStatusesSafe();
@@ -1658,24 +1692,28 @@ codeunit 50312 "eInvoice Submission Status"
         if TryDirectApiCallForBackground(SubmissionLogRec."Submission UID", SubmissionDetails) then begin
             // Success - extract status and update using Document UUID for precise matching
             if SubmissionLogRec."Document UUID" <> '' then
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLogRec."Document UUID")
             else
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
 
             // Update record
             SubmissionLogRec.Status := LhdnStatus;
             SubmissionLogRec."Response Date" := CurrentDateTime;
             SubmissionLogRec."Last Updated" := CurrentDateTime;
-            SubmissionLogRec."Error Message" := 'Successfully refreshed from LHDN API';
+            SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Successfully refreshed from LHDN API. Method: %1',
+                                                                  SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
+                                                       1, MaxStrLen(SubmissionLogRec."Error Message"));
             SubmissionLogRec.Modify();
 
             Message('Status refreshed successfully!\\\\' +
                    'New Status: %1\\' +
                    'Submission UID: %2\\' +
-                   'Updated: %3',
+                   'Updated: %3\\' +
+                   'Method: %4',
                    LhdnStatus,
                    SubmissionLogRec."Submission UID",
-                   Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
+                   Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
+                   SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status');
             exit(true);
         end else begin
             // Direct call failed - likely due to context restrictions
@@ -1737,9 +1775,9 @@ codeunit 50312 "eInvoice Submission Status"
         if ApiSuccess then begin
             // Extract the proper status from LHDN response using Document UUID for precise matching
             if SubmissionLogRec."Document UUID" <> '' then
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
+                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLogRec."Document UUID")
             else
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
 
             // Update the log entry with the current LHDN status
             SubmissionLogRec.Status := LhdnStatus;
@@ -1812,12 +1850,19 @@ codeunit 50312 "eInvoice Submission Status"
                 ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
 
                 if ApiSuccess then begin
-                    // Extract and update status
-                    LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                    // Extract status using Document UUID for precise matching
+                    if SubmissionLog."Document UUID" <> '' then
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLog."Document UUID")
+                    else
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
+
                     SubmissionLog.Status := LhdnStatus;
                     SubmissionLog."Response Date" := CurrentDateTime;
                     SubmissionLog."Last Updated" := CurrentDateTime;
-                    SubmissionLog."Error Message" := '';
+                    SubmissionLog."Error Message" := CopyStr(StrSubstNo('Bulk refresh: %1. Method: %2',
+                                                                       LhdnStatus,
+                                                                       SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
+                                                             1, MaxStrLen(SubmissionLog."Error Message"));
 
                     if SubmissionLog.Modify() then
                         UpdatedCount += 1;
@@ -1850,12 +1895,19 @@ codeunit 50312 "eInvoice Submission Status"
     /// <summary>
     /// Context-safe refresh for a specific submission log entry
     /// Uses direct API call when possible, background job when restricted
+    /// Enhanced to use the same direct HttpClient approach as Posted Sales Invoice
     /// </summary>
     procedure RefreshSubmissionLogStatusSafe(var SubmissionLogRec: Record "eInvoice Submission Log"): Boolean
     var
-        SubmissionDetails: Text;
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestHeaders: HttpHeaders;
+        AccessToken: Text;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        ApiUrl: Text;
+        ResponseText: Text;
         LhdnStatus: Text;
-        ApiSuccess: Boolean;
     begin
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
@@ -1863,74 +1915,98 @@ codeunit 50312 "eInvoice Submission Status"
             exit(false);
         end;
 
-        // Try direct API call with proper initialization
+        // Get setup for environment determination
+        if not eInvoiceSetup.Get('SETUP') then begin
+            Message('eInvoice Setup not found');
+            exit(false);
+        end;
+
+        // Get access token using the helper method (same as Posted Sales Invoice)
         eInvoiceHelper.InitializeHelper();
+        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+        if AccessToken = '' then begin
+            Message('Failed to get access token');
+            exit(false);
+        end;
 
-        // Use CheckSubmissionStatus directly instead of TryRefreshStatusFromAPI
-        ApiSuccess := CheckSubmissionStatus(SubmissionLogRec."Submission UID", SubmissionDetails);
+        // Build API URL same as Posted Sales Invoice extension
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLogRec."Submission UID")
+        else
+            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLogRec."Submission UID");
 
-        if ApiSuccess then begin
-            // Extract and update status using Document UUID for precise matching
-            if SubmissionLogRec."Document UUID" <> '' then
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails, SubmissionLogRec."Document UUID")
-            else
-                LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+        // Setup request (same as Posted Sales Invoice extension)
+        HttpRequestMessage.Method := 'GET';
+        HttpRequestMessage.SetRequestUri(ApiUrl);
 
-            // Update the log entry with the current LHDN status
-            SubmissionLogRec.Status := LhdnStatus;
-            SubmissionLogRec."Response Date" := CurrentDateTime;
-            SubmissionLogRec."Last Updated" := CurrentDateTime;
-            SubmissionLogRec."Error Message" := '';
+        // Set headers (same as Posted Sales Invoice extension)
+        HttpRequestMessage.GetHeaders(RequestHeaders);
+        RequestHeaders.Clear();
+        RequestHeaders.Add('Accept', 'application/json');
+        RequestHeaders.Add('Accept-Language', 'en');
+        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
 
-            if SubmissionLogRec.Modify() then begin
-                Message('Status refreshed successfully!\\' +
-                       'New Status: %1\\' +
-                       'Updated: %2',
-                       LhdnStatus,
-                       Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
-                exit(true);
-            end else begin
-                Message('Failed to update the log entry. Please try again.');
-                exit(false);
-            end;
-        end else begin
-            // Check if it's a context restriction
-            if SubmissionDetails.Contains('context') or GetLastErrorText().Contains('context') then begin
-                // Create background job for actual API call
-                if CreateBackgroundStatusRefreshJob(SubmissionLogRec."Submission UID") then begin
-                    Message('HTTP operations restricted in current context.\\\\' +
-                           'Background job created to refresh status.\\' +
-                           'The status will be updated automatically.\\\\' +
-                           'Please check again in a few moments or refresh the page.');
+        // Send request (same method as Posted Sales Invoice extension)
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            HttpResponseMessage.Content.ReadAs(ResponseText);
+
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                // Extract status using Document UUID for precise matching (same logic as Posted Sales Invoice)
+                if SubmissionLogRec."Document UUID" <> '' then
+                    LhdnStatus := ExtractDocumentStatusFromJson(ResponseText, SubmissionLogRec."Document UUID")
+                else
+                    LhdnStatus := ExtractDocumentStatusFromJson(ResponseText);
+
+                // Update the log entry with the current LHDN status
+                SubmissionLogRec.Status := LhdnStatus;
+                SubmissionLogRec."Response Date" := CurrentDateTime;
+                SubmissionLogRec."Last Updated" := CurrentDateTime;
+                SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Status refreshed from LHDN via direct API. UUID: %1, Method: %2',
+                                                                     SubmissionLogRec."Document UUID",
+                                                                     SubmissionLogRec."Document UUID" <> '' ? 'Document-level' : 'Submission-level'),
+                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
+
+                if SubmissionLogRec.Modify() then begin
+                    Message('Status refreshed successfully via direct API!\\' +
+                           'New Status: %1\\' +
+                           'Updated: %2\\' +
+                           'Method: %3\\' +
+                           'API Response: Direct HttpClient call',
+                           LhdnStatus,
+                           Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
+                           SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Submission-level status');
                     exit(true);
                 end else begin
-                    Message('HTTP operations restricted in current context.\\\\' +
-                           'To refresh this status, try one of these options:\\\\' +
-                           '1. Use "Background Status Refresh" action from the page\\' +
-                           '2. Run the refresh from Job Queue Entries\\' +
-                           '3. Wait for scheduled automatic refresh\\\\' +
-                           'Submission UID: %1\\' +
-                           'Current Status: %2',
-                           SubmissionLogRec."Submission UID",
-                           SubmissionLogRec.Status);
+                    Message('Failed to update the log entry. Please try again.');
                     exit(false);
                 end;
             end else begin
-                // Other type of error - log it and inform user
-                SubmissionLogRec."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                Message('Failed to retrieve status from LHDN API (Status Code: %1). Check the Error Message field for details.',
+                       HttpResponseMessage.HttpStatusCode);
+
+                SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('HTTP Error %1: %2',
+                                                                     HttpResponseMessage.HttpStatusCode,
+                                                                     ResponseText),
+                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
                 SubmissionLogRec."Last Updated" := CurrentDateTime;
                 SubmissionLogRec.Modify();
-
-                Message('Failed to refresh status from LHDN.\\\\' +
-                       'Error: %1\\\\' +
-                       'Please check:\\' +
-                       '- Network connectivity\\' +
-                       '- LHDN API availability\\' +
-                       '- Submission UID validity\\\\' +
-                       'The error has been logged for reference.',
-                       SubmissionDetails);
                 exit(false);
             end;
+        end else begin
+            // Failed to connect to LHDN API
+            Message('Failed to connect to LHDN API via direct HttpClient call.\\\\' +
+                   'Error: %1\\\\' +
+                   'This may be due to:\\' +
+                   '- Network connectivity issues\\' +
+                   '- Context restrictions\\' +
+                   '- LHDN API temporary unavailability',
+                   GetLastErrorText());
+
+            SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Direct API call failed: %1', GetLastErrorText()),
+                                                       1, MaxStrLen(SubmissionLogRec."Error Message"));
+            SubmissionLogRec."Last Updated" := CurrentDateTime;
+            SubmissionLogRec.Modify();
+            exit(false);
         end;
     end;
 
@@ -2070,12 +2146,19 @@ codeunit 50312 "eInvoice Submission Status"
 
                 // Try context-safe API call
                 if TryRefreshStatusFromAPI(SubmissionLog."Submission UID", SubmissionDetails) then begin
-                    // Extract and update status
-                    LhdnStatus := ExtractStatusFromResponse(SubmissionDetails);
+                    // Extract status using Document UUID for precise matching (same logic as Posted Sales Invoice)
+                    if SubmissionLog."Document UUID" <> '' then
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLog."Document UUID")
+                    else
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
+
                     SubmissionLog.Status := LhdnStatus;
                     SubmissionLog."Response Date" := CurrentDateTime;
                     SubmissionLog."Last Updated" := CurrentDateTime;
-                    SubmissionLog."Error Message" := '';
+                    SubmissionLog."Error Message" := CopyStr(StrSubstNo('Bulk refresh: %1. Method: %2',
+                                                                       LhdnStatus,
+                                                                       SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
+                                                             1, MaxStrLen(SubmissionLog."Error Message"));
 
                     if SubmissionLog.Modify() then
                         UpdatedCount += 1;
@@ -2114,6 +2197,124 @@ codeunit 50312 "eInvoice Submission Status"
                    'Check the Error Message field for any failed updates.',
                    ProcessedCount, UpdatedCount, ErrorCount);
             exit(true);
+        end;
+    end;
+
+    /// <summary>
+    /// Extract document-level status from LHDN API JSON response
+    /// Prioritizes individual document status over submission-level overallStatus
+    /// </summary>
+    local procedure ExtractDocumentStatusFromJson(ResponseText: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        OverallStatus: Text;
+        DocumentStatus: Text;
+    begin
+        // Parse JSON response
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('Unknown');
+
+        // Check for document-level status first (more accurate)
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            // For single document submissions, use the document status directly
+            if DocumentSummaryArray.Count() = 1 then begin
+                DocumentSummaryArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('status', JsonToken) then begin
+                        DocumentStatus := JsonToken.AsValue().AsText();
+                        exit(FormatLhdnStatus(DocumentStatus));
+                    end;
+                end;
+            end;
+        end;
+
+        // Fallback to submission-level overallStatus
+        if JsonObject.Get('overallStatus', JsonToken) then begin
+            OverallStatus := JsonToken.AsValue().AsText();
+            exit(FormatLhdnStatus(OverallStatus));
+        end;
+
+        exit('Unknown');
+    end;
+
+    /// <summary>
+    /// Extract document-level status using UUID matching for precise document identification
+    /// </summary>
+    local procedure ExtractDocumentStatusFromJson(ResponseText: Text; DocumentUuidToMatch: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        DocumentUuid: Text;
+        DocumentStatus: Text;
+        i: Integer;
+    begin
+        // If no UUID provided, use regular extraction
+        if DocumentUuidToMatch = '' then
+            exit(ExtractDocumentStatusFromJson(ResponseText));
+
+        // Parse JSON response
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('Unknown');
+
+        // Search for matching document UUID in documentSummary array
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Check if this document matches our UUID
+                    if DocumentJson.Get('uuid', JsonToken) then begin
+                        DocumentUuid := JsonToken.AsValue().AsText();
+
+                        if DocumentUuid = DocumentUuidToMatch then begin
+                            // Found matching document - get its individual status
+                            if DocumentJson.Get('status', JsonToken) then begin
+                                DocumentStatus := JsonToken.AsValue().AsText();
+                                exit(FormatLhdnStatus(DocumentStatus));
+                            end;
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // If UUID not found, fallback to regular extraction
+        exit(ExtractDocumentStatusFromJson(ResponseText));
+    end;
+
+    /// <summary>
+    /// Format LHDN status values to consistent display format
+    /// </summary>
+    local procedure FormatLhdnStatus(StatusValue: Text): Text
+    begin
+        case StatusValue.ToLower() of
+            'valid':
+                exit('Valid');
+            'invalid':
+                exit('Invalid');
+            'cancelled':
+                exit('Cancelled');
+            'in progress':
+                exit('In Progress');
+            'partially valid':
+                exit('Partially Valid');
+            'rejected':
+                exit('Rejected');
+            'submitted':
+                exit('Submitted');
+            else
+                exit(StatusValue); // Return as-is for unknown values
         end;
     end;
 

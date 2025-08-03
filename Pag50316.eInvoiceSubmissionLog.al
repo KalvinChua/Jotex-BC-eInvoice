@@ -94,16 +94,7 @@ page 50316 "e-Invoice Submission Log"
 
                 trigger OnAction()
                 var
-                    HttpClient: HttpClient;
-                    HttpRequestMessage: HttpRequestMessage;
-                    HttpResponseMessage: HttpResponseMessage;
-                    RequestHeaders: HttpHeaders;
-                    AccessToken: Text;
-                    eInvoiceSetup: Record "eInvoiceSetup";
-                    eInvoiceHelper: Codeunit eInvoiceHelper;
-                    ApiUrl: Text;
-                    ResponseText: Text;
-                    LhdnStatus: Text;
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                 begin
                     // Validate selection
                     if Rec."Submission UID" = '' then begin
@@ -111,67 +102,21 @@ page 50316 "e-Invoice Submission Log"
                         exit;
                     end;
 
-                    // Get setup for environment determination
-                    if not eInvoiceSetup.Get('SETUP') then begin
-                        Message('eInvoice Setup not found');
-                        exit;
-                    end;
-
-                    // Get access token using the helper method
-                    eInvoiceHelper.InitializeHelper();
-                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
-                    if AccessToken = '' then begin
-                        Message('Failed to get access token');
-                        exit;
-                    end;
-
-                    // Build API URL
-                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."Submission UID")
-                    else
-                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."Submission UID");
-
-                    // Setup request
-                    HttpRequestMessage.Method := 'GET';
-                    HttpRequestMessage.SetRequestUri(ApiUrl);
-
-                    // Set headers
-                    HttpRequestMessage.GetHeaders(RequestHeaders);
-                    RequestHeaders.Clear();
-                    RequestHeaders.Add('Accept', 'application/json');
-                    RequestHeaders.Add('Accept-Language', 'en');
-                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
-
-                    // Send request
-                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-                        HttpResponseMessage.Content.ReadAs(ResponseText);
-
-                        if HttpResponseMessage.IsSuccessStatusCode then begin
-                            // Extract status from response and update record
-                            LhdnStatus := ExtractStatusFromApiResponse(ResponseText);
-
-                            Rec.Status := LhdnStatus;
-                            Rec."Response Date" := CurrentDateTime;
-                            Rec."Last Updated" := CurrentDateTime;
-                            Rec."Error Message" := 'Status updated via direct API call: ' + LhdnStatus;
-                            Rec.Modify();
-
-                            Message('Status updated successfully.');
+                    // Use the same context-safe refresh method as the submission log card
+                    // This ensures consistent document-level status extraction
+                    if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
+                        // If direct method fails due to context restrictions, offer alternatives
+                        if Confirm('Context restrictions detected. Create background job for this entry?') then begin
+                            // Create background job for this specific entry
+                            if SubmissionStatusCU.CreateBackgroundStatusRefreshJob(Rec."Submission UID") then begin
+                                Message('Background job created. Check "Background Jobs" for progress.');
+                            end else begin
+                                Message('Failed to create background job.');
+                            end;
                         end else begin
-                            // Update error message
-                            Rec."Error Message" := CopyStr('Direct API call failed: Status ' + Format(HttpResponseMessage.HttpStatusCode) + ' - ' + ResponseText, 1, MaxStrLen(Rec."Error Message"));
-                            Rec."Last Updated" := CurrentDateTime;
-                            Rec.Modify();
-
-                            Message('Failed to retrieve status from LHDN.');
+                            // Show alternative options
+                            SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
                         end;
-                    end else begin
-                        // Update error message
-                        Rec."Error Message" := CopyStr('HTTP request failed: ' + GetLastErrorText(), 1, MaxStrLen(Rec."Error Message"));
-                        Rec."Last Updated" := CurrentDateTime;
-                        Rec.Modify();
-
-                        Message('Failed to connect to LHDN API.');
                     end;
 
                     CurrPage.Update(false);
@@ -182,131 +127,45 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Refresh All Statuses';
                 Image = RefreshLines;
-                ToolTip = 'Refresh the status for all submissions with UIDs using direct LHDN API calls';
+                ToolTip = 'Refresh the status for all submissions with UIDs using direct LHDN API calls with document-level status detection';
 
                 trigger OnAction()
                 var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                     SubmissionLog: Record "eInvoice Submission Log";
-                    HttpClient: HttpClient;
-                    HttpRequestMessage: HttpRequestMessage;
-                    HttpResponseMessage: HttpResponseMessage;
-                    RequestHeaders: HttpHeaders;
-                    AccessToken: Text;
-                    eInvoiceSetup: Record "eInvoiceSetup";
-                    eInvoiceHelper: Codeunit eInvoiceHelper;
-                    ApiUrl: Text;
-                    ResponseText: Text;
-                    LhdnStatus: Text;
                     UpdatedCount: Integer;
-                    FailedCount: Integer;
-                    TotalCount: Integer;
-                    ProgressDialog: Dialog;
+                    TotalEntries: Integer;
+                    JobQueueEntry: Record "Job Queue Entry";
                 begin
-                    if not Confirm('This will refresh the status for ALL submissions with UIDs using direct API calls.\\\\' +
-                                 'This may take several minutes depending on the number of entries.\\\\' +
-                                 'Continue?') then
-                        exit;
-
-                    // Get setup for environment determination
-                    if not eInvoiceSetup.Get('SETUP') then begin
-                        Message('eInvoice Setup not found');
-                        exit;
-                    end;
-
-                    // Get access token using the helper method
-                    eInvoiceHelper.InitializeHelper();
-                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
-                    if AccessToken = '' then begin
-                        Message('Failed to get access token');
-                        exit;
-                    end;
-
-                    // Count total records
+                    // Count total entries first
                     SubmissionLog.SetFilter("Submission UID", '<>%1', '');
-                    TotalCount := SubmissionLog.Count();
+                    TotalEntries := SubmissionLog.Count();
 
-                    if TotalCount = 0 then begin
-                        Message('No submissions with UIDs found to refresh.');
+                    if TotalEntries = 0 then begin
+                        Message('No submission entries found with Submission UIDs to refresh.');
                         exit;
                     end;
 
-                    ProgressDialog.Open('Refreshing submission statuses...\\' +
-                                       'Progress: #1### of #2### \\' +
-                                       'Current: #3################## \\' +
-                                       'Updated: #4### Failed: #5###');
+                    if not Confirm(StrSubstNo('Refresh status for all %1 submissions?', TotalEntries)) then
+                        exit;
 
-                    ProgressDialog.Update(2, TotalCount);
-
-                    // Process each record
-                    if SubmissionLog.FindSet() then
-                        repeat
-                            ProgressDialog.Update(1, SubmissionLog."Entry No.");
-                            ProgressDialog.Update(3, SubmissionLog."Submission UID");
-                            ProgressDialog.Update(4, UpdatedCount);
-                            ProgressDialog.Update(5, FailedCount);
-
-                            // Build API URL
-                            if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-                                ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLog."Submission UID")
-                            else
-                                ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLog."Submission UID");
-
-                            // Setup request
-                            Clear(HttpRequestMessage);
-                            Clear(HttpResponseMessage);
-                            HttpRequestMessage.Method := 'GET';
-                            HttpRequestMessage.SetRequestUri(ApiUrl);
-
-                            // Set headers
-                            HttpRequestMessage.GetHeaders(RequestHeaders);
-                            RequestHeaders.Clear();
-                            RequestHeaders.Add('Accept', 'application/json');
-                            RequestHeaders.Add('Accept-Language', 'en');
-                            RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
-
-                            // Send request
-                            if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-                                HttpResponseMessage.Content.ReadAs(ResponseText);
-
-                                if HttpResponseMessage.IsSuccessStatusCode then begin
-                                    // Extract status from response and update record
-                                    LhdnStatus := ExtractStatusFromApiResponse(ResponseText);
-
-                                    SubmissionLog.Status := LhdnStatus;
-                                    SubmissionLog."Response Date" := CurrentDateTime;
-                                    SubmissionLog."Last Updated" := CurrentDateTime;
-                                    SubmissionLog."Error Message" := 'Bulk status update via direct API: ' + LhdnStatus;
-                                    SubmissionLog.Modify();
-                                    UpdatedCount += 1;
-                                end else begin
-                                    // Update error message
-                                    SubmissionLog."Error Message" := CopyStr('Bulk API failed: Status ' + Format(HttpResponseMessage.HttpStatusCode), 1, MaxStrLen(SubmissionLog."Error Message"));
-                                    SubmissionLog."Last Updated" := CurrentDateTime;
-                                    SubmissionLog.Modify();
-                                    FailedCount += 1;
-                                end;
+                    // Use the context-safe bulk refresh method from the submission status codeunit
+                    // This ensures consistent document-level status extraction for all entries
+                    if SubmissionStatusCU.RefreshAllSubmissionLogStatusesSafe() then begin
+                        Message('Bulk refresh completed successfully.');
+                    end else begin
+                        // Context restrictions detected - offer job queue alternative
+                        if Confirm('Context restrictions detected. Create background job?') then begin
+                            // Create job queue entry for bulk refresh
+                            if CreateBulkRefreshJob() then begin
+                                Message('Background job created. Expected duration: 5-15 minutes.');
                             end else begin
-                                // Update error message
-                                SubmissionLog."Error Message" := CopyStr('Bulk HTTP request failed', 1, MaxStrLen(SubmissionLog."Error Message"));
-                                SubmissionLog."Last Updated" := CurrentDateTime;
-                                SubmissionLog.Modify();
-                                FailedCount += 1;
+                                Message('Failed to create background job.');
                             end;
-
-                            // Brief delay to respect rate limits
-                            Sleep(100);
-
-                        until SubmissionLog.Next() = 0;
-
-                    ProgressDialog.Close();
-
-                    Message('Bulk status refresh completed!\\\\' +
-                           'Total processed: %1\\' +
-                           'Successfully updated: %2\\' +
-                           'Failed: %3',
-                           TotalCount,
-                           UpdatedCount,
-                           FailedCount);
+                        end else begin
+                            Message('Try individual refresh instead.');
+                        end;
+                    end;
 
                     CurrPage.Update(false);
                 end;
@@ -369,7 +228,7 @@ page 50316 "e-Invoice Submission Log"
                     DeleteDate: Date;
                     DeletedCount: Integer;
                 begin
-                    if Confirm('This will delete all log entries older than 30 days.' + '\\' + '\\' + 'Proceed?') then begin
+                    if Confirm('Delete entries older than 30 days?') then begin
                         DeleteDate := CalcDate('-30D', Today);
                         DeletedCount := 0;
 
@@ -385,44 +244,50 @@ page 50316 "e-Invoice Submission Log"
                     end;
                 end;
             }
+
+            action(CheckBackgroundJobs)
+            {
+                ApplicationArea = All;
+                Caption = 'Check Background Jobs';
+                Image = JobListSetup;
+                ToolTip = 'Check the status of background refresh jobs';
+
+                trigger OnAction()
+                var
+                    JobQueueEntry: Record "Job Queue Entry";
+                    JobStatus: Text;
+                    ActiveJobs: Integer;
+                    CompletedJobs: Integer;
+                    ErrorJobs: Integer;
+                begin
+                    ActiveJobs := 0;
+                    CompletedJobs := 0;
+                    ErrorJobs := 0;
+
+                    // Count eInvoice related jobs
+                    JobQueueEntry.SetRange("Object ID to Run", Codeunit::"eInvoice Submission Status");
+                    if JobQueueEntry.FindSet() then begin
+                        repeat
+                            case JobQueueEntry.Status of
+                                JobQueueEntry.Status::Ready,
+                                JobQueueEntry.Status::"In Process":
+                                    ActiveJobs += 1;
+                                JobQueueEntry.Status::Finished:
+                                    CompletedJobs += 1;
+                                JobQueueEntry.Status::Error:
+                                    ErrorJobs += 1;
+                            end;
+                        until JobQueueEntry.Next() = 0;
+                    end;
+
+                    JobStatus := StrSubstNo('Background Jobs: Active: %1, Completed: %2, Errors: %3',
+                                          ActiveJobs, CompletedJobs, ErrorJobs);
+
+                    Message(JobStatus);
+                end;
+            }
         }
     }
-
-    /// <summary>
-    /// Extract status from LHDN API response for display purposes
-    /// </summary>
-    /// <param name="ResponseText">JSON response from LHDN API</param>
-    /// <returns>The formatted status value</returns>
-    local procedure ExtractStatusFromApiResponse(ResponseText: Text): Text
-    var
-        JsonObject: JsonObject;
-        JsonToken: JsonToken;
-        OverallStatus: Text;
-    begin
-        // Parse the JSON response
-        if not JsonObject.ReadFrom(ResponseText) then
-            exit('Unknown - JSON Parse Failed');
-
-        // Extract the overallStatus field
-        if not JsonObject.Get('overallStatus', JsonToken) then
-            exit('Unknown - No Status Field');
-
-        OverallStatus := JsonToken.AsValue().AsText();
-
-        // Convert LHDN status values to proper case for display
-        case OverallStatus.ToLower() of
-            'valid':
-                exit('Valid');
-            'invalid':
-                exit('Invalid');
-            'in progress':
-                exit('In Progress');
-            'partially valid':
-                exit('Partially Valid');
-            else
-                exit(OverallStatus); // Use as-is if unknown
-        end;
-    end;
 
     /// <summary>
     /// Removes surrounding quotes from text values
@@ -488,5 +353,28 @@ page 50316 "e-Invoice Submission Log"
         JobQueueLogEntry."Job Queue Category Code" := 'EINVOICE';
         JobQueueLogEntry."Description" := 'eInvoice Status Refresh - Job Created';
         JobQueueLogEntry.Insert();
+    end;
+
+    /// <summary>
+    /// Create a background job for bulk status refresh
+    /// </summary>
+    local procedure CreateBulkRefreshJob(): Boolean
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+    begin
+        // Create job queue entry for bulk refresh
+        JobQueueEntry.Init();
+        JobQueueEntry."Object Type to Run" := JobQueueEntry."Object Type to Run"::Codeunit;
+        JobQueueEntry."Object ID to Run" := Codeunit::"eInvoice Submission Status";
+        JobQueueEntry."Job Queue Category Code" := 'EINVOICE';
+        JobQueueEntry.Description := 'eInvoice Bulk Status Refresh - All Submissions';
+        JobQueueEntry."Parameter String" := 'BULK_REFRESH_ALL'; // Indicates bulk refresh operation
+        JobQueueEntry."User ID" := UserId;
+        JobQueueEntry."Earliest Start Date/Time" := CurrentDateTime + 5000; // Start in 5 seconds
+        JobQueueEntry.Status := JobQueueEntry.Status::Ready;
+        JobQueueEntry."Maximum No. of Attempts to Run" := 3;
+        JobQueueEntry."Rerun Delay (sec.)" := 30;
+
+        exit(JobQueueEntry.Insert(true));
     end;
 }

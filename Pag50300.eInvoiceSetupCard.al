@@ -59,9 +59,9 @@ page 50300 eInvoiceSetupCard
     {
         area(processing)
         {
-            action(TestConnection)
+            action(RefreshToken)
             {
-                Caption = 'Test Connection';
+                Caption = 'Refresh Token';
                 ApplicationArea = All;
                 Image = Action;
 
@@ -69,19 +69,12 @@ page 50300 eInvoiceSetupCard
                 var
                     Token: Text;
                     MyInvoisHelper: Codeunit eInvoiceHelper;
-                    TokenLength: Integer;
                 begin
                     Token := MyInvoisHelper.GetAccessTokenFromSetup(Rec);
-                    TokenLength := StrLen(Token);
-
-                    Message('Token Generation Test Results:' + '\\' + '\\' +
-                        'Token Length: %1 characters' + '\\' +
-                        'Token Preview: %2...' + '\\' +
-                        'Token Format: %3' + '\\' + '\\' +
-                        'Note: If token is valid, it should be a JWT token starting with "eyJ"',
-                        TokenLength,
-                        CopyStr(Token, 1, 50),
-                        Token.StartsWith('eyJ') ? 'Valid JWT format' : 'Invalid format - should start with eyJ');
+                    if Token <> '' then
+                        Message('Token refreshed successfully!')
+                    else
+                        Message('Failed to refresh token. Please check your credentials.');
                 end;
             }
 
@@ -260,78 +253,6 @@ page 50300 eInvoiceSetupCard
 
                     DiagnosticResult := eInvoiceGenerator.TestAzureFunctionConnectivity(Rec."Azure Function URL");
                     Message(DiagnosticResult);
-                end;
-            }
-
-            action(TestAutoTokenRefresh)
-            {
-                Caption = 'Test Automatic Token Refresh';
-                ApplicationArea = All;
-                Image = Refresh;
-                ToolTip = 'Test the automatic token refresh functionality with detailed status';
-
-                trigger OnAction()
-                var
-                    MyInvoisHelper: Codeunit eInvoiceHelper;
-                    Token: Text;
-                    TokenStatus: Text;
-                    RefreshNeeded: Boolean;
-                    MessageText: Text;
-                begin
-                    // Test current token status
-                    TokenStatus := MyInvoisHelper.GetTokenStatus(Rec);
-                    RefreshNeeded := MyInvoisHelper.IsTokenRefreshNeeded(Rec);
-
-                    MessageText := StrSubstNo('Token Status Test Results:' + '\\' + '\\' +
-                        'Current Status: %1' + '\\' +
-                        'Refresh Needed: %2' + '\\' + '\\' +
-                        'Testing automatic token retrieval...',
-                        TokenStatus,
-                        RefreshNeeded ? 'Yes' : 'No');
-
-                    // Test automatic token retrieval (this will refresh if needed)
-                    Token := MyInvoisHelper.GetAccessTokenFromSetup(Rec);
-
-                    MessageText += StrSubstNo('\\' + '\\' +
-                        'Token Retrieval Results:' + '\\' +
-                        'Token Length: %1 characters' + '\\' +
-                        'Token Preview: %2...' + '\\' +
-                        'Token Format: %3' + '\\' + '\\' +
-                        'Automatic refresh is working correctly!',
-                        StrLen(Token),
-                        CopyStr(Token, 1, 50),
-                        Token.StartsWith('eyJ') ? 'Valid JWT format' : 'Invalid format');
-
-                    Message(MessageText);
-                end;
-            }
-
-            action(ForceTokenRefresh)
-            {
-                Caption = 'Force Token Refresh';
-                ApplicationArea = All;
-                Image = Refresh;
-                ToolTip = 'Force refresh the token regardless of current status (for testing)';
-
-                trigger OnAction()
-                var
-                    MyInvoisHelper: Codeunit eInvoiceHelper;
-                    Token: Text;
-                    MessageText: Text;
-                begin
-                    // Force refresh the token
-                    Token := MyInvoisHelper.ForceRefreshToken(Rec);
-
-                    MessageText := StrSubstNo('Force Token Refresh Results:' + '\\' + '\\' +
-                        'Token Length: %1 characters' + '\\' +
-                        'Token Preview: %2...' + '\\' +
-                        'Token Format: %3' + '\\' + '\\' +
-                        'Token has been force refreshed successfully!',
-                        StrLen(Token),
-                        CopyStr(Token, 1, 50),
-                        Token.StartsWith('eyJ') ? 'Valid JWT format' : 'Invalid format');
-
-                    Message(MessageText);
                 end;
             }
 

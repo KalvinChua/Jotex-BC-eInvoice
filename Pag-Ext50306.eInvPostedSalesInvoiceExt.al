@@ -211,6 +211,9 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                                 // Try to update the posted invoice field using the codeunit with proper permissions
                                 TryUpdateStatusViaCodeunit(ExtractStatusFromApiResponse(ResponseText));
 
+                                // Update cancel button state after status refresh
+                                CanCancelEInvoice := IsCancellationAllowed();
+
                                 Message('Status updated successfully from LHDN.');
                             end else begin
                                 Message('Status check completed, but unable to parse response.');
@@ -470,6 +473,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 PromotedCategory = Process;
                 ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                 Visible = IsJotexCompany;
+                Enabled = CanCancelEInvoice;
 
                 trigger OnAction()
                 var
@@ -479,19 +483,37 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
                     ReasonPrompt: Label 'Please enter the reason for cancellation:';
                 begin
+                    // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
+                    if not IsCancellationAllowed() then begin
+                        // Provide specific message based on current status
+                        if Rec."eInvoice Validation Status" = 'Cancelled' then begin
+                            Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
+                            exit;
+                        end;
+
+                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                        if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
+                            Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
+                                    SubmissionLog."Cancellation Reason",
+                                    Format(SubmissionLog."Cancellation Date"));
+                            exit;
+                        end;
+
+                        if Rec."eInvoice Submission UID" = '' then begin
+                            Message('This invoice has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
+                            exit;
+                        end;
+
+                        Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
+                                Rec."eInvoice Validation Status");
+                        exit;
+                    end;
+
                     // Verify that the invoice has been submitted and is valid
                     SubmissionLog.SetRange("Invoice No.", Rec."No.");
                     SubmissionLog.SetRange(Status, 'Valid');
                     if not SubmissionLog.FindLast() then begin
                         Message('This invoice has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
-                        exit;
-                    end;
-
-                    // Check if already cancelled
-                    if SubmissionLog.Status = 'Cancelled' then begin
-                        Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
-                                SubmissionLog."Cancellation Reason",
-                                Format(SubmissionLog."Cancellation Date"));
                         exit;
                     end;
 
@@ -507,13 +529,15 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     // Proceed with cancellation
                     ClearLastError();
                     if eInvPostingSubscribers.CancelEInvoiceDocument(Rec, CancellationReason) then begin
-                        // Refresh the page to show updated status
+                        // Refresh the page to show updated status and disable cancel button
+                        CanCancelEInvoice := IsCancellationAllowed();
                         CurrPage.Update(false);
                     end else begin
                         // Try alternative method with transaction isolation
                         ClearLastError();
                         if eInvPostingSubscribers.CancelEInvoiceDocumentWithIsolation(Rec, CancellationReason) then begin
                             Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                            CanCancelEInvoice := IsCancellationAllowed();
                             CurrPage.Update(false);
                         end else begin
                             // Show any error that occurred
@@ -530,12 +554,19 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
     var
         IsJotexCompany: Boolean;
+        CanCancelEInvoice: Boolean;
 
     trigger OnOpenPage()
     var
         CompanyInfo: Record "Company Information";
     begin
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+        CanCancelEInvoice := IsCancellationAllowed();
+    end;
+
+    trigger OnAfterGetCurrRecord()
+    begin
+        CanCancelEInvoice := IsCancellationAllowed();
     end;
 
     /// <summary>
@@ -826,7 +857,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         UpdateSubmissionLogStatus(LhdnStatus);
 
         if UpdateSuccess then begin
-            // Refresh the page to show the updated status
+            // Refresh the page to show the updated status and update cancel button state
+            CanCancelEInvoice := IsCancellationAllowed();
             CurrPage.Update(false);
         end;
 
@@ -963,6 +995,43 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         end;
 
         exit(ReasonText);
+    end;
+
+    /// <summary>
+    /// Check if cancellation is allowed for this invoice
+    /// Returns false if the invoice is already cancelled or not in a cancellable state
+    /// </summary>
+    /// <returns>True if cancellation is allowed, false otherwise</returns>
+    local procedure IsCancellationAllowed(): Boolean
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // Check if invoice has validation status of "Cancelled"
+        if Rec."eInvoice Validation Status" = 'Cancelled' then
+            exit(false);
+
+        // Check submission log for cancelled status
+        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+        if SubmissionLog.FindLast() then begin
+            if SubmissionLog.Status = 'Cancelled' then
+                exit(false);
+        end;
+
+        // Check if invoice has been submitted to LHDN (has submission UID)
+        if Rec."eInvoice Submission UID" = '' then
+            exit(false);
+
+        // Additional check: Only allow cancellation if status is Valid
+        // since only valid e-Invoices can be cancelled in LHDN
+        if Rec."eInvoice Validation Status" <> 'Valid' then begin
+            // Double-check with submission log
+            SubmissionLog.SetRange("Invoice No.", Rec."No.");
+            SubmissionLog.SetRange(Status, 'Valid');
+            if not SubmissionLog.FindLast() then
+                exit(false);
+        end;
+
+        exit(true);
     end;
 
     /// <summary>
