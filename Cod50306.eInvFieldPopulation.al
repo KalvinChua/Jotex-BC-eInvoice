@@ -162,6 +162,10 @@ codeunit 50306 "eInv Field Population"
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
             exit;
 
+        // Skip Sales Orders - they are handled by dedicated codeunit
+        if SalesHeader."Document Type" = SalesHeader."Document Type"::Order then
+            exit;
+
         // Only process invoices
         if SalesInvHdrNo = '' then
             exit;

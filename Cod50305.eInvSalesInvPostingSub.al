@@ -25,8 +25,12 @@ codeunit 50305 "eInv Posting Subscribers"
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
             exit;
 
-        // Only process invoices (skip credit memos and other documents)
+        // Only process invoices (skip credit memos, sales orders and other documents)
         if SalesInvHdrNo = '' then
+            exit;
+
+        // Skip Sales Orders - they are handled by dedicated codeunit
+        if SalesHeader."Document Type" = SalesHeader."Document Type"::Order then
             exit;
 
         // Find the posted invoice and update fields
@@ -125,6 +129,10 @@ codeunit 50305 "eInv Posting Subscribers"
     begin
         // Only process for JOTEX SDN BHD
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
+        // Skip Sales Orders - they are handled by dedicated codeunit
+        if SalesHeader."Document Type" = SalesHeader."Document Type"::Order then
             exit;
 
         if IsHandled then
