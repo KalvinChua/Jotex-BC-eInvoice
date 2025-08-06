@@ -911,9 +911,9 @@ codeunit 50302 "eInvoice JSON Generator"
             else begin
                 // Log warning for debugging
                 LogDebugInfo('Payment Mode Warning',
-                    StrSubstNo('Invalid or empty payment mode "%1" for invoice %2. Defaulting to Bank Transfer.',
+                    StrSubstNo('Invalid or empty payment mode "%1" for invoice %2. Returning empty value.',
                         PaymentMode, SalesInvoiceHeader."No."));
-                exit('03'); // Default to Bank Transfer (code 03) if not specified or invalid
+                exit('08'); // Return Others if not specified or invalid
             end;
         end;
     end;

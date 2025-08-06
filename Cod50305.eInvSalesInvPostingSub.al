@@ -58,9 +58,6 @@ codeunit 50305 "eInv Posting Subscribers"
                 // Wait a moment to ensure all data is committed
                 Sleep(2000);
 
-                // Attempt automatic submission to LHDN
-                Message('Starting automatic e-Invoice submission for invoice %1...', SalesInvHdrNo);
-
                 if eInvoiceJSONGenerator.GetSignedInvoiceAndSubmitToLHDN(SalesInvoiceHeader, LhdnResponse) then begin
                     // Success - log the successful submission
                     Clear(TelemetryDimensions);
@@ -69,8 +66,6 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV01', 'Automatic e-Invoice submission successful',
                         Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
-
-                    Message('Invoice %1 has been successfully posted and submitted to LHDN e-Invoice system.', SalesInvHdrNo);
                 end else begin
                     // Failure - log the error but don't stop the posting process
                     Clear(TelemetryDimensions);
@@ -79,15 +74,7 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV02', 'Automatic e-Invoice submission failed',
                         Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
-
-                    Message('Invoice %1 has been posted successfully.' +
-                            'However, automatic e-Invoice submission failed: %2' +
-                            'You can manually submit it from the Posted Sales Invoice page.',
-                            SalesInvHdrNo, CopyStr(LhdnResponse, 1, 200));
                 end;
-            end else begin
-                // Customer doesn't require e-Invoice - just show normal posting message
-                Message('Invoice %1 has been posted successfully. Customer does not require automatic e-Invoice submission.', SalesInvHdrNo);
             end;
         end;
     end;
