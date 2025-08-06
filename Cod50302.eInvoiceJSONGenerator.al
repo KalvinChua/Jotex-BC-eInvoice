@@ -435,8 +435,9 @@ codeunit 50302 "eInvoice JSON Generator"
             Error('Customer %1 not found', SalesInvoiceHeader."Bill-to Customer No.");
         AddAccountingCustomerParty(InvoiceObject, Customer);
 
-        // Delivery and shipment
-        AddDelivery(InvoiceObject, Customer, SalesInvoiceHeader);
+        // Delivery and shipment (optional)
+        if ShouldIncludeDelivery(SalesInvoiceHeader) then
+            AddDelivery(InvoiceObject, Customer, SalesInvoiceHeader);
 
         // Payment information
         AddPaymentMeans(InvoiceObject, SalesInvoiceHeader);
@@ -523,6 +524,21 @@ codeunit 50302 "eInvoice JSON Generator"
             else
                 exit(false); // Don't include for standard invoices unless specifically needed
         end;
+    end;
+
+    local procedure ShouldIncludeDelivery(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
+    begin
+        // Define business logic for when to include delivery/shipping recipient information
+        // According to MyInvois documentation, shipping recipient details are optional
+
+        // You can customize this logic based on your business requirements:
+        // - Only include when there's a different delivery address than billing address
+        // - Only for specific document types that require delivery information
+        // - Only when customer has specific delivery requirements
+
+        // For now, return false to make delivery section optional by default
+        // You can modify this logic based on your specific business needs
+        exit(false);
     end;
 
     local procedure GetInvoicePeriodDetails(SalesInvoiceHeader: Record "Sales Invoice Header"; var StartDate: Date; var EndDate: Date; var PeriodDescription: Text)
