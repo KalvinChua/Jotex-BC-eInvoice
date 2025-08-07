@@ -54,6 +54,11 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies when the response was received from LHDN.';
                 }
+                field("Posting Date"; Rec."Posting Date")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the posting date of the posted sales invoice.';
+                }
                 field("Environment"; Rec.Environment)
                 {
                     ApplicationArea = All;
@@ -187,11 +192,11 @@ page 50316 "e-Invoice Submission Log"
                     CsvContent: Text;
                 begin
                     // Generate CSV content
-                    CsvContent := 'Entry No.,Invoice No.,Customer Name,Submission UID,Document UUID,Status,Submission Date,Response Date,Environment,Error Message' + '\\';
+                    CsvContent := 'Entry No.,Invoice No.,Customer Name,Submission UID,Document UUID,Status,Submission Date,Response Date,Posting Date,Environment,Error Message' + '\\';
 
                     if Rec.FindSet() then begin
                         repeat
-                            CsvContent += StrSubstNo('%1,%2,%3,%4,%5,%6,%7,%8,%9,%10' + '\\',
+                            CsvContent += StrSubstNo('%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11' + '\\',
                                 Rec."Entry No.",
                                 Rec."Invoice No.",
                                 Rec."Customer Name",
@@ -200,6 +205,7 @@ page 50316 "e-Invoice Submission Log"
                                 Rec.Status,
                                 Format(Rec."Submission Date"),
                                 Format(Rec."Response Date"),
+                                Format(Rec."Posting Date"),
                                 Rec.Environment,
                                 Rec."Error Message");
                         until Rec.Next() = 0;
@@ -284,6 +290,39 @@ page 50316 "e-Invoice Submission Log"
                                           ActiveJobs, CompletedJobs, ErrorJobs);
 
                     Message(JobStatus);
+                end;
+            }
+
+            action(PopulatePostingDates)
+            {
+                ApplicationArea = All;
+                Caption = 'Populate Posting Dates';
+                Image = UpdateDescription;
+                ToolTip = 'Populate posting dates for existing submission log entries that don''t have posting dates';
+
+                trigger OnAction()
+                var
+                    PostingDatePopulator: Codeunit "eInvoice Post Date Populator";
+                begin
+                    if Confirm('This will populate posting dates for existing submission log entries that don''t have posting dates. Continue?') then begin
+                        PostingDatePopulator.PopulatePostingDatesForExistingEntries();
+                        CurrPage.Update(false);
+                    end;
+                end;
+            }
+
+            action(ShowSubmissionLogStatus)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Log Status';
+                Image = Statistics;
+                ToolTip = 'Show current status of submission log entries';
+
+                trigger OnAction()
+                var
+                    PostingDatePopulator: Codeunit "eInvoice Post Date Populator";
+                begin
+                    PostingDatePopulator.ShowSubmissionLogStatus();
                 end;
             }
         }

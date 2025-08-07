@@ -117,6 +117,55 @@ pageextension 50320 eInvCustList extends "Customer List"
                     end;
                 end;
             }
+
+            action(SetAllCustomersRequireEInvoice)
+            {
+                ApplicationArea = All;
+                Caption = 'Set All Require e-Invoice';
+                Image = Check;
+                ToolTip = 'Set all customers to require e-Invoice submission';
+
+                trigger OnAction()
+                var
+                    CustomerBulkUpdate: Codeunit "eInvoice Customer Bulk Update";
+                begin
+                    if Confirm('Do you want to set ALL customers to require e-Invoice? This will enable automatic submission for all customers.') then begin
+                        CustomerBulkUpdate.SetAllCustomersRequireEInvoice();
+                    end;
+                end;
+            }
+
+            action(ShowCustomerEInvoiceStatus)
+            {
+                ApplicationArea = All;
+                Caption = 'Show e-Invoice Status';
+                Image = Statistics;
+                ToolTip = 'Show current status of customer e-Invoice requirements';
+
+                trigger OnAction()
+                var
+                    CustomerBulkUpdate: Codeunit "eInvoice Customer Bulk Update";
+                begin
+                    CustomerBulkUpdate.ShowCustomerEInvoiceStatus();
+                end;
+            }
+
+            action(ResetAllCustomersEInvoiceRequirement)
+            {
+                ApplicationArea = All;
+                Caption = 'Reset All e-Invoice Requirements';
+                Image = Cancel;
+                ToolTip = 'Reset all customers to NOT require e-Invoice (revert changes)';
+
+                trigger OnAction()
+                var
+                    CustomerBulkUpdate: Codeunit "eInvoice Customer Bulk Update";
+                begin
+                    if Confirm('Do you want to reset ALL customers to NOT require e-Invoice? This will disable automatic submission for all customers.') then begin
+                        CustomerBulkUpdate.ResetAllCustomersEInvoiceRequirement();
+                    end;
+                end;
+            }
         }
     }
 

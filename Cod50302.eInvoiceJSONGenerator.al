@@ -4127,6 +4127,7 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog."User ID" := UserId;
         SubmissionLog."Company Name" := CompanyName;
         SubmissionLog."Error Message" := ErrorMessage;
+        SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
 
         // Set environment based on setup
         if eInvoiceSetup.Get('SETUP') then

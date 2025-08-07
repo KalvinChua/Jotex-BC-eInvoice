@@ -69,6 +69,11 @@ page 50315 "e-Invoice Submission Log Card"
                     ApplicationArea = All;
                     ToolTip = 'Specifies when this log entry was last updated.';
                 }
+                field("Posting Date"; Rec."Posting Date")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the posting date of the posted sales invoice.';
+                }
             }
 
             group(User)
