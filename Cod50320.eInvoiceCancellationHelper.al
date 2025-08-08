@@ -104,4 +104,48 @@ codeunit 50320 "eInvoice Cancellation Helper"
             exit(false);
         end;
     end;
+
+
+
+    /// <summary>
+    /// Updates Customer Name for existing e-invoice submission log entries that have empty customer names.
+    /// This procedure can be called manually to populate customer names for historical records.
+    /// </summary>
+    procedure UpdateExistingCustomerNames()
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        Customer: Record Customer;
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        CustomerName: Text;
+        UpdatedCount: Integer;
+    begin
+        UpdatedCount := 0;
+
+        // Find all submission log entries with empty customer names
+        SubmissionLog.SetRange("Customer Name", '');
+        if SubmissionLog.FindSet() then begin
+            repeat
+                CustomerName := '';
+
+                // Try to get customer name from the invoice
+                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                    if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+                        CustomerName := Customer.Name;
+                end;
+
+                // Update the record if we found a customer name
+                if CustomerName <> '' then begin
+                    SubmissionLog."Customer Name" := CustomerName;
+                    SubmissionLog.Modify();
+                    UpdatedCount += 1;
+                end;
+            until SubmissionLog.Next() = 0;
+        end;
+
+        // Show results to user
+        if UpdatedCount > 0 then
+            Message('Successfully updated Customer Name for %1 existing submission log entries.', UpdatedCount)
+        else
+            Message('No submission log entries with empty Customer Name were found.');
+    end;
 }

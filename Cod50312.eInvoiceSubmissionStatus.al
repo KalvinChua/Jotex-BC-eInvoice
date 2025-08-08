@@ -24,7 +24,7 @@ codeunit 50312 "eInvoice Submission Status"
     /// Rate Limit: 300 RPM per Client ID
     /// Enhanced with context restriction handling and proper pagination
     /// </summary>
-    procedure CheckSubmissionStatus(SubmissionUid: Text; var SubmissionDetails: Text): Boolean
+    procedure CheckSubmissionStatus(SubmissionUid: Text; var SubmissionDetails: Text; var DocumentType: Text): Boolean
     var
         HttpClient: HttpClient;
         HttpResponseMessage: HttpResponseMessage;
@@ -194,7 +194,7 @@ codeunit 50312 "eInvoice Submission Status"
         HttpResponseMessage.Content().ReadAs(ResponseText);
 
         // Parse JSON response according to LHDN API specification
-        if ParseSubmissionResponse(ResponseText, SubmissionDetails, OverallStatus, DocumentCount, DateTimeReceived) then begin
+        if ParseSubmissionResponse(ResponseText, SubmissionDetails, OverallStatus, DocumentCount, DateTimeReceived, DocumentType) then begin
             // Format the response for better readability with official API structure
             SubmissionDetails := StrSubstNo('LHDN Get Submission API Response\\' +
                                           '================================\\\\' +
@@ -261,6 +261,7 @@ codeunit 50312 "eInvoice Submission Status"
         CurrentPageDocCount: Integer;
         RetrievedDocCount: Integer;
         IsSuccess: Boolean;
+        DocumentType: Text;
     begin
         SubmissionDetails := '';
         CorrelationId := CreateGuid();
@@ -291,7 +292,7 @@ codeunit 50312 "eInvoice Submission Status"
 
         // Get first page to determine total document count
         IsSuccess := GetSubmissionPage(SubmissionUid, PageNo, PageSize, eInvoiceSetup, AccessToken, CorrelationId,
-                                     ResponseText, OverallStatus, DocumentCount, DateTimeReceived, PageDetails);
+                                     ResponseText, OverallStatus, DocumentCount, DateTimeReceived, PageDetails, DocumentType);
 
         if not IsSuccess then begin
             SubmissionDetails := PageDetails;
@@ -312,7 +313,7 @@ codeunit 50312 "eInvoice Submission Status"
                 Sleep(4000);
 
                 IsSuccess := GetSubmissionPage(SubmissionUid, PageNo, PageSize, eInvoiceSetup, AccessToken, CorrelationId,
-                                             ResponseText, OverallStatus, DocumentCount, DateTimeReceived, PageDetails);
+                                             ResponseText, OverallStatus, DocumentCount, DateTimeReceived, PageDetails, DocumentType);
 
                 if IsSuccess then begin
                     if AllDocumentDetails <> '' then
@@ -362,7 +363,7 @@ codeunit 50312 "eInvoice Submission Status"
     /// <summary>
     /// Helper procedure to get a specific page of submission data
     /// </summary>
-    local procedure GetSubmissionPage(SubmissionUid: Text; PageNo: Integer; PageSize: Integer; var eInvoiceSetup: Record "eInvoiceSetup"; AccessToken: Text; CorrelationId: Text; var ResponseText: Text; var OverallStatus: Text; var DocumentCount: Integer; var DateTimeReceived: Text; var PageDetails: Text): Boolean
+    local procedure GetSubmissionPage(SubmissionUid: Text; PageNo: Integer; PageSize: Integer; var eInvoiceSetup: Record "eInvoiceSetup"; AccessToken: Text; CorrelationId: Text; var ResponseText: Text; var OverallStatus: Text; var DocumentCount: Integer; var DateTimeReceived: Text; var PageDetails: Text; var DocumentType: Text): Boolean
     var
         HttpClient: HttpClient;
         HttpResponseMessage: HttpResponseMessage;
@@ -407,7 +408,7 @@ codeunit 50312 "eInvoice Submission Status"
 
         // Read and parse response
         HttpResponseMessage.Content().ReadAs(ResponseText);
-        if not ParseSubmissionResponse(ResponseText, PageDetails, OverallStatus, DocumentCount, DateTimeReceived) then begin
+        if not ParseSubmissionResponse(ResponseText, PageDetails, OverallStatus, DocumentCount, DateTimeReceived, DocumentType) then begin
             PageDetails := StrSubstNo('Failed to parse response for page %1', PageNo);
             exit(false);
         end;
@@ -564,7 +565,7 @@ codeunit 50312 "eInvoice Submission Status"
     /// Based on: https://sdk.myinvois.hasil.gov.my/einvoicingapi/06-get-submission/
     /// Response includes: submissionUid, documentCount, dateTimeReceived, overallStatus, documentSummary[]
     /// </summary>
-    local procedure ParseSubmissionResponse(ResponseText: Text; var SubmissionDetails: Text; var OverallStatus: Text; var DocumentCount: Integer; var DateTimeReceived: Text): Boolean
+    local procedure ParseSubmissionResponse(ResponseText: Text; var SubmissionDetails: Text; var OverallStatus: Text; var DocumentCount: Integer; var DateTimeReceived: Text; var DocumentType: Text): Boolean
     var
         JsonObject: JsonObject;
         JsonToken: JsonToken;
@@ -595,6 +596,7 @@ codeunit 50312 "eInvoice Submission Status"
         DocumentCount := 0;
         DateTimeReceived := '';
         SubmissionUid := '';
+        DocumentType := '';
 
         if not JsonObject.ReadFrom(ResponseText) then
             exit(false);
@@ -707,6 +709,16 @@ codeunit 50312 "eInvoice Submission Status"
             // Update submission details with document information
             if DocumentDetails <> '' then begin
                 SubmissionDetails := StrSubstNo('Document Summary:\\%1', DocumentDetails);
+            end;
+
+            // Extract document type from the first document if available
+            if DocumentSummaryCount > 0 then begin
+                DocumentSummaryArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('typeName', JsonToken) then
+                        DocumentType := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                end;
             end;
         end;
 
@@ -1417,6 +1429,7 @@ codeunit 50312 "eInvoice Submission Status"
         ApiSuccess: Boolean;
         UpdatedCount: Integer;
         ProcessedCount: Integer;
+        DocumentType: Text;
     begin
         UpdatedCount := 0;
         ProcessedCount := 0;
@@ -1432,7 +1445,7 @@ codeunit 50312 "eInvoice Submission Status"
                 ProcessedCount += 1;
 
                 // Use the direct status check method
-                ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
+                ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails, DocumentType);
 
                 if ApiSuccess then begin
                     // Update the log entry with current status from LHDN using Document UUID for precise matching
@@ -1510,6 +1523,9 @@ codeunit 50312 "eInvoice Submission Status"
                             SubmissionLogRec."Error Message" := StrSubstNo('Background refresh completed at %1',
                                                                           Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
                             SubmissionLogRec.Modify();
+
+                            // Synchronize the Posted Sales Invoice status
+                            SynchronizePostedSalesInvoiceStatus(SubmissionLogRec."Invoice No.", LhdnStatus);
                         end else begin
                             // Even background job context has restrictions - log this issue
                             SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Background refresh failed due to HTTP context restrictions. Environment may have strict HTTP policies. Last attempted: %1',
@@ -1550,6 +1566,7 @@ codeunit 50312 "eInvoice Submission Status"
         SubmissionDetails: Text;
         LhdnStatus: Text;
         PipePos: Integer;
+        DocumentType: Text;
     begin
         // Find the current job queue entry to get parameters
         JobQueueEntry.SetRange("Object ID to Run", Codeunit::"eInvoice Submission Status");
@@ -1568,7 +1585,7 @@ codeunit 50312 "eInvoice Submission Status"
                     SubmissionLogRec.SetRange("Submission UID", SubmissionUID);
                     if SubmissionLogRec.FindFirst() then begin
                         // Direct API call - this runs in background context where HTTP is allowed
-                        if CheckSubmissionStatus(SubmissionUID, SubmissionDetails) then begin
+                        if CheckSubmissionStatus(SubmissionUID, SubmissionDetails, DocumentType) then begin
                             // Extract status using Document UUID for precise matching
                             if SubmissionLogRec."Document UUID" <> '' then
                                 LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLogRec."Document UUID")
@@ -1581,6 +1598,9 @@ codeunit 50312 "eInvoice Submission Status"
                             SubmissionLogRec."Error Message" := StrSubstNo('Background refresh completed at %1',
                                                                           Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
                             SubmissionLogRec.Modify();
+
+                            // Synchronize the Posted Sales Invoice status
+                            SynchronizePostedSalesInvoiceStatus(SubmissionLogRec."Invoice No.", LhdnStatus);
                         end else begin
                             // Log the error from background job
                             SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Background refresh failed: %1', SubmissionDetails),
@@ -1609,13 +1629,15 @@ codeunit 50312 "eInvoice Submission Status"
     /// </summary>
     [TryFunction]
     local procedure TryDirectApiCallForBackground(SubmissionUid: Text; var SubmissionDetails: Text)
+    var
+        DocumentType: Text;
     begin
         // Initialize helper with minimal overhead
         eInvoiceHelper.InitializeHelper();
 
         // Attempt the status check with try-catch
         // If this fails even in job queue, it indicates very strict HTTP restrictions
-        CheckSubmissionStatus(SubmissionUid, SubmissionDetails);
+        CheckSubmissionStatus(SubmissionUid, SubmissionDetails, DocumentType);
     end;
 
     /// <summary>
@@ -1627,6 +1649,7 @@ codeunit 50312 "eInvoice Submission Status"
         SubmissionLog: Record "eInvoice Submission Log";
         SubmissionDetails: Text;
         ProcessedCount: Integer;
+        DocumentType: Text;
     begin
         // Process a limited number of entries to avoid timeout
         SubmissionLog.SetFilter("Submission UID", '<>%1', '');
@@ -1636,7 +1659,7 @@ codeunit 50312 "eInvoice Submission Status"
             repeat
                 ProcessedCount += 1;
                 // Try to refresh this one entry
-                CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
+                CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails, DocumentType);
 
                 // Limit to 5 entries to avoid job timeout
                 if ProcessedCount >= 5 then
@@ -1761,6 +1784,7 @@ codeunit 50312 "eInvoice Submission Status"
         SubmissionDetails: Text;
         ApiSuccess: Boolean;
         LhdnStatus: Text;
+        DocumentType: Text;
     begin
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
@@ -1770,7 +1794,7 @@ codeunit 50312 "eInvoice Submission Status"
 
         // Check status using LHDN API
         eInvoiceHelper.InitializeHelper();
-        ApiSuccess := CheckSubmissionStatus(SubmissionLogRec."Submission UID", SubmissionDetails);
+        ApiSuccess := CheckSubmissionStatus(SubmissionLogRec."Submission UID", SubmissionDetails, DocumentType);
 
         if ApiSuccess then begin
             // Extract the proper status from LHDN response using Document UUID for precise matching
@@ -1784,6 +1808,8 @@ codeunit 50312 "eInvoice Submission Status"
             SubmissionLogRec."Response Date" := CurrentDateTime;
             SubmissionLogRec."Last Updated" := CurrentDateTime;
             SubmissionLogRec."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLogRec."Error Message"));
+            if DocumentType <> '' then
+                SubmissionLogRec."Document Type" := DocumentType;
 
             if SubmissionLogRec.Modify() then begin
                 Message('Status refreshed successfully!\\' +
@@ -1823,6 +1849,7 @@ codeunit 50312 "eInvoice Submission Status"
         ProcessedCount: Integer;
         ErrorCount: Integer;
         LhdnStatus: Text;
+        DocumentType: Text;
         ProgressDialog: Dialog;
     begin
         UpdatedCount := 0;
@@ -1847,7 +1874,7 @@ codeunit 50312 "eInvoice Submission Status"
 
                 // Refresh status using LHDN API
                 eInvoiceHelper.InitializeHelper();
-                ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails);
+                ApiSuccess := CheckSubmissionStatus(SubmissionLog."Submission UID", SubmissionDetails, DocumentType);
 
                 if ApiSuccess then begin
                     // Extract status using Document UUID for precise matching
@@ -1863,9 +1890,14 @@ codeunit 50312 "eInvoice Submission Status"
                                                                        LhdnStatus,
                                                                        SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
                                                              1, MaxStrLen(SubmissionLog."Error Message"));
+                    if DocumentType <> '' then
+                        SubmissionLog."Document Type" := DocumentType;
 
-                    if SubmissionLog.Modify() then
+                    if SubmissionLog.Modify() then begin
                         UpdatedCount += 1;
+                        // Synchronize the Posted Sales Invoice status
+                        SynchronizePostedSalesInvoiceStatus(SubmissionLog."Invoice No.", LhdnStatus);
+                    end;
                 end else begin
                     // Log the error
                     SubmissionLog."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLog."Error Message"));
@@ -1898,6 +1930,14 @@ codeunit 50312 "eInvoice Submission Status"
     /// Enhanced to use the same direct HttpClient approach as Posted Sales Invoice
     /// </summary>
     procedure RefreshSubmissionLogStatusSafe(var SubmissionLogRec: Record "eInvoice Submission Log"): Boolean
+    begin
+        exit(RefreshSubmissionLogStatusSafeInternal(SubmissionLogRec, true));
+    end;
+
+    /// <summary>
+    /// Internal method for refreshing submission log status with optional message display
+    /// </summary>
+    local procedure RefreshSubmissionLogStatusSafeInternal(var SubmissionLogRec: Record "eInvoice Submission Log"; ShowMessages: Boolean): Boolean
     var
         HttpClient: HttpClient;
         HttpRequestMessage: HttpRequestMessage;
@@ -1911,13 +1951,15 @@ codeunit 50312 "eInvoice Submission Status"
     begin
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
-            Message('No Submission UID found for this entry. Cannot refresh status.');
+            if ShowMessages then
+                Message('No Submission UID found for this entry. Cannot refresh status.');
             exit(false);
         end;
 
         // Get setup for environment determination
         if not eInvoiceSetup.Get('SETUP') then begin
-            Message('eInvoice Setup not found');
+            if ShowMessages then
+                Message('eInvoice Setup not found');
             exit(false);
         end;
 
@@ -1925,7 +1967,8 @@ codeunit 50312 "eInvoice Submission Status"
         eInvoiceHelper.InitializeHelper();
         AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
         if AccessToken = '' then begin
-            Message('Failed to get access token');
+            if ShowMessages then
+                Message('Failed to get access token');
             exit(false);
         end;
 
@@ -1967,22 +2010,29 @@ codeunit 50312 "eInvoice Submission Status"
                                                            1, MaxStrLen(SubmissionLogRec."Error Message"));
 
                 if SubmissionLogRec.Modify() then begin
-                    Message('Status refreshed successfully via direct API!\\' +
-                           'New Status: %1\\' +
-                           'Updated: %2\\' +
-                           'Method: %3\\' +
-                           'API Response: Direct HttpClient call',
-                           LhdnStatus,
-                           Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
-                           SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Submission-level status');
+                    // Synchronize the Posted Sales Invoice status
+                    SynchronizePostedSalesInvoiceStatus(SubmissionLogRec."Invoice No.", LhdnStatus);
+
+                    if ShowMessages then
+                        Message('Status refreshed successfully via direct API!\\' +
+                               'New Status: %1\\' +
+                               'Updated: %2\\' +
+                               'Method: %3\\' +
+                               'API Response: Direct HttpClient call\\' +
+                               'Posted Sales Invoice status synchronized',
+                               LhdnStatus,
+                               Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
+                               SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Submission-level status');
                     exit(true);
                 end else begin
-                    Message('Failed to update the log entry. Please try again.');
+                    if ShowMessages then
+                        Message('Failed to update the log entry. Please try again.');
                     exit(false);
                 end;
             end else begin
-                Message('Failed to retrieve status from LHDN API (Status Code: %1). Check the Error Message field for details.',
-                       HttpResponseMessage.HttpStatusCode);
+                if ShowMessages then
+                    Message('Failed to retrieve status from LHDN API (Status Code: %1). Check the Error Message field for details.',
+                           HttpResponseMessage.HttpStatusCode());
 
                 SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('HTTP Error %1: %2',
                                                                      HttpResponseMessage.HttpStatusCode,
@@ -1994,13 +2044,14 @@ codeunit 50312 "eInvoice Submission Status"
             end;
         end else begin
             // Failed to connect to LHDN API
-            Message('Failed to connect to LHDN API via direct HttpClient call.\\\\' +
-                   'Error: %1\\\\' +
-                   'This may be due to:\\' +
-                   '- Network connectivity issues\\' +
-                   '- Context restrictions\\' +
-                   '- LHDN API temporary unavailability',
-                   GetLastErrorText());
+            if ShowMessages then
+                Message('Failed to connect to LHDN API via direct HttpClient call.\\\\' +
+                       'Error: %1\\\\' +
+                       'This may be due to:\\' +
+                       '- Network connectivity issues\\' +
+                       '- Context restrictions\\' +
+                       '- LHDN API temporary unavailability',
+                       GetLastErrorText());
 
             SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Direct API call failed: %1', GetLastErrorText()),
                                                        1, MaxStrLen(SubmissionLogRec."Error Message"));
@@ -2099,34 +2150,36 @@ codeunit 50312 "eInvoice Submission Status"
     /// </summary>
     [TryFunction]
     local procedure TryRefreshStatusFromAPI(SubmissionUid: Text; var SubmissionDetails: Text)
+    var
+        DocumentType: Text;
     begin
         // Initialize helper and attempt API call
         eInvoiceHelper.InitializeHelper();
 
         // The TryFunction attribute ensures any errors (including context restrictions) 
         // are caught and the function returns false gracefully
-        CheckSubmissionStatus(SubmissionUid, SubmissionDetails);
+        CheckSubmissionStatus(SubmissionUid, SubmissionDetails, DocumentType);
     end;
 
     /// <summary>
     /// Context-safe refresh for all submission log entries
-    /// Uses try-catch approach to handle context restrictions gracefully
+    /// Uses direct HttpClient approach (same as single refresh) to avoid context restrictions
     /// </summary>
     procedure RefreshAllSubmissionLogStatusesSafe(): Boolean
     var
         SubmissionLog: Record "eInvoice Submission Log";
-        SubmissionDetails: Text;
         UpdatedCount: Integer;
         ProcessedCount: Integer;
         ErrorCount: Integer;
-        LhdnStatus: Text;
         ProgressDialog: Dialog;
         ContextRestricted: Boolean;
+        FirstError: Text;
     begin
         UpdatedCount := 0;
         ProcessedCount := 0;
         ErrorCount := 0;
         ContextRestricted := false;
+        FirstError := '';
 
         // Set up progress dialog
         ProgressDialog.Open('Refreshing submission statuses...\\' +
@@ -2144,37 +2197,24 @@ codeunit 50312 "eInvoice Submission Status"
                 ProgressDialog.Update(2, UpdatedCount);
                 ProgressDialog.Update(3, ErrorCount);
 
-                // Try context-safe API call
-                if TryRefreshStatusFromAPI(SubmissionLog."Submission UID", SubmissionDetails) then begin
-                    // Extract status using Document UUID for precise matching (same logic as Posted Sales Invoice)
-                    if SubmissionLog."Document UUID" <> '' then
-                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLog."Document UUID")
-                    else
-                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
-
-                    SubmissionLog.Status := LhdnStatus;
-                    SubmissionLog."Response Date" := CurrentDateTime;
-                    SubmissionLog."Last Updated" := CurrentDateTime;
-                    SubmissionLog."Error Message" := CopyStr(StrSubstNo('Bulk refresh: %1. Method: %2',
-                                                                       LhdnStatus,
-                                                                       SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
-                                                             1, MaxStrLen(SubmissionLog."Error Message"));
-
-                    if SubmissionLog.Modify() then
-                        UpdatedCount += 1;
+                // Use the EXACT same method as single refresh for each record
+                // This ensures each HTTP call is identical to the working single refresh
+                // Use internal method without messages to avoid dialog bombardment
+                if RefreshSubmissionLogStatusSafeInternal(SubmissionLog, false) then begin
+                    UpdatedCount += 1;
                 end else begin
-                    // Check if this is due to context restrictions
-                    if GetLastErrorText().Contains('context') then begin
+                    // Check if this failed due to context restrictions
+                    FirstError := GetLastErrorText();
+                    if FirstError.Contains('Context restrictions') or
+                       FirstError.Contains('HTTP operations') or
+                       FirstError.Contains('not allowed') or
+                       FirstError.Contains('context') then begin
                         ContextRestricted := true;
-                        break; // Exit the loop if context restricted
+                        ErrorCount += 1;
+                        break; // Exit the loop on first context restriction
                     end else begin
-                        // Log other types of errors
-                        SubmissionLog."Error Message" := CopyStr(GetLastErrorText(), 1, MaxStrLen(SubmissionLog."Error Message"));
-                        SubmissionLog."Last Updated" := CurrentDateTime;
-                        SubmissionLog.Modify();
                         ErrorCount += 1;
                     end;
-                    ClearLastError();
                 end;
 
                 // Add delay to respect LHDN rate limiting
@@ -2185,11 +2225,18 @@ codeunit 50312 "eInvoice Submission Status"
 
         ProgressDialog.Close();
 
+        // Show completion message
         if ContextRestricted then begin
-            // Context restrictions detected - return false to trigger alternative handling
+            Message('Bulk refresh stopped due to context restrictions!\\\\' +
+                   'Processed: %1 entries\\' +
+                   'Updated: %2 entries\\' +
+                   'Errors: %3 entries\\\\' +
+                   'Error: %4\\\\' +
+                   'Context restrictions prevent HTTP operations in this UI context.\\' +
+                   'Consider using individual refresh or background job for bulk operations.',
+                   ProcessedCount, UpdatedCount, ErrorCount, FirstError);
             exit(false);
         end else begin
-            // Show completion message
             Message('Status refresh completed!\\\\' +
                    'Processed: %1 entries\\' +
                    'Updated: %2 entries\\' +
@@ -2316,6 +2363,72 @@ codeunit 50312 "eInvoice Submission Status"
             else
                 exit(StatusValue); // Return as-is for unknown values
         end;
+    end;
+
+    /// <summary>
+    /// Synchronize the Posted Sales Invoice status with the submission log status
+    /// This ensures both entities have consistent status information
+    /// </summary>
+    /// <param name="InvoiceNo">The invoice number to update</param>
+    /// <param name="NewStatus">The new status from LHDN</param>
+    local procedure SynchronizePostedSalesInvoiceStatus(InvoiceNo: Code[20]; NewStatus: Text)
+    var
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+    begin
+        // Only proceed if we have a valid invoice number
+        if InvoiceNo = '' then
+            exit;
+
+        // Try to get the posted sales invoice
+        if SalesInvoiceHeader.Get(InvoiceNo) then begin
+            // Use the existing UpdateInvoiceValidationStatus procedure from the JSON Generator codeunit
+            // This ensures consistent status formatting and proper permissions
+            if not eInvoiceGenerator.UpdateInvoiceValidationStatus(InvoiceNo, NewStatus) then begin
+                // Log the failure but don't stop the process
+                Session.LogMessage('0000EIV03', StrSubstNo('Failed to synchronize Posted Sales Invoice status for invoice %1 with status %2',
+                    InvoiceNo, NewStatus),
+                    Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, '', '');
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// Update existing submission log entries with empty Document Type fields
+    /// This procedure can be called to populate Document Type for existing records
+    /// </summary>
+    procedure UpdateExistingDocumentTypes(): Integer
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        UpdatedCount: Integer;
+    begin
+        UpdatedCount := 0;
+
+        // Find all submission log entries with empty Document Type
+        SubmissionLog.SetFilter("Document Type", '');
+        SubmissionLog.SetFilter("Invoice No.", '<>%1', '');
+
+        if SubmissionLog.FindSet() then begin
+            repeat
+                // Try to get document type from the corresponding Sales Invoice Header
+                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                    if SalesInvoiceHeader."eInvoice Document Type" <> '' then begin
+                        SubmissionLog."Document Type" := SalesInvoiceHeader."eInvoice Document Type";
+                        SubmissionLog."Last Updated" := CurrentDateTime;
+                        if SubmissionLog.Modify() then
+                            UpdatedCount += 1;
+                    end;
+                end;
+            until SubmissionLog.Next() = 0;
+        end;
+
+        if UpdatedCount > 0 then
+            Message('Updated Document Type for %1 existing submission log entries.', UpdatedCount)
+        else
+            Message('No submission log entries found with empty Document Type fields.');
+
+        exit(UpdatedCount);
     end;
 
 }

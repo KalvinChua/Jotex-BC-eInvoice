@@ -2438,7 +2438,7 @@ codeunit 50302 "eInvoice JSON Generator"
                 SalesInvoiceHeader.Modify();
 
                 // Log the failed submission
-                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Submission Failed', LhdnResponse);
+                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Submission Failed', LhdnResponse, SalesInvoiceHeader."eInvoice Document Type");
             end;
         end else begin
             Error('Failed to send HTTP request to LHDN API at %1', LhdnApiUrl);
@@ -2645,7 +2645,7 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
 
         // Log the submission to the submission log table
-        LogSubmissionToTable(SalesInvoiceHeader, SubmissionUid, Uuid, 'Submitted', '');
+        LogSubmissionToTable(SalesInvoiceHeader, SubmissionUid, Uuid, 'Submitted', '', SalesInvoiceHeader."eInvoice Document Type");
     end;
 
     local procedure ParseAndDisplayLhdnError(ErrorResponse: Text; StatusCode: Integer; ReasonPhrase: Text; HttpResponseMessage: HttpResponseMessage)
@@ -4109,15 +4109,23 @@ codeunit 50302 "eInvoice JSON Generator"
     /// <param name="DocumentUuid">Document UUID from LHDN</param>
     /// <param name="Status">Submission status</param>
     /// <param name="ErrorMessage">Error message if any</param>
-    local procedure LogSubmissionToTable(SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; DocumentUuid: Text; Status: Text; ErrorMessage: Text)
+    local procedure LogSubmissionToTable(SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; DocumentUuid: Text; Status: Text; ErrorMessage: Text; DocumentType: Text)
     var
         SubmissionLog: Record "eInvoice Submission Log";
         eInvoiceSetup: Record "eInvoiceSetup";
+        Customer: Record Customer;
+        CustomerName: Text;
     begin
+        // Get customer name
+        CustomerName := '';
+        if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
         // Create new log entry
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
+        SubmissionLog."Customer Name" := CustomerName;
         SubmissionLog."Submission UID" := CleanQuotesFromText(SubmissionUid);
         SubmissionLog."Document UUID" := CleanQuotesFromText(DocumentUuid);
         SubmissionLog.Status := Status;
@@ -4128,6 +4136,7 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog."Company Name" := CompanyName;
         SubmissionLog."Error Message" := ErrorMessage;
         SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
+        SubmissionLog."Document Type" := DocumentType;
 
         // Set environment based on setup
         if eInvoiceSetup.Get('SETUP') then

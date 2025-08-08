@@ -93,6 +93,11 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Posting Date';
             DataClassification = CustomerContent;
         }
+        field(18; "Document Type"; Text[100])
+        {
+            Caption = 'Document Type';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

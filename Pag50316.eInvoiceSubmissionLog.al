@@ -39,6 +39,11 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the document UUID assigned by LHDN MyInvois.';
                 }
+                field("Document Type"; Rec."Document Type")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the document type from the LHDN API response (e.g., Invoice, Credit Note, etc.).';
+                }
                 field("Status"; Rec.Status)
                 {
                     ApplicationArea = All;
@@ -159,16 +164,14 @@ page 50316 "e-Invoice Submission Log"
                     if SubmissionStatusCU.RefreshAllSubmissionLogStatusesSafe() then begin
                         Message('Bulk refresh completed successfully.');
                     end else begin
-                        // Context restrictions detected - offer job queue alternative
-                        if Confirm('Context restrictions detected. Create background job?') then begin
-                            // Create job queue entry for bulk refresh
-                            if CreateBulkRefreshJob() then begin
-                                Message('Background job created. Expected duration: 5-15 minutes.');
-                            end else begin
-                                Message('Failed to create background job.');
-                            end;
+                        // Context restrictions detected - automatically create background job
+                        Message('Context restrictions detected. Creating background job for bulk refresh...');
+                        if CreateBulkRefreshJob() then begin
+                            Message('Background job created successfully!\\\\' +
+                                   'Expected duration: 5-15 minutes\\\\' +
+                                   'You can check progress using the "Check Background Jobs" action.');
                         end else begin
-                            Message('Try individual refresh instead.');
+                            Message('Failed to create background job. Please try individual refresh instead.');
                         end;
                     end;
 
@@ -323,6 +326,76 @@ page 50316 "e-Invoice Submission Log"
                     PostingDatePopulator: Codeunit "eInvoice Post Date Populator";
                 begin
                     PostingDatePopulator.ShowSubmissionLogStatus();
+                end;
+            }
+
+            action(UpdateDocumentTypes)
+            {
+                ApplicationArea = All;
+                Caption = 'Update Document Types';
+                Image = UpdateDescription;
+                ToolTip = 'Update document types for existing submission log entries that have empty document types';
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    UpdatedCount: Integer;
+                begin
+                    if Confirm('This will update document types for existing submission log entries that have empty document types. Continue?') then begin
+                        UpdatedCount := SubmissionStatusCU.UpdateExistingDocumentTypes();
+                        CurrPage.Update(false);
+                    end;
+                end;
+            }
+
+            action(UpdateCustomerNames)
+            {
+                ApplicationArea = All;
+                Caption = 'Update Customer Names';
+                Image = UpdateDescription;
+                ToolTip = 'Update customer names for existing submission log entries that have empty customer names';
+
+                trigger OnAction()
+                var
+                    CustomerNameUpgrade: Codeunit "eInvoice Customer Name Upgrade";
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    Customer: Record Customer;
+                    SalesInvoiceHeader: Record "Sales Invoice Header";
+                    CustomerName: Text;
+                    UpdatedCount: Integer;
+                begin
+                    if Confirm('This will update customer names for existing submission log entries that have empty customer names. Continue?') then begin
+                        UpdatedCount := 0;
+
+                        // Find all submission log entries with empty customer names
+                        SubmissionLog.SetRange("Customer Name", '');
+                        if SubmissionLog.FindSet() then begin
+                            repeat
+                                CustomerName := '';
+
+                                // Try to get customer name from the invoice
+                                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                                    if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+                                        CustomerName := Customer.Name;
+                                end;
+
+                                // Update the record if we found a customer name
+                                if CustomerName <> '' then begin
+                                    SubmissionLog."Customer Name" := CustomerName;
+                                    SubmissionLog.Modify();
+                                    UpdatedCount += 1;
+                                end;
+                            until SubmissionLog.Next() = 0;
+                        end;
+
+                        // Show results to user
+                        if UpdatedCount > 0 then
+                            Message('Successfully updated Customer Name for %1 existing submission log entries.', UpdatedCount)
+                        else
+                            Message('No submission log entries with empty Customer Name were found.');
+
+                        CurrPage.Update(false);
+                    end;
                 end;
             }
         }

@@ -906,6 +906,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             SubmissionLog."Submission Date" := CurrentDateTime;
             SubmissionLog."Last Updated" := CurrentDateTime;
             SubmissionLog."Error Message" := StrSubstNo('Status retrieved via API check: %1', NewStatus);
+            SubmissionLog."Document Type" := Rec."eInvoice Document Type";
             if SubmissionLog.Insert() then begin
                 // Successfully created log entry
             end;
@@ -923,6 +924,9 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     begin
         // Use the JSON Generator codeunit which has tabledata "Sales Invoice Header" = M permission
         if eInvoiceGenerator.UpdateInvoiceValidationStatus(Rec."No.", NewStatus) then begin
+            // Synchronize the Submission Log status
+            SynchronizeSubmissionLogStatus(Rec."No.", NewStatus);
+
             // Refresh the current record to show updated status
             Rec.Get(Rec."No.");
             CurrPage.Update(false);
@@ -949,8 +953,10 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     /// </summary>
     [TryFunction]
     local procedure TryCallLhdnApi(var SubmissionStatusCU: Codeunit "eInvoice Submission Status"; SubmissionUID: Text; var SubmissionDetails: Text)
+    var
+        DocumentType: Text;
     begin
-        SubmissionStatusCU.CheckSubmissionStatus(SubmissionUID, SubmissionDetails);
+        SubmissionStatusCU.CheckSubmissionStatus(SubmissionUID, SubmissionDetails, DocumentType);
     end;
 
     /// <summary>
@@ -1054,5 +1060,31 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
         // Return empty string if cancelled or no reason provided
         exit('');
+    end;
+
+    /// <summary>
+    /// Synchronize the Submission Log status with the Posted Sales Invoice status
+    /// This ensures both entities have consistent status information
+    /// </summary>
+    /// <param name="InvoiceNo">The invoice number to update</param>
+    /// <param name="NewStatus">The new status from LHDN</param>
+    local procedure SynchronizeSubmissionLogStatus(InvoiceNo: Code[20]; NewStatus: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // Only proceed if we have a valid invoice number
+        if InvoiceNo = '' then
+            exit;
+
+        // Find the submission log entry for this invoice
+        SubmissionLog.SetRange("Invoice No.", InvoiceNo);
+        if SubmissionLog.FindLast() then begin
+            // Update the submission log status to match the invoice status
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Error Message" := CopyStr(StrSubstNo('Status synchronized from Posted Sales Invoice: %1', NewStatus),
+                                                    1, MaxStrLen(SubmissionLog."Error Message"));
+            SubmissionLog.Modify();
+        end;
     end;
 }
