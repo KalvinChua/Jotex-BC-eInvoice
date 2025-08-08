@@ -47,6 +47,27 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ToolTip = 'Specifies version code for e-Invoice reporting';
                     Visible = IsJotexCompany;
                 }
+                field("eInvoice Submission UID"; Rec."eInvoice Submission UID")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the LHDN Submission UID';
+                    Visible = IsJotexCompany;
+                    Editable = false;
+                }
+                field("eInvoice UUID"; Rec."eInvoice UUID")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the LHDN Document UUID';
+                    Visible = IsJotexCompany;
+                    Editable = false;
+                }
+                field("eInvoice Validation Status"; Rec."eInvoice Validation Status")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the e-Invoice validation status from LHDN';
+                    Visible = IsJotexCompany;
+                    Editable = false;
+                }
             }
         }
     }
@@ -100,15 +121,22 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 trigger OnAction()
                 var
                     eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    LhdnResponse: Text;
                     Success: Boolean;
-                    ResponseText: Text;
+                    SuccessMsg: Text;
                 begin
-                    Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, ResponseText);
+                    // Direct submission without confirmation - matching sales invoice pattern
+                    Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
 
-                    if Success then
-                        Message('Credit memo %1 successfully signed and submitted to LHDN.', Rec."No.")
-                    else
-                        Error('Failed to sign and submit credit memo %1 to LHDN.\n\nError: %2', Rec."No.", ResponseText);
+                    if Success then begin
+                        SuccessMsg := StrSubstNo('Credit Memo %1 successfully signed and submitted to LHDN!\' +
+                            'LHDN Response:\' +
+                            '%2', Rec."No.", FormatLhdnResponse(LhdnResponse));
+                        Message(SuccessMsg);
+                    end else begin
+                        Message(StrSubstNo('Failed to complete signing and submission process.\' +
+                            'Response: %1', LhdnResponse));
+                    end;
                 end;
             }
         }
@@ -122,5 +150,126 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         CompanyInfo: Record "Company Information";
     begin
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+    end;
+
+    /// <summary>
+    /// Formats LHDN response JSON into a clean, readable format
+    /// </summary>
+    /// <param name="RawResponse">Raw JSON response from LHDN</param>
+    /// <returns>Formatted response text</returns>
+    local procedure FormatLhdnResponse(RawResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        AcceptedArray: JsonArray;
+        RejectedArray: JsonArray;
+        SubmissionUid: Text;
+        AcceptedCount: Integer;
+        RejectedCount: Integer;
+        i: Integer;
+        DocumentJson: JsonObject;
+        Uuid: Text;
+        InvoiceCodeNumber: Text;
+        FormattedResponse: Text;
+    begin
+        // Try to parse the JSON response
+        if not ResponseJson.ReadFrom(RawResponse) then begin
+            // If parsing fails, return a simplified version of the raw response
+            exit('Raw Response: ' + CopyStr(RawResponse, 1, 200) + '...');
+        end;
+
+        // Extract submission UID
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        // Extract accepted documents
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            AcceptedArray := JsonToken.AsArray();
+            AcceptedCount := AcceptedArray.Count();
+
+            if AcceptedCount > 0 then begin
+                FormattedResponse := StrSubstNo('Submission ID: %1\' +
+                                   'Accepted Documents: %2\', SubmissionUid, Format(AcceptedCount));
+
+                for i := 0 to AcceptedCount - 1 do begin
+                    AcceptedArray.Get(i, JsonToken);
+                    if JsonToken.IsObject() then begin
+                        DocumentJson := JsonToken.AsObject();
+
+                        if DocumentJson.Get('uuid', JsonToken) then
+                            Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                        if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                            InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        FormattedResponse += StrSubstNo('- Credit Memo: %1\    UUID: %2', InvoiceCodeNumber, Uuid);
+                        if i < AcceptedCount - 1 then
+                            FormattedResponse += '\';
+                    end;
+                end;
+            end;
+        end;
+
+        // Extract rejected documents
+        if ResponseJson.Get('rejectedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            RejectedArray := JsonToken.AsArray();
+            RejectedCount := RejectedArray.Count();
+
+            if RejectedCount > 0 then begin
+                if FormattedResponse <> '' then
+                    FormattedResponse += '\';
+                FormattedResponse += StrSubstNo('Rejected Documents: %1', Format(RejectedCount));
+            end;
+        end;
+
+        // If no structured data found, return simplified raw response
+        if FormattedResponse = '' then begin
+            FormattedResponse := 'Raw Response: ' + CopyStr(RawResponse, 1, 200) + '...';
+        end;
+
+        exit(FormattedResponse);
+    end;
+
+    /// <summary>
+    /// Removes surrounding quotes from text values
+    /// </summary>
+    /// <param name="InputText">Text that may contain surrounding quotes</param>
+    /// <returns>Text with quotes removed</returns>
+    local procedure CleanQuotesFromText(InputText: Text): Text
+    var
+        CleanText: Text;
+    begin
+        if InputText = '' then
+            exit('');
+
+        CleanText := InputText;
+
+        // Remove leading quote if present
+        if StrPos(CleanText, '"') = 1 then
+            CleanText := CopyStr(CleanText, 2);
+
+        // Remove trailing quote if present
+        if StrLen(CleanText) > 0 then
+            if CopyStr(CleanText, StrLen(CleanText), 1) = '"' then
+                CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
+
+        exit(CleanText);
+    end;
+
+    /// <summary>
+    /// Safely converts JSON token to text
+    /// </summary>
+    /// <param name="JsonToken">JSON token to convert</param>
+    /// <returns>Text representation of the JSON value</returns>
+    local procedure SafeJsonValueToText(JsonToken: JsonToken): Text
+    begin
+        if JsonToken.IsValue() then begin
+            exit(Format(JsonToken.AsValue()));
+        end else if JsonToken.IsObject() then begin
+            exit('JSON Object');
+        end else if JsonToken.IsArray() then begin
+            exit('JSON Array');
+        end else begin
+            exit('Unknown');
+        end;
     end;
 }
