@@ -1,6 +1,9 @@
 codeunit 50321 "eInvoice Data Upgrade"
 {
     Subtype = Upgrade;
+    Permissions = tabledata "eInvoice Submission Log" = M,
+                  tabledata "Sales Invoice Header" = R,
+                  tabledata eInvoiceTypes = M;
 
     trigger OnUpgradePerCompany()
     begin
@@ -15,6 +18,7 @@ codeunit 50321 "eInvoice Data Upgrade"
         SubmissionLog: Record "eInvoice Submission Log";
         SalesInvoiceHeader: Record "Sales Invoice Header";
         UpdatedCount: Integer;
+        PostingDateField: Date;
     begin
         UpdatedCount := 0;
 
@@ -24,7 +28,8 @@ codeunit 50321 "eInvoice Data Upgrade"
             repeat
                 // Try to find the corresponding posted sales invoice
                 if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
-                    SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
+                    PostingDateField := SalesInvoiceHeader."Posting Date";
+                    SubmissionLog."Posting Date" := PostingDateField;
                     if SubmissionLog.Modify() then
                         UpdatedCount += 1;
                 end;

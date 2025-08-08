@@ -522,18 +522,14 @@ codeunit 50302 "eInvoice JSON Generator"
 
     local procedure BuildCreditMemoEInvoiceJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; IncludeSignature: Boolean) JsonObject: JsonObject
     var
-        InvoiceArray: JsonArray;
-        InvoiceObject: JsonObject;
+        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
+        UBLDocument: JsonObject;
     begin
-        // UBL 2.1 namespace declarations (same as invoice)
-        JsonObject.Add('_D', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
-        JsonObject.Add('_A', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
-        JsonObject.Add('_B', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        // Use the enhanced UBL Document Builder for credit memos with proper LHDN structure
+        UBLDocument := UBLDocumentBuilder.BuildEnhancedCreditMemoDocument(SalesCrMemoHeader);
 
-        // Build the credit memo object
-        InvoiceObject := CreateCreditMemoObject(SalesCrMemoHeader, IncludeSignature);
-        InvoiceArray.Add(InvoiceObject);
-        JsonObject.Add('Invoice', InvoiceArray);
+        // Copy the UBL document structure to our JsonObject
+        JsonObject := UBLDocument;
     end;
 
     local procedure CreateInvoiceObject(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) InvoiceObject: JsonObject
@@ -5105,10 +5101,8 @@ codeunit 50302 "eInvoice JSON Generator"
         UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
         JsonText: Text;
     begin
-        // Use the existing UBL document builder for credit memos
-        // Instead of calling the procedure directly, we'll call the BuildCreditMemoDocument procedure
-        // and then convert the resulting JsonObject to JSON text
-        UBLDocument := UBLDocumentBuilder.BuildCreditMemoDocument(SalesCrMemoHeader);
+        // Use the enhanced UBL document builder for credit memos with proper LHDN structure
+        UBLDocument := UBLDocumentBuilder.BuildEnhancedCreditMemoDocument(SalesCrMemoHeader);
         UBLDocument.WriteTo(JsonText);
         exit(JsonText);
     end;
@@ -5887,4 +5881,6 @@ codeunit 50302 "eInvoice JSON Generator"
 
         exit('01'); // LHDN Standard Invoice type by default
     end;
+
+
 }

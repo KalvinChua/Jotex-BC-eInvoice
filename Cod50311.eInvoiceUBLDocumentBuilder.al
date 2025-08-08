@@ -263,7 +263,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
         AccountingSupplierParty.Add('cac:Party', PartyObject);
         InvoiceObject.Add('cac:AccountingSupplierParty', AccountingSupplierParty);
 
-        UBLDocument.Replace('Invoice', InvoiceToken);
+        UBLDocument.Replace('Invoice', InvoiceObject);
     end;
 
     // Overloaded version for credit memos
@@ -314,7 +314,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
         AccountingCustomerParty.Add('cac:Party', PartyObject);
         InvoiceObject.Add('cac:AccountingCustomerParty', AccountingCustomerParty);
 
-        UBLDocument.Replace('Invoice', InvoiceToken);
+        UBLDocument.Replace('Invoice', InvoiceObject);
     end;
 
     local procedure BuildInvoiceLines(var UBLDocument: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
@@ -337,7 +337,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
             until SalesInvoiceLine.Next() = 0;
 
         InvoiceObject.Add('cac:InvoiceLine', InvoiceLinesArray);
-        UBLDocument.Replace('Invoice', InvoiceToken);
+        UBLDocument.Replace('Invoice', InvoiceObject);
     end;
 
     local procedure BuildSingleInvoiceLine(var InvoiceLinesArray: JsonArray; SalesInvoiceLine: Record "Sales Invoice Line")
@@ -595,37 +595,69 @@ codeunit 50311 "eInvoice UBL Document Builder"
         ID2: JsonObject;
         Price: JsonObject;
         PriceAmount: JsonObject;
+        TaxTotal: JsonObject;
+        TaxSubtotal: JsonObject;
+        TaxCategory: JsonObject;
+        TaxScheme: JsonObject;
+        TaxAmount: Decimal;
     begin
+        // Calculate tax amount (negative for credit note)
+        TaxAmount := -(SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine."Line Amount");
+
         // Invoice Line ID
         ID.Add('_text', Format(SalesCrMemoLine."Line No."));
         InvoiceLineObject.Add('cbc:ID', ID);
 
-        // Invoiced Quantity
-        InvoicedQuantity.Add('_text', Format(SalesCrMemoLine.Quantity));
+        // Invoiced Quantity (negative for credit note)
+        InvoicedQuantity.Add('_text', Format(-SalesCrMemoLine.Quantity));
+        InvoicedQuantity.Add('unitCode', 'C62');
         InvoiceLineObject.Add('cbc:InvoicedQuantity', InvoicedQuantity);
 
-        // Line Extension Amount
-        LineExtensionAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
+        // Line Extension Amount (negative for credit note)
+        LineExtensionAmount.Add('_text', Format(-SalesCrMemoLine."Line Amount"));
+        LineExtensionAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
         InvoiceLineObject.Add('cbc:LineExtensionAmount', LineExtensionAmount);
 
+        // Add Tax Total for this line
+        TaxTotal.Add('cbc:TaxAmount', TaxAmount);
+        TaxTotal.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+
+        // Tax Subtotal
+        TaxSubtotal.Add('cbc:TaxableAmount', -SalesCrMemoLine."Line Amount");
+        TaxSubtotal.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        TaxSubtotal.Add('cbc:TaxAmount', TaxAmount);
+        TaxSubtotal.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+
+        // Tax Category
+        TaxCategory.Add('cbc:ID', 'S'); // Standard rate
+        TaxCategory.Add('cbc:Percent', Format(SalesCrMemoLine."VAT %"));
+
+        // Tax Scheme
+        TaxScheme.Add('cbc:ID', 'OTH');
+        TaxScheme.Add('schemeID', 'UN/ECE 5153');
+        TaxCategory.Add('cac:TaxScheme', TaxScheme);
+        TaxSubtotal.Add('cac:TaxCategory', TaxCategory);
+
+        TaxTotal.Add('cac:TaxSubtotal', TaxSubtotal);
+        InvoiceLineObject.Add('cac:TaxTotal', TaxTotal);
+
         // Item Information
-        Item.Add('cbc:Description', ItemDescription);
-        Item.Add('cac:SellersItemIdentification', SellersItemIdentification);
+        Item.Add('cbc:Description', SalesCrMemoLine.Description);
 
         // Item Name
         Name.Add('_text', SalesCrMemoLine.Description);
         ItemDescription.Add('cbc:Name', Name);
+        Item.Add('cac:Description', ItemDescription);
 
         // Item ID
         ID2.Add('_text', SalesCrMemoLine."No.");
         SellersItemIdentification.Add('cbc:ID', ID2);
+        Item.Add('cac:SellersItemIdentification', SellersItemIdentification);
 
         // Price Information
-        Price.Add('cbc:PriceAmount', PriceAmount);
-
-        // Price Amount
         PriceAmount.Add('_text', Format(SalesCrMemoLine."Unit Price"));
         PriceAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        Price.Add('cbc:PriceAmount', PriceAmount);
 
         // Add item and price to line
         InvoiceLineObject.Add('cac:Item', Item);
@@ -635,12 +667,13 @@ codeunit 50311 "eInvoice UBL Document Builder"
         InvoiceLinesArray.Add(InvoiceLineObject);
     end;
 
+    // Enhanced helper method for credit memo currency code
     local procedure GetDocumentCurrencyCode(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Text
     begin
-        if SalesCrMemoHeader."Currency Code" = '' then
-            exit('MYR')
+        if SalesCrMemoHeader."Currency Code" <> '' then
+            exit(SalesCrMemoHeader."Currency Code")
         else
-            exit(SalesCrMemoHeader."Currency Code");
+            exit('MYR'); // Default Malaysian Ringgit
     end;
 
     local procedure GetDocumentCurrencyCode(SalesCrMemoLine: Record "Sales Cr.Memo Line"): Text
@@ -651,6 +684,138 @@ codeunit 50311 "eInvoice UBL Document Builder"
             exit(GetDocumentCurrencyCode(SalesCrMemoHeader))
         else
             exit('MYR');
+    end;
+
+    // Enhanced credit memo document building with proper structure
+    procedure BuildEnhancedCreditMemoDocument(SalesCrMemoHeader: Record "Sales Cr.Memo Header") UBLDocument: JsonObject
+    var
+        CompanyInfo: Record "Company Information";
+        Customer: Record Customer;
+        LegalMonetaryTotal: JsonObject;
+        TaxTotal: JsonObject;
+        TaxSubtotal: JsonObject;
+        TaxCategory: JsonObject;
+        TaxScheme: JsonObject;
+        TotalTaxAmount: Decimal;
+        TotalAmount: Decimal;
+    begin
+        CompanyInfo.Get();
+        Customer.Get(SalesCrMemoHeader."Sell-to Customer No.");
+
+        // Initialize document structure
+        InitializeCreditMemoUBLStructure(UBLDocument);
+
+        // Build core credit memo identification
+        BuildCreditMemoIdentification(UBLDocument, SalesCrMemoHeader);
+
+        // Build parties (supplier and customer)
+        BuildSupplierParty(UBLDocument, SalesCrMemoHeader);
+        BuildCustomerParty(UBLDocument, SalesCrMemoHeader);
+
+        // Build credit memo lines
+        BuildCreditMemoLines(UBLDocument, SalesCrMemoHeader);
+
+        // Calculate totals (negative for credit notes)
+        TotalAmount := -SalesCrMemoHeader."Amount";
+        TotalTaxAmount := -(SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount");
+
+        // Build Legal Monetary Total
+        BuildLegalMonetaryTotal(UBLDocument, SalesCrMemoHeader, TotalAmount, TotalTaxAmount);
+
+        // Build Tax Total
+        BuildTaxTotal(UBLDocument, SalesCrMemoHeader, TotalTaxAmount);
+
+        // Validate final document structure
+        if not ValidateUBLDocument(UBLDocument) then
+            Error('Credit Memo UBL Document validation failed\\\\Please check document structure and required fields.');
+    end;
+
+    // Enhanced Legal Monetary Total for credit memos
+    local procedure BuildLegalMonetaryTotal(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header"; TotalAmount: Decimal; TotalTaxAmount: Decimal)
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        LegalMonetaryTotal: JsonObject;
+        LineExtensionAmount: JsonObject;
+        TaxExclusiveAmount: JsonObject;
+        TaxInclusiveAmount: JsonObject;
+        PayableAmount: JsonObject;
+        CurrencyCode: Text;
+    begin
+        CurrencyCode := GetDocumentCurrencyCode(SalesCrMemoHeader);
+
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Line Extension Amount (negative for credit note)
+        LineExtensionAmount.Add('_text', Format(TotalAmount));
+        LineExtensionAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:LineExtensionAmount', LineExtensionAmount);
+
+        // Tax Exclusive Amount (negative for credit note)
+        TaxExclusiveAmount.Add('_text', Format(TotalAmount));
+        TaxExclusiveAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:TaxExclusiveAmount', TaxExclusiveAmount);
+
+        // Tax Inclusive Amount (negative for credit note)
+        TaxInclusiveAmount.Add('_text', Format(TotalAmount + TotalTaxAmount));
+        TaxInclusiveAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:TaxInclusiveAmount', TaxInclusiveAmount);
+
+        // Payable Amount (negative for credit note)
+        PayableAmount.Add('_text', Format(TotalAmount + TotalTaxAmount));
+        PayableAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:PayableAmount', PayableAmount);
+
+        InvoiceObject.Add('cac:LegalMonetaryTotal', LegalMonetaryTotal);
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // Enhanced Tax Total for credit memos
+    local procedure BuildTaxTotal(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header"; TotalTaxAmount: Decimal)
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        TaxTotal: JsonObject;
+        TaxSubtotal: JsonObject;
+        TaxCategory: JsonObject;
+        TaxScheme: JsonObject;
+        TaxAmount: JsonObject;
+        TaxableAmount: JsonObject;
+        CurrencyCode: Text;
+    begin
+        CurrencyCode := GetDocumentCurrencyCode(SalesCrMemoHeader);
+
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Tax Amount (negative for credit note)
+        TaxAmount.Add('_text', Format(TotalTaxAmount));
+        TaxAmount.Add('currencyID', CurrencyCode);
+        TaxTotal.Add('cbc:TaxAmount', TaxAmount);
+
+        // Tax Subtotal
+        TaxableAmount.Add('_text', Format(-SalesCrMemoHeader."Amount"));
+        TaxableAmount.Add('currencyID', CurrencyCode);
+        TaxSubtotal.Add('cbc:TaxableAmount', TaxableAmount);
+
+        TaxAmount.Add('_text', Format(TotalTaxAmount));
+        TaxAmount.Add('currencyID', CurrencyCode);
+        TaxSubtotal.Add('cbc:TaxAmount', TaxAmount);
+
+        // Tax Category
+        TaxCategory.Add('cbc:ID', 'S'); // Standard rate
+        TaxCategory.Add('cbc:Percent', '10'); // Default VAT rate
+
+        // Tax Scheme
+        TaxScheme.Add('cbc:ID', 'OTH');
+        TaxScheme.Add('schemeID', 'UN/ECE 5153');
+        TaxCategory.Add('cac:TaxScheme', TaxScheme);
+        TaxSubtotal.Add('cac:TaxCategory', TaxCategory);
+
+        TaxTotal.Add('cac:TaxSubtotal', TaxSubtotal);
+        InvoiceObject.Add('cac:TaxTotal', TaxTotal);
+        UBLDocument.Replace('Invoice', InvoiceObject);
     end;
 
     // Additional helper methods would be implemented here for:
