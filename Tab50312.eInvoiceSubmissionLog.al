@@ -93,10 +93,17 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Posting Date';
             DataClassification = CustomerContent;
         }
-        field(18; "Document Type"; Text[100])
+        field(18; "Document Type"; Code[20])
         {
             Caption = 'Document Type';
             DataClassification = CustomerContent;
+            TableRelation = eInvoiceTypes.Code;
+        }
+        field(19; "Document Type Description"; Text[100])
+        {
+            Caption = 'Document Type Description';
+            FieldClass = FlowField;
+            CalcFormula = Lookup(eInvoiceTypes.Description WHERE(Code = FIELD("Document Type")));
         }
     }
 

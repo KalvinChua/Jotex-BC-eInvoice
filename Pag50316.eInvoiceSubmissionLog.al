@@ -39,10 +39,10 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the document UUID assigned by LHDN MyInvois.';
                 }
-                field("Document Type"; Rec."Document Type")
+                field("Document Type Description"; Rec."Document Type Description")
                 {
                     ApplicationArea = All;
-                    ToolTip = 'Specifies the document type from the LHDN API response (e.g., Invoice, Credit Note, etc.).';
+                    ToolTip = 'Specifies the document type description (e.g., Standard Invoice, Credit Note, etc.).';
                 }
                 field("Status"; Rec.Status)
                 {
