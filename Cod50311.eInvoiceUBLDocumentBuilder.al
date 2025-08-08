@@ -221,6 +221,102 @@ codeunit 50311 "eInvoice UBL Document Builder"
         UBLDocument.Replace('Invoice', InvoiceToken);
     end;
 
+    // Overloaded version for credit memos
+    local procedure BuildSupplierParty(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        AccountingSupplierParty: JsonObject;
+        PartyObject: JsonObject;
+        PartyIdentification: JsonObject;
+        PartyName: JsonObject;
+        PostalAddress: JsonObject;
+        PartyTaxScheme: JsonObject;
+        PartyLegalEntity: JsonObject;
+        Contact: JsonObject;
+        CompanyInfo: Record "Company Information";
+    begin
+        CompanyInfo.Get();
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Build supplier party structure with basic information
+        BuildPartyIdentification(PartyIdentification, CompanyInfo."Registration No.");
+        PartyObject.Add('cac:PartyIdentification', PartyIdentification);
+
+        BuildPartyName(PartyName, CompanyInfo.Name);
+        PartyObject.Add('cac:PartyName', PartyName);
+
+        // TODO: Implement additional party components
+        // BuildSupplierPostalAddress(PostalAddress, CompanyInfo);
+        // PartyObject.Add('cac:PostalAddress', PostalAddress);
+
+        // BuildPartyTaxScheme(PartyTaxScheme, CompanyInfo."VAT Registration No.");
+        // PartyObject.Add('cac:PartyTaxScheme', PartyTaxScheme);
+
+        // BuildPartyLegalEntity(PartyLegalEntity, CompanyInfo.Name, CompanyInfo."Registration No.");
+        // PartyObject.Add('cac:PartyLegalEntity', PartyLegalEntity);
+
+        // BuildSupplierContact(Contact, CompanyInfo);
+        // PartyObject.Add('cac:Contact', Contact);
+
+        AccountingSupplierParty.Add('cac:Party', PartyObject);
+        InvoiceObject.Add('cac:AccountingSupplierParty', AccountingSupplierParty);
+
+        UBLDocument.Replace('Invoice', InvoiceToken);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure BuildCustomerParty(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        AccountingCustomerParty: JsonObject;
+        PartyObject: JsonObject;
+        PartyIdentification: JsonObject;
+        PartyName: JsonObject;
+        PostalAddress: JsonObject;
+        PartyTaxScheme: JsonObject;
+        PartyLegalEntity: JsonObject;
+        Contact: JsonObject;
+        Customer: Record Customer;
+        CustomerTIN: Text;
+    begin
+        Customer.Get(SalesCrMemoHeader."Sell-to Customer No.");
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Use VAT Registration No. as TIN placeholder
+        CustomerTIN := Customer."VAT Registration No.";
+        if CustomerTIN = '' then
+            CustomerTIN := Customer."No."; // Fallback to customer number
+
+        // Build customer party structure with basic information
+        BuildPartyIdentification(PartyIdentification, CustomerTIN);
+        PartyObject.Add('cac:PartyIdentification', PartyIdentification);
+
+        BuildPartyName(PartyName, SalesCrMemoHeader."Sell-to Customer Name");
+        PartyObject.Add('cac:PartyName', PartyName);
+
+        // TODO: Implement additional party components
+        // BuildCustomerPostalAddress(PostalAddress, SalesCrMemoHeader);
+        // PartyObject.Add('cac:PostalAddress', PostalAddress);
+
+        // BuildPartyTaxScheme(PartyTaxScheme, Customer."VAT Registration No.");
+        // PartyObject.Add('cac:PartyTaxScheme', PartyTaxScheme);
+
+        // BuildPartyLegalEntity(PartyLegalEntity, SalesCrMemoHeader."Sell-to Customer Name", CustomerTIN);
+        // PartyObject.Add('cac:PartyLegalEntity', PartyLegalEntity);
+
+        // BuildCustomerContact(Contact, Customer, SalesCrMemoHeader);
+        // PartyObject.Add('cac:Contact', Contact);
+
+        AccountingCustomerParty.Add('cac:Party', PartyObject);
+        InvoiceObject.Add('cac:AccountingCustomerParty', AccountingCustomerParty);
+
+        UBLDocument.Replace('Invoice', InvoiceToken);
+    end;
+
     local procedure BuildInvoiceLines(var UBLDocument: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
     var
         InvoiceToken: JsonToken;
@@ -346,6 +442,215 @@ codeunit 50311 "eInvoice UBL Document Builder"
                 exit(false);
 
         IsValid := true;
+    end;
+
+    // New procedure for building credit memo UBL JSON
+    procedure BuildCreditMemoUBLJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Text
+    var
+        UBLDocument: JsonObject;
+        JsonText: Text;
+    begin
+        // Build the credit memo UBL document
+        UBLDocument := BuildCreditMemoDocument(SalesCrMemoHeader);
+
+        // Convert to JSON text
+        UBLDocument.WriteTo(JsonText);
+
+        exit(JsonText);
+    end;
+
+    procedure BuildCreditMemoDocument(SalesCrMemoHeader: Record "Sales Cr.Memo Header") UBLDocument: JsonObject
+    var
+        DocumentBuilder: JsonObject;
+        InvoiceTypeCode: Text;
+        CurrencyCode: Text;
+        DocumentCurrencyCode: Text;
+    begin
+        // Initialize document structure following UBL 2.1 standard for credit memos
+        InitializeCreditMemoUBLStructure(UBLDocument);
+
+        // Build core credit memo identification
+        BuildCreditMemoIdentification(UBLDocument, SalesCrMemoHeader);
+
+        // Build parties (supplier and customer)
+        BuildSupplierParty(UBLDocument, SalesCrMemoHeader);
+        BuildCustomerParty(UBLDocument, SalesCrMemoHeader);
+
+        // Build credit memo lines
+        BuildCreditMemoLines(UBLDocument, SalesCrMemoHeader);
+
+        // Validate final document structure
+        if not ValidateUBLDocument(UBLDocument) then
+            Error('Credit Memo UBL Document validation failed\\\\Please check document structure and required fields.');
+    end;
+
+    local procedure InitializeCreditMemoUBLStructure(var UBLDocument: JsonObject)
+    var
+        NamespaceObject: JsonObject;
+    begin
+        // Set UBL namespace and schema information for credit memos
+        UBLDocument.Add('_declaration', CreateXMLDeclaration());
+        UBLDocument.Add('Invoice', CreateCreditMemoRoot());
+    end;
+
+    local procedure CreateCreditMemoRoot() InvoiceRoot: JsonObject
+    var
+        AttributesObject: JsonObject;
+    begin
+        // UBL Invoice root element with required namespaces (same as invoice but for credit memo)
+        AttributesObject.Add('xmlns', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
+        AttributesObject.Add('xmlns:cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        AttributesObject.Add('xmlns:cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+
+        InvoiceRoot.Add('_attributes', AttributesObject);
+    end;
+
+    local procedure BuildCreditMemoIdentification(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        UBLVersionID: JsonObject;
+        CustomizationID: JsonObject;
+        ProfileID: JsonObject;
+        ID: JsonObject;
+        IssueDate: JsonObject;
+        IssueTime: JsonObject;
+        InvoiceTypeCode: JsonObject;
+        DocumentCurrencyCode: JsonObject;
+    begin
+        // Get invoice object from UBL structure
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // UBL Version (required by myinvois)
+        UBLVersionID.Add('_text', '2.1');
+        InvoiceObject.Add('cbc:UBLVersionID', UBLVersionID);
+
+        // Customization ID (Malaysia e-Invoice specific)
+        CustomizationID.Add('_text', 'MY:1.0');
+        InvoiceObject.Add('cbc:CustomizationID', CustomizationID);
+
+        // Profile ID (Malaysia e-Invoice profile)
+        ProfileID.Add('_text', 'reporting:1.0');
+        InvoiceObject.Add('cbc:ProfileID', ProfileID);
+
+        // Credit Memo Number
+        ID.Add('_text', SalesCrMemoHeader."No.");
+        InvoiceObject.Add('cbc:ID', ID);
+
+        // FORCE: Always use yesterday's date to ensure it's never in the future
+        IssueDate.Add('_text', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
+        InvoiceObject.Add('cbc:IssueDate', IssueDate);
+
+        IssueTime.Add('_text', Format(DT2Time(CurrentDateTime - 300000), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        InvoiceObject.Add('cbc:IssueTime', IssueTime);
+
+        // Invoice Type Code (02 = Credit Note)
+        InvoiceTypeCode.Add('_text', '02');
+        InvoiceObject.Add('cbc:InvoiceTypeCode', InvoiceTypeCode);
+
+        // Document Currency Code
+        DocumentCurrencyCode.Add('_text', GetDocumentCurrencyCode(SalesCrMemoHeader));
+        InvoiceObject.Add('cbc:DocumentCurrencyCode', DocumentCurrencyCode);
+
+        // Update the document
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    local procedure BuildCreditMemoLines(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        InvoiceLinesArray: JsonArray;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+    begin
+        // Get invoice object from UBL structure
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Build invoice lines array
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                BuildSingleCreditMemoLine(InvoiceLinesArray, SalesCrMemoLine);
+            until SalesCrMemoLine.Next() = 0;
+
+        // Add invoice lines to document
+        InvoiceObject.Add('cac:InvoiceLine', InvoiceLinesArray);
+
+        // Update the document
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    local procedure BuildSingleCreditMemoLine(var InvoiceLinesArray: JsonArray; SalesCrMemoLine: Record "Sales Cr.Memo Line")
+    var
+        InvoiceLineObject: JsonObject;
+        ID: JsonObject;
+        InvoicedQuantity: JsonObject;
+        LineExtensionAmount: JsonObject;
+        Item: JsonObject;
+        ItemDescription: JsonObject;
+        Name: JsonObject;
+        SellersItemIdentification: JsonObject;
+        ID2: JsonObject;
+        Price: JsonObject;
+        PriceAmount: JsonObject;
+    begin
+        // Invoice Line ID
+        ID.Add('_text', Format(SalesCrMemoLine."Line No."));
+        InvoiceLineObject.Add('cbc:ID', ID);
+
+        // Invoiced Quantity
+        InvoicedQuantity.Add('_text', Format(SalesCrMemoLine.Quantity));
+        InvoiceLineObject.Add('cbc:InvoicedQuantity', InvoicedQuantity);
+
+        // Line Extension Amount
+        LineExtensionAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
+        InvoiceLineObject.Add('cbc:LineExtensionAmount', LineExtensionAmount);
+
+        // Item Information
+        Item.Add('cbc:Description', ItemDescription);
+        Item.Add('cac:SellersItemIdentification', SellersItemIdentification);
+
+        // Item Name
+        Name.Add('_text', SalesCrMemoLine.Description);
+        ItemDescription.Add('cbc:Name', Name);
+
+        // Item ID
+        ID2.Add('_text', SalesCrMemoLine."No.");
+        SellersItemIdentification.Add('cbc:ID', ID2);
+
+        // Price Information
+        Price.Add('cbc:PriceAmount', PriceAmount);
+
+        // Price Amount
+        PriceAmount.Add('_text', Format(SalesCrMemoLine."Unit Price"));
+        PriceAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+
+        // Add item and price to line
+        InvoiceLineObject.Add('cac:Item', Item);
+        InvoiceLineObject.Add('cac:Price', Price);
+
+        // Add line to array
+        InvoiceLinesArray.Add(InvoiceLineObject);
+    end;
+
+    local procedure GetDocumentCurrencyCode(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Text
+    begin
+        if SalesCrMemoHeader."Currency Code" = '' then
+            exit('MYR')
+        else
+            exit(SalesCrMemoHeader."Currency Code");
+    end;
+
+    local procedure GetDocumentCurrencyCode(SalesCrMemoLine: Record "Sales Cr.Memo Line"): Text
+    var
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+    begin
+        if SalesCrMemoHeader.Get(SalesCrMemoLine."Document No.") then
+            exit(GetDocumentCurrencyCode(SalesCrMemoHeader))
+        else
+            exit('MYR');
     end;
 
     // Additional helper methods would be implemented here for:

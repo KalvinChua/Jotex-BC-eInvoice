@@ -51,6 +51,69 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         }
     }
 
+    actions
+    {
+        addlast(Processing)
+        {
+            action(GenerateEInvoiceJSON)
+            {
+                ApplicationArea = All;
+                Caption = 'Generate e-Invoice JSON';
+                Image = ExportFile;
+                ToolTip = 'Generate e-Invoice in JSON format for credit memo';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    TempBlob: Codeunit "Temp Blob";
+                    FileName: Text;
+                    JsonText: Text;
+                    OutStream: OutStream;
+                    InStream: InStream;
+                begin
+                    JsonText := eInvoiceGenerator.GenerateCreditMemoEInvoiceJson(Rec, false);
+
+                    // Create download file
+                    FileName := StrSubstNo('eInvoice_CreditMemo_%1_%2.json',
+                        Rec."No.",
+                        Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+                    // Create the file content
+                    TempBlob.CreateOutStream(OutStream);
+                    OutStream.WriteText(JsonText);
+
+                    // Prepare for download
+                    TempBlob.CreateInStream(InStream);
+                    DownloadFromStream(InStream, 'Download e-Invoice Credit Memo', '', 'JSON files (*.json)|*.json', FileName);
+                end;
+            }
+
+            action(SignAndSubmitToLHDN)
+            {
+                ApplicationArea = All;
+                Caption = 'Sign & Submit to LHDN';
+                Image = ElectronicDoc;
+                ToolTip = 'Sign and submit credit memo to LHDN MyInvois';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    Success: Boolean;
+                    ResponseText: Text;
+                begin
+                    Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, ResponseText);
+
+                    if Success then
+                        Message('Credit memo %1 successfully signed and submitted to LHDN.', Rec."No.")
+                    else
+                        Error('Failed to sign and submit credit memo %1 to LHDN.\n\nError: %2', Rec."No.", ResponseText);
+                end;
+            }
+        }
+    }
+
     var
         IsJotexCompany: Boolean;
 

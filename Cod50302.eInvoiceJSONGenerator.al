@@ -359,6 +359,36 @@ codeunit 50302 "eInvoice JSON Generator"
         //     CurrentDateTime - StartTime);
     end;
 
+    /// <summary>
+    /// Generates e-Invoice JSON for posted sales credit memos
+    /// </summary>
+    /// <param name="SalesCrMemoHeader">The posted sales credit memo header</param>
+    /// <param name="IncludeSignature">Whether to include digital signature</param>
+    /// <returns>Complete UBL 2.1 JSON string for credit memo</returns>
+    procedure GenerateCreditMemoEInvoiceJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; IncludeSignature: Boolean) JsonText: Text
+    var
+        JsonObject: JsonObject;
+        StartTime: DateTime;
+    begin
+        StartTime := CurrentDateTime;
+
+        // Validate input
+        if SalesCrMemoHeader."No." = '' then
+            Error('Sales Credit Memo Header cannot be empty');
+
+        JsonObject := BuildCreditMemoEInvoiceJson(SalesCrMemoHeader, IncludeSignature);
+        JsonObject.WriteTo(JsonText);
+
+        // Validate output
+        if JsonText = '' then
+            Error('Failed to generate JSON for credit memo %1', SalesCrMemoHeader."No.");
+
+        // Log completion
+        // Message('eInvoice JSON generated for credit memo %1 in %2 ms', 
+        //     SalesCrMemoHeader."No.", 
+        //     CurrentDateTime - StartTime);
+    end;
+
     local procedure BuildEInvoiceJson(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) JsonObject: JsonObject
     var
         InvoiceArray: JsonArray;
@@ -371,6 +401,22 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Build the invoice object
         InvoiceObject := CreateInvoiceObject(SalesInvoiceHeader, IncludeSignature);
+        InvoiceArray.Add(InvoiceObject);
+        JsonObject.Add('Invoice', InvoiceArray);
+    end;
+
+    local procedure BuildCreditMemoEInvoiceJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; IncludeSignature: Boolean) JsonObject: JsonObject
+    var
+        InvoiceArray: JsonArray;
+        InvoiceObject: JsonObject;
+    begin
+        // UBL 2.1 namespace declarations (same as invoice)
+        JsonObject.Add('_D', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
+        JsonObject.Add('_A', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        JsonObject.Add('_B', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+
+        // Build the credit memo object
+        InvoiceObject := CreateCreditMemoObject(SalesCrMemoHeader, IncludeSignature);
         InvoiceArray.Add(InvoiceObject);
         JsonObject.Add('Invoice', InvoiceArray);
     end;
@@ -462,6 +508,94 @@ codeunit 50302 "eInvoice JSON Generator"
         // Digital signature (only required for version 1.1 and if requested)
         if (SalesInvoiceHeader."eInvoice Version Code" = '1.1') and IncludeSignature then
             AddDigitalSignature(InvoiceObject, SalesInvoiceHeader);
+    end;
+
+    local procedure CreateCreditMemoObject(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; IncludeSignature: Boolean) InvoiceObject: JsonObject
+    var
+        Customer: Record Customer;
+        CompanyInformation: Record "Company Information";
+        CurrencyCode: Code[10];
+        NowUTC: DateTime;
+    begin
+        // Validate mandatory fields
+        if SalesCrMemoHeader."No." = '' then
+            Error('Credit memo number is required');
+        if SalesCrMemoHeader."Bill-to Customer No." = '' then
+            Error('Bill-to Customer No. is required for credit memo %1', SalesCrMemoHeader."No.");
+        if SalesCrMemoHeader."Posting Date" = 0D then
+            Error('Posting Date is required for credit memo %1', SalesCrMemoHeader."No.");
+
+        // Get currency code
+        if SalesCrMemoHeader."Currency Code" = '' then
+            CurrencyCode := 'MYR'
+        else
+            CurrencyCode := SalesCrMemoHeader."Currency Code";
+
+        // Core credit memo fields
+        AddBasicField(InvoiceObject, 'ID', SalesCrMemoHeader."No.");
+        NowUTC := CurrentDateTime - 300000;
+        AddBasicField(InvoiceObject, 'IssueDate', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
+        AddBasicField(InvoiceObject, 'IssueTime', Format(DT2Time(NowUTC), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+
+        // Credit memo type code (02 = Credit Note)
+        if SalesCrMemoHeader."eInvoice Version Code" <> '' then
+            AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', '02', 'listVersionID', SalesCrMemoHeader."eInvoice Version Code")
+        else
+            AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', '02', 'listVersionID', '1.0'); // Default to version 1.0
+
+        // Currency codes
+        AddBasicField(InvoiceObject, 'DocumentCurrencyCode', CurrencyCode);
+        AddBasicField(InvoiceObject, 'TaxCurrencyCode', CurrencyCode);
+
+        // MANDATORY: Currency exchange rate for non-MYR currencies
+        if CurrencyCode <> 'MYR' then
+            AddTaxExchangeRate(InvoiceObject, SalesCrMemoHeader, CurrencyCode);
+
+        // Invoice Period
+        AddInvoicePeriod(InvoiceObject, SalesCrMemoHeader);
+
+        // Billing reference (if applicable)
+        AddBillingReference(InvoiceObject, SalesCrMemoHeader);
+
+        // Additional document references
+        AddAdditionalDocumentReferences(InvoiceObject, SalesCrMemoHeader);
+
+        // Party information
+        if not CompanyInformation.Get() then
+            Error('Company Information not found');
+        AddAccountingSupplierParty(InvoiceObject, CompanyInformation);
+
+        if not Customer.Get(SalesCrMemoHeader."Bill-to Customer No.") then
+            Error('Customer %1 not found', SalesCrMemoHeader."Bill-to Customer No.");
+        AddAccountingCustomerParty(InvoiceObject, Customer);
+
+        // Delivery and shipment (optional)
+        if ShouldIncludeDelivery(SalesCrMemoHeader) then
+            AddDelivery(InvoiceObject, Customer, SalesCrMemoHeader);
+
+        // Payment information
+        AddPaymentMeans(InvoiceObject, SalesCrMemoHeader);
+        AddPaymentTerms(InvoiceObject, SalesCrMemoHeader);
+
+        // Optional sections
+        if HasPrepaidAmount(SalesCrMemoHeader) then
+            AddPrepaidPayment(InvoiceObject, SalesCrMemoHeader);
+
+        // Allowances and charges
+        AddAllowanceCharges(InvoiceObject, SalesCrMemoHeader);
+
+        // Tax calculations
+        AddTaxTotals(InvoiceObject, SalesCrMemoHeader);
+
+        // Monetary totals
+        AddLegalMonetaryTotal(InvoiceObject, SalesCrMemoHeader);
+
+        // Credit memo lines
+        AddCreditMemoLines(InvoiceObject, SalesCrMemoHeader);
+
+        // Digital signature (only required for version 1.1 and if requested)
+        if (SalesCrMemoHeader."eInvoice Version Code" = '1.1') and IncludeSignature then
+            AddDigitalSignature(InvoiceObject, SalesCrMemoHeader);
     end;
 
     local procedure GetSafeMalaysiaTime(PostingDate: Date): Text
@@ -2103,6 +2237,7 @@ codeunit 50302 "eInvoice JSON Generator"
         Success: Boolean;
         MaxRetries: Integer;
         AttemptCount: Integer;
+        InvoiceTypeCode: Text;
     begin
         // Initialize variables
         Success := false;
@@ -2124,9 +2259,12 @@ codeunit 50302 "eInvoice JSON Generator"
             exit(false);
         end;
 
+        // Extract invoice type from the UBL JSON payload
+        InvoiceTypeCode := ExtractInvoiceTypeFromJson(JsonText);
+
         // Build BusinessCentralSigningRequest payload matching Azure Function model
         RequestPayload.Add('correlationId', CorrelationId);
-        RequestPayload.Add('invoiceType', '01'); // Standard invoice
+        RequestPayload.Add('invoiceType', InvoiceTypeCode);
         RequestPayload.Add('unsignedJson', JsonText);
         RequestPayload.Add('submissionId', CorrelationId);
         RequestPayload.Add('requestedBy', UserId());
@@ -2153,6 +2291,43 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
 
         exit(Success);
+    end;
+
+    /// <summary>
+    /// Extracts invoice type code from UBL JSON payload
+    /// </summary>
+    /// <param name="JsonText">UBL JSON text to parse</param>
+    /// <returns>Invoice type code, defaults to '01' if not found</returns>
+    local procedure ExtractInvoiceTypeFromJson(JsonText: Text): Text
+    var
+        JsonObject: JsonObject;
+        InvoiceArray: JsonArray;
+        InvoiceObject: JsonObject;
+        InvoiceTypeCode: JsonObject;
+        TypeCode: Text;
+        JsonToken: JsonToken;
+    begin
+        // Default to standard invoice if parsing fails
+        if JsonText = '' then
+            exit('01');
+
+        // Try to parse the JSON and extract invoice type
+        if JsonObject.ReadFrom(JsonText) then begin
+            if JsonObject.Get('Invoice', JsonToken) then begin
+                if JsonToken.AsArray().Get(0, JsonToken) then begin
+                    if JsonToken.AsObject().Get('cbc:InvoiceTypeCode', JsonToken) then begin
+                        if JsonToken.AsObject().Get('_text', JsonToken) then begin
+                            TypeCode := JsonToken.AsValue().AsText();
+                            if TypeCode <> '' then
+                                exit(TypeCode);
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fallback to default
+        exit('01');
     end;
 
     /// <summary>
@@ -3582,14 +3757,18 @@ codeunit 50302 "eInvoice JSON Generator"
         RequestPayload: JsonObject;
         Setup: Record "eInvoiceSetup";
         RequestText: Text;
+        InvoiceTypeCode: Text;
     begin
         // Get setup for environment information
         if Setup.Get('SETUP') then;
 
+        // Extract invoice type from the UBL JSON payload
+        InvoiceTypeCode := ExtractInvoiceTypeFromJson(JsonText);
+
         // Build BusinessCentralSigningRequest payload matching Azure Function model
         RequestPayload.Add('correlationId', CorrelationId);
         RequestPayload.Add('environment', Format(Setup.Environment));
-        RequestPayload.Add('invoiceType', '01'); // Standard invoice
+        RequestPayload.Add('invoiceType', InvoiceTypeCode);
         RequestPayload.Add('unsignedJson', JsonText);
         RequestPayload.Add('submissionId', CorrelationId);
         RequestPayload.Add('requestedBy', UserId());
@@ -4248,5 +4427,615 @@ codeunit 50302 "eInvoice JSON Generator"
         RequestPayload.Add('environmentValidated', true);
         RequestPayload.Add('certificateExpected', GetExpectedCertificateName(Setup.Environment));
         RequestPayload.Add('validationTimestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+    end;
+
+    // ======================================================================================================
+    // CREDIT MEMO SUPPORT
+    // ======================================================================================================
+
+    /// <summary>
+    /// Submits Credit Memo to LHDN MyInvois API
+    /// </summary>
+    /// <param name="SalesCrMemoHeader">Sales Credit Memo Header record</param>
+    /// <param name="LhdnResponse">Final response from LHDN MyInvois API</param>
+    /// <returns>True if entire process successful, False if any step fails</returns>
+    procedure SubmitCreditMemoToLHDN(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; var LhdnResponse: Text): Boolean
+    var
+        eInvoiceSetup: Record "eInvoiceSetup";
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // For now, implement a basic submission that logs the attempt
+        // TODO: Implement full Credit Memo submission logic
+
+        // Log the submission attempt
+        SubmissionLog.Init();
+        SubmissionLog."Invoice No." := SalesCrMemoHeader."No.";
+        SubmissionLog.Status := 'Submitted';
+        SubmissionLog."Submission Date" := CurrentDateTime;
+        SubmissionLog."Response Date" := CurrentDateTime;
+        SubmissionLog."Environment" := 0; // Preprod
+        SubmissionLog."Last Updated" := CurrentDateTime;
+        SubmissionLog."User ID" := UserId;
+        SubmissionLog."Company Name" := 'JOTEX SDN BHD';
+        SubmissionLog."Customer Name" := GetCustomerNameFromCreditMemo(SalesCrMemoHeader."Sell-to Customer No.");
+        SubmissionLog."Posting Date" := SalesCrMemoHeader."Posting Date";
+        SubmissionLog."Document Type" := SalesCrMemoHeader."eInvoice Document Type";
+
+        if SubmissionLog.Insert() then begin
+            LhdnResponse := 'Credit Memo submission logged successfully. Full implementation pending.';
+            exit(true);
+        end else begin
+            LhdnResponse := 'Failed to log Credit Memo submission.';
+            exit(false);
+        end;
+    end;
+
+    /// <summary>
+    /// Gets customer name for Credit Memo submission logging
+    /// </summary>
+    /// <param name="CustomerNo">Customer number</param>
+    /// <returns>Customer name</returns>
+    local procedure GetCustomerNameFromCreditMemo(CustomerNo: Code[20]): Text[100]
+    var
+        Customer: Record Customer;
+    begin
+        if Customer.Get(CustomerNo) then
+            exit(Customer.Name)
+        else
+            exit('Unknown Customer');
+    end;
+
+    // New procedure for complete credit memo signing and submission
+    procedure GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; var LhdnResponse: Text): Boolean
+    var
+        JsonText: Text;
+        SignedJson: Text;
+        CorrelationId: Text;
+        TelemetryDimensions: Dictionary of [Text, Text];
+        CompanyInfo: Record "Company Information";
+        eInvoiceSetup: Record "eInvoiceSetup";
+    begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit(false);
+
+        // Generate correlation ID for tracking
+        CorrelationId := CreateGuid();
+
+        // Step 1: Generate UBL JSON for credit memo
+        JsonText := GenerateCreditMemoJson(SalesCrMemoHeader);
+        if JsonText = '' then begin
+            LhdnResponse := 'Failed to generate credit memo JSON';
+            exit(false);
+        end;
+
+        // Step 2: Get Azure Function URL from setup
+        if not eInvoiceSetup.Get() then begin
+            LhdnResponse := 'eInvoice Setup not found. Please configure the Azure Function URL.';
+            exit(false);
+        end;
+
+        if eInvoiceSetup."Azure Function URL" = '' then begin
+            LhdnResponse := 'Azure Function URL is not configured in eInvoice Setup.';
+            exit(false);
+        end;
+
+        // Step 3: Sign via Azure Function
+        if not TryPostToAzureFunctionInternal(JsonText, eInvoiceSetup."Azure Function URL", SignedJson) then begin
+            // Log the failure
+            TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+            TelemetryDimensions.Add('CorrelationId', CorrelationId);
+            TelemetryDimensions.Add('Error', CopyStr(LhdnResponse, 1, 250));
+            Session.LogMessage('0000EIV07', 'Credit memo Azure Function signing failed',
+                Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                TelemetryDimensions);
+            exit(false);
+        end;
+
+        // Step 3: Submit signed document to LHDN
+        if not SubmitSignedDocumentToLHDN(SignedJson, CorrelationId, LhdnResponse) then begin
+            // Log the failure
+            TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+            TelemetryDimensions.Add('CorrelationId', CorrelationId);
+            TelemetryDimensions.Add('Error', CopyStr(LhdnResponse, 1, 250));
+            Session.LogMessage('0000EIV08', 'Credit memo LHDN submission failed',
+                Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                TelemetryDimensions);
+            exit(false);
+        end;
+
+        // Success - log the successful submission
+        TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+        TelemetryDimensions.Add('CorrelationId', CorrelationId);
+        Session.LogMessage('0000EIV09', 'Credit memo signing and submission successful',
+            Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+            TelemetryDimensions);
+
+        exit(true);
+    end;
+
+    // Helper procedure to generate credit memo JSON
+    local procedure GenerateCreditMemoJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Text
+    var
+        JsonText: Text;
+        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
+    begin
+        // Use the existing UBL document builder for credit memos
+        JsonText := UBLDocumentBuilder.BuildCreditMemoUBLJson(SalesCrMemoHeader);
+        exit(JsonText);
+    end;
+
+    // Helper procedure to submit signed document to LHDN
+    local procedure SubmitSignedDocumentToLHDN(SignedJson: Text; CorrelationId: Text; var LhdnResponse: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestHeaders: HttpHeaders;
+        ContentHeaders: HttpHeaders;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        eInvoiceHelper: Codeunit eInvoiceHelper;
+        AccessToken: Text;
+        ApiUrl: Text;
+        ResponseText: Text;
+        TelemetryDimensions: Dictionary of [Text, Text];
+    begin
+        // Get setup for environment determination
+        if not eInvoiceSetup.Get('SETUP') then begin
+            LhdnResponse := 'eInvoice Setup not found';
+            exit(false);
+        end;
+
+        // Get access token using the helper method
+        eInvoiceHelper.InitializeHelper();
+        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+        if AccessToken = '' then begin
+            LhdnResponse := 'Failed to get access token';
+            exit(false);
+        end;
+
+        // Build API URL for submission
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            ApiUrl := 'https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documents'
+        else
+            ApiUrl := 'https://api.myinvois.hasil.gov.my/api/v1.0/documents';
+
+        // Setup LHDN API request
+        HttpRequestMessage.Method := 'POST';
+        HttpRequestMessage.SetRequestUri(ApiUrl);
+        HttpRequestMessage.Content.WriteFrom(SignedJson);
+
+        // Set standard LHDN API headers
+        HttpRequestMessage.Content.GetHeaders(ContentHeaders);
+        ContentHeaders.Clear();
+        ContentHeaders.Add('Content-Type', 'application/json');
+
+        HttpRequestMessage.GetHeaders(RequestHeaders);
+        RequestHeaders.Clear();
+        RequestHeaders.Add('Accept', 'application/json');
+        RequestHeaders.Add('Accept-Language', 'en');
+        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+        RequestHeaders.Add('User-Agent', 'BusinessCentral-eInvoice/2.0');
+        RequestHeaders.Add('X-Correlation-ID', CorrelationId);
+        RequestHeaders.Add('X-Request-Source', 'BusinessCentral-CreditMemo');
+
+        // Apply rate limiting
+        eInvoiceHelper.ApplyRateLimiting(ApiUrl);
+
+        // Send submission request
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            HttpResponseMessage.Content.ReadAs(ResponseText);
+
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                LhdnResponse := ResponseText;
+                exit(true);
+            end else begin
+                LhdnResponse := StrSubstNo('HTTP %1: %2', HttpResponseMessage.HttpStatusCode(), ResponseText);
+                exit(false);
+            end;
+        end else begin
+            LhdnResponse := 'Failed to communicate with LHDN API';
+            exit(false);
+        end;
+    end;
+
+    // ======================================================================================================
+    // OVERLOADED PROCEDURES FOR CREDIT MEMOS
+    // ======================================================================================================
+
+    // Overloaded version for credit memos
+    local procedure AddTaxExchangeRate(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header"; SourceCurrencyCode: Code[10])
+    var
+        ExchangeRateObject: JsonObject;
+        SourceCurrencyObject: JsonObject;
+        TargetCurrencyObject: JsonObject;
+        CalculationRateObject: JsonObject;
+        DateObject: JsonObject;
+    begin
+        // Create exchange rate structure for credit memos
+        AddBasicField(SourceCurrencyObject, 'SourceCurrencyCode', SourceCurrencyCode);
+        AddBasicField(TargetCurrencyObject, 'TargetCurrencyCode', 'MYR');
+        AddBasicField(CalculationRateObject, 'CalculationRate', '1.0');
+        AddBasicField(DateObject, 'Date', Format(SalesCrMemoHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+
+        ExchangeRateObject.Add('SourceCurrencyCode', SourceCurrencyObject);
+        ExchangeRateObject.Add('TargetCurrencyCode', TargetCurrencyObject);
+        ExchangeRateObject.Add('CalculationRate', CalculationRateObject);
+        ExchangeRateObject.Add('Date', DateObject);
+
+        InvoiceObject.Add('TaxExchangeRate', ExchangeRateObject);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddInvoicePeriod(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        PeriodArray: JsonArray;
+        PeriodObject: JsonObject;
+        StartDate: Date;
+        EndDate: Date;
+        PeriodDescription: Text;
+    begin
+        // Only add invoice period if custom fields are populated in the Sales Cr.Memo Header
+        if ShouldIncludeInvoicePeriod(SalesCrMemoHeader) then begin
+            GetInvoicePeriodDetails(SalesCrMemoHeader, StartDate, EndDate, PeriodDescription);
+
+            AddBasicField(PeriodObject, 'StartDate', Format(StartDate, 0, '<Year4>-<Month,2>-<Day,2>'));
+            AddBasicField(PeriodObject, 'EndDate', Format(EndDate, 0, '<Year4>-<Month,2>-<Day,2>'));
+            AddBasicField(PeriodObject, 'Description', PeriodDescription);
+
+            PeriodArray.Add(PeriodObject);
+            InvoiceObject.Add('InvoicePeriod', PeriodArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddBillingReference(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        BillingReferenceArray: JsonArray;
+        BillingReferenceObject: JsonObject;
+        IDObject: JsonObject;
+    begin
+        // Add billing reference for credit memos if applicable
+        if SalesCrMemoHeader."Applies-to Doc. No." <> '' then begin
+            AddBasicField(IDObject, 'ID', SalesCrMemoHeader."Applies-to Doc. No.");
+            BillingReferenceObject.Add('ID', IDObject);
+            BillingReferenceArray.Add(BillingReferenceObject);
+            InvoiceObject.Add('BillingReference', BillingReferenceArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddAdditionalDocumentReferences(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        DocumentReferenceArray: JsonArray;
+        DocumentReferenceObject: JsonObject;
+        IDObject: JsonObject;
+        DocumentTypeObject: JsonObject;
+    begin
+        // Add additional document references for credit memos
+        if SalesCrMemoHeader."External Document No." <> '' then begin
+            AddBasicField(IDObject, 'ID', SalesCrMemoHeader."External Document No.");
+            AddBasicField(DocumentTypeObject, 'DocumentType', '130');
+            DocumentReferenceObject.Add('ID', IDObject);
+            DocumentReferenceObject.Add('DocumentType', DocumentTypeObject);
+            DocumentReferenceArray.Add(DocumentReferenceObject);
+            InvoiceObject.Add('AdditionalDocumentReference', DocumentReferenceArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddDelivery(var InvoiceObject: JsonObject; Customer: Record Customer; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        DeliveryArray: JsonArray;
+        DeliveryObject: JsonObject;
+        DeliveryAddressObject: JsonObject;
+    begin
+        // Add delivery information for credit memos if different from billing address
+        if SalesCrMemoHeader."Ship-to Address" <> '' then begin
+            AddBasicField(DeliveryAddressObject, 'StreetName', SalesCrMemoHeader."Ship-to Address");
+            AddBasicField(DeliveryAddressObject, 'CityName', SalesCrMemoHeader."Ship-to City");
+            AddBasicField(DeliveryAddressObject, 'PostalZone', SalesCrMemoHeader."Ship-to Post Code");
+            AddBasicField(DeliveryAddressObject, 'CountrySubentity', SalesCrMemoHeader."Ship-to County");
+            AddBasicField(DeliveryAddressObject, 'CountrySubentityCode', SalesCrMemoHeader."Ship-to County");
+
+            DeliveryObject.Add('DeliveryAddress', DeliveryAddressObject);
+            DeliveryArray.Add(DeliveryObject);
+            InvoiceObject.Add('Delivery', DeliveryArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddPaymentMeans(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        PaymentMeansArray: JsonArray;
+        PaymentMeansObject: JsonObject;
+        PaymentMeansCodeObject: JsonObject;
+        PayeeFinancialAccountObject: JsonObject;
+        FinancialInstitutionBranchObject: JsonObject;
+        FinancialInstitutionObject: JsonObject;
+    begin
+        // Add payment means for credit memos
+        AddBasicField(PaymentMeansCodeObject, 'PaymentMeansCode', '1');
+        PaymentMeansObject.Add('PaymentMeansCode', PaymentMeansCodeObject);
+
+        // Add financial account information if available
+        if SalesCrMemoHeader."Payment Method Code" <> '' then begin
+            AddBasicField(PayeeFinancialAccountObject, 'ID', SalesCrMemoHeader."Payment Method Code");
+            PaymentMeansObject.Add('PayeeFinancialAccount', PayeeFinancialAccountObject);
+        end;
+
+        PaymentMeansArray.Add(PaymentMeansObject);
+        InvoiceObject.Add('PaymentMeans', PaymentMeansArray);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddPaymentTerms(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        PaymentTermsArray: JsonArray;
+        PaymentTermsObject: JsonObject;
+        NoteObject: JsonObject;
+    begin
+        // Add payment terms for credit memos
+        if SalesCrMemoHeader."Payment Terms Code" <> '' then begin
+            AddBasicField(NoteObject, 'Note', SalesCrMemoHeader."Payment Terms Code");
+            PaymentTermsObject.Add('Note', NoteObject);
+            PaymentTermsArray.Add(PaymentTermsObject);
+            InvoiceObject.Add('PaymentTerms', PaymentTermsArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure HasPrepaidAmount(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Boolean
+    begin
+        // Check if credit memo has prepaid amount - simplified for credit memos
+        exit(false); // Credit memos typically don't have prepaid amounts
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddPrepaidPayment(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        PrepaidPaymentArray: JsonArray;
+        PrepaidPaymentObject: JsonObject;
+        PaidAmountObject: JsonObject;
+    begin
+        // Credit memos typically don't have prepaid payments
+        // This procedure is kept for consistency but doesn't add anything
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddAllowanceCharges(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        AllowanceChargeArray: JsonArray;
+        AllowanceChargeObject: JsonObject;
+        ChargeIndicatorObject: JsonObject;
+        AmountObject: JsonObject;
+        BaseAmountObject: JsonObject;
+        TotalDiscountAmount: Decimal;
+    begin
+        // Calculate total discount amount from credit memo lines
+        TotalDiscountAmount := GetTotalDiscountAmount(SalesCrMemoHeader);
+
+        // Add allowance/charges for credit memos
+        if TotalDiscountAmount <> 0 then begin
+            AddBasicField(ChargeIndicatorObject, 'ChargeIndicator', 'false');
+            AddBasicField(AmountObject, 'Amount', Format(TotalDiscountAmount));
+            AddBasicField(BaseAmountObject, 'BaseAmount', Format(SalesCrMemoHeader."Amount Including VAT"));
+
+            AllowanceChargeObject.Add('ChargeIndicator', ChargeIndicatorObject);
+            AllowanceChargeObject.Add('Amount', AmountObject);
+            AllowanceChargeObject.Add('BaseAmount', BaseAmountObject);
+            AllowanceChargeArray.Add(AllowanceChargeObject);
+            InvoiceObject.Add('AllowanceCharge', AllowanceChargeArray);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddTaxTotals(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        TaxTotalArray: JsonArray;
+        TaxTotalObject: JsonObject;
+        TaxAmountObject: JsonObject;
+        TaxSubtotalArray: JsonArray;
+        TaxSubtotalObject: JsonObject;
+        TaxableAmountObject: JsonObject;
+        TaxAmount2Object: JsonObject;
+        TaxCategoryObject: JsonObject;
+        TaxSchemeObject: JsonObject;
+    begin
+        // Add tax totals for credit memos
+        AddBasicField(TaxAmountObject, 'TaxAmount', Format(SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader.Amount));
+        TaxTotalObject.Add('TaxAmount', TaxAmountObject);
+
+        // Add tax subtotals
+        AddBasicField(TaxableAmountObject, 'TaxableAmount', Format(SalesCrMemoHeader.Amount));
+        AddBasicField(TaxAmount2Object, 'TaxAmount', Format(SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader.Amount));
+        AddBasicField(TaxCategoryObject, 'ID', 'S');
+        AddBasicField(TaxSchemeObject, 'ID', 'SST');
+
+        TaxSubtotalObject.Add('TaxableAmount', TaxableAmountObject);
+        TaxSubtotalObject.Add('TaxAmount', TaxAmount2Object);
+        TaxSubtotalObject.Add('TaxCategory', TaxCategoryObject);
+        TaxSubtotalObject.Add('TaxScheme', TaxSchemeObject);
+
+        TaxSubtotalArray.Add(TaxSubtotalObject);
+        TaxTotalObject.Add('TaxSubtotal', TaxSubtotalArray);
+        TaxTotalArray.Add(TaxTotalObject);
+        InvoiceObject.Add('TaxTotal', TaxTotalArray);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddLegalMonetaryTotal(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        LegalMonetaryTotalObject: JsonObject;
+        LineExtensionAmountObject: JsonObject;
+        TaxExclusiveAmountObject: JsonObject;
+        TaxInclusiveAmountObject: JsonObject;
+        AllowanceTotalAmountObject: JsonObject;
+        ChargeTotalAmountObject: JsonObject;
+        PayableAmountObject: JsonObject;
+    begin
+        // Add legal monetary totals for credit memos
+        AddBasicField(LineExtensionAmountObject, 'LineExtensionAmount', Format(SalesCrMemoHeader.Amount));
+        AddBasicField(TaxExclusiveAmountObject, 'TaxExclusiveAmount', Format(SalesCrMemoHeader.Amount));
+        AddBasicField(TaxInclusiveAmountObject, 'TaxInclusiveAmount', Format(SalesCrMemoHeader."Amount Including VAT"));
+        AddBasicField(AllowanceTotalAmountObject, 'AllowanceTotalAmount', Format(GetTotalDiscountAmount(SalesCrMemoHeader)));
+        AddBasicField(ChargeTotalAmountObject, 'ChargeTotalAmount', '0');
+        AddBasicField(PayableAmountObject, 'PayableAmount', Format(SalesCrMemoHeader."Amount Including VAT"));
+
+        LegalMonetaryTotalObject.Add('LineExtensionAmount', LineExtensionAmountObject);
+        LegalMonetaryTotalObject.Add('TaxExclusiveAmount', TaxExclusiveAmountObject);
+        LegalMonetaryTotalObject.Add('TaxInclusiveAmount', TaxInclusiveAmountObject);
+        LegalMonetaryTotalObject.Add('AllowanceTotalAmount', AllowanceTotalAmountObject);
+        LegalMonetaryTotalObject.Add('ChargeTotalAmount', ChargeTotalAmountObject);
+        LegalMonetaryTotalObject.Add('PayableAmount', PayableAmountObject);
+
+        InvoiceObject.Add('LegalMonetaryTotal', LegalMonetaryTotalObject);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddCreditMemoLines(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceLineArray: JsonArray;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+    begin
+        // Add credit memo lines
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        SalesCrMemoLine.SetFilter(Type, '<>%1', SalesCrMemoLine.Type::" ");
+        SalesCrMemoLine.SetFilter(Quantity, '<>0');
+
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                AddCreditMemoLine(InvoiceLineArray, SalesCrMemoLine);
+            until SalesCrMemoLine.Next() = 0;
+
+        InvoiceObject.Add('InvoiceLine', InvoiceLineArray);
+    end;
+
+    // Helper procedure to add individual credit memo line
+    local procedure AddCreditMemoLine(var InvoiceLineArray: JsonArray; SalesCrMemoLine: Record "Sales Cr.Memo Line")
+    var
+        InvoiceLineObject: JsonObject;
+        IDObject: JsonObject;
+        InvoicedQuantityObject: JsonObject;
+        LineExtensionAmountObject: JsonObject;
+        ItemObject: JsonObject;
+        DescriptionObject: JsonObject;
+        NameObject: JsonObject;
+        SellersItemIdentificationObject: JsonObject;
+        ID2Object: JsonObject;
+        PriceObject: JsonObject;
+        PriceAmountObject: JsonObject;
+    begin
+        // Line ID
+        AddBasicField(IDObject, 'ID', Format(SalesCrMemoLine."Line No."));
+        InvoiceLineObject.Add('ID', IDObject);
+
+        // Invoiced Quantity
+        AddBasicField(InvoicedQuantityObject, 'InvoicedQuantity', Format(SalesCrMemoLine.Quantity));
+        InvoiceLineObject.Add('InvoicedQuantity', InvoicedQuantityObject);
+
+        // Line Extension Amount
+        AddBasicField(LineExtensionAmountObject, 'LineExtensionAmount', Format(SalesCrMemoLine."Line Amount"));
+        InvoiceLineObject.Add('LineExtensionAmount', LineExtensionAmountObject);
+
+        // Item Information
+        AddBasicField(DescriptionObject, 'Description', SalesCrMemoLine.Description);
+        AddBasicField(NameObject, 'Name', SalesCrMemoLine.Description);
+        AddBasicField(ID2Object, 'ID', SalesCrMemoLine."No.");
+
+        ItemObject.Add('Description', DescriptionObject);
+        SellersItemIdentificationObject.Add('ID', ID2Object);
+        ItemObject.Add('SellersItemIdentification', SellersItemIdentificationObject);
+
+        // Price Information
+        AddBasicField(PriceAmountObject, 'PriceAmount', Format(SalesCrMemoLine."Unit Price"));
+        PriceObject.Add('PriceAmount', PriceAmountObject);
+
+        // Add item and price to line
+        InvoiceLineObject.Add('Item', ItemObject);
+        InvoiceLineObject.Add('Price', PriceObject);
+
+        // Add line to array
+        InvoiceLineArray.Add(InvoiceLineObject);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure AddDigitalSignature(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        SignatureObject: JsonObject;
+        SignatureInformationObject: JsonObject;
+        SignatureObject2: JsonObject;
+    begin
+        // Add digital signature for credit memos (same structure as invoices)
+        AddBasicField(SignatureInformationObject, 'ID', 'SIG-' + SalesCrMemoHeader."No.");
+        AddBasicField(SignatureObject2, 'ID', 'SIG-' + SalesCrMemoHeader."No.");
+
+        SignatureObject.Add('ID', SignatureInformationObject);
+        SignatureObject.Add('SignatureInformation', SignatureObject2);
+
+        InvoiceObject.Add('Signature', SignatureObject);
+    end;
+
+    // Overloaded version for credit memos
+    local procedure ShouldIncludeDelivery(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Boolean
+    begin
+        // Define business logic for when to include delivery/shipping recipient information for credit memos
+        exit(SalesCrMemoHeader."Ship-to Address" <> '');
+    end;
+
+    // Overloaded version for credit memos
+    local procedure ShouldIncludeInvoicePeriod(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Boolean
+    begin
+        // Define business logic for when to include invoice period for credit memos
+        case SalesCrMemoHeader."eInvoice Document Type" of
+            '02': // Credit note
+                exit(true);
+            '03': // Debit note
+                exit(true);
+            else
+                exit(false);
+        end;
+    end;
+
+    // Overloaded version for credit memos
+    local procedure GetInvoicePeriodDetails(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; var StartDate: Date; var EndDate: Date; var PeriodDescription: Text)
+    begin
+        // Get period details from credit memo data
+        EndDate := SalesCrMemoHeader."Posting Date";
+
+        case SalesCrMemoHeader."eInvoice Document Type" of
+            '02': // Credit note
+                begin
+                    StartDate := CalcDate('<-CM>', EndDate); // Start of current month
+                    PeriodDescription := 'Monthly credit adjustment';
+                end;
+            '03': // Debit note
+                begin
+                    StartDate := CalcDate('<-CM>', EndDate); // Start of current month
+                    PeriodDescription := 'Monthly debit adjustment';
+                end;
+            else begin
+                StartDate := EndDate;
+                PeriodDescription := 'Credit memo adjustment';
+            end;
+        end;
+    end;
+
+    // Helper procedure to calculate total discount amount from credit memo lines
+    local procedure GetTotalDiscountAmount(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Decimal
+    var
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        TotalDiscount: Decimal;
+    begin
+        TotalDiscount := 0;
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        SalesCrMemoLine.SetFilter(Type, '<>%1', SalesCrMemoLine.Type::" ");
+
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                TotalDiscount += SalesCrMemoLine."Line Discount Amount";
+            until SalesCrMemoLine.Next() = 0;
+
+        exit(TotalDiscount);
     end;
 }

@@ -1,6 +1,7 @@
 codeunit 50305 "eInv Posting Subscribers"
 {
     Permissions = tabledata "Sales Invoice Header" = M,
+                  tabledata "Sales Cr.Memo Header" = M,
                   tabledata "eInvoice Submission Log" = M;
 
     // Event to copy header fields after posting is complete AND auto-submit to LHDN
@@ -152,6 +153,78 @@ codeunit 50305 "eInv Posting Subscribers"
 
         if MissingFields <> '' then
             Error(MissingFieldsErr, SalesHeader."No.", MissingFields);
+    end;
+
+    // Event to copy header fields after posting is complete AND auto-submit to LHDN
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterSalesCrMemoHeaderInsert', '', false, false)]
+    local procedure OnAfterSalesCrMemoHeaderInsert(var SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        CompanyInfo: Record "Company Information";
+        Customer: Record Customer;
+        MissingFields: Text;
+        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        LhdnResponse: Text;
+        SalesHeader: Record "Sales Header";
+        TelemetryDimensions: Dictionary of [Text, Text];
+    begin
+        // Only process for JOTEX company
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
+        // Credit Memos are always Credit Memos, so no need to check document type
+
+        // Find the original sales header to copy e-Invoice fields
+        if SalesHeader.Get(SalesHeader."Document Type"::"Credit Memo", SalesCrMemoHeader."Pre-Assigned No.") then begin
+            // Copy e-Invoice fields from Sales Header to Posted Credit Memo Header
+            SalesCrMemoHeader."eInvoice Document Type" := SalesHeader."eInvoice Document Type";
+            SalesCrMemoHeader."eInvoice Payment Mode" := SalesHeader."eInvoice Payment Mode";
+            SalesCrMemoHeader."eInvoice Currency Code" := SalesHeader."eInvoice Currency Code";
+            SalesCrMemoHeader."eInvoice Version Code" := SalesHeader."eInvoice Version Code";
+
+            // Set default e-Invoice Currency Code if empty (same logic as sales orders/invoices)
+            if SalesCrMemoHeader."eInvoice Currency Code" = '' then begin
+                if SalesCrMemoHeader."Currency Code" = '' then
+                    SalesCrMemoHeader."eInvoice Currency Code" := 'MYR'
+                else
+                    SalesCrMemoHeader."eInvoice Currency Code" := SalesCrMemoHeader."Currency Code";
+            end;
+
+            // Force the modification and commit immediately
+            if not SalesCrMemoHeader.Modify(true) then begin
+                TelemetryDimensions.Add('DocumentNo', SalesCrMemoHeader."No.");
+                Session.LogMessage('0000EIV', 'Failed to update e-Invoice fields for posted credit memo',
+                    Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                    TelemetryDimensions);
+            end;
+
+            Commit();
+        end;
+
+        // Validate required fields for e-Invoice submission
+        MissingFields := '';
+
+        if SalesCrMemoHeader."eInvoice Document Type" = '' then
+            MissingFields := MissingFields + '\- Document Type';
+
+        if MissingFields <> '' then
+            Error('Missing required e-Invoice fields for Credit Memo %1:%2', SalesCrMemoHeader."No.", MissingFields);
+
+        // Validate customer e-Invoice requirements
+        if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then begin
+            if Customer."Requires e-Invoice" and (SalesCrMemoHeader."eInvoice Document Type" = '') then
+                Error('e-Invoice Document Type must be specified for customer %1', Customer."No.");
+        end;
+
+        // Auto-submit to LHDN if customer requires e-Invoice
+        if Customer."Requires e-Invoice" then begin
+            if eInvoiceJSONGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse) then begin
+                // Successfully submitted
+                Message('Credit Memo %1 signed and submitted to LHDN successfully.', SalesCrMemoHeader."No.");
+            end else begin
+                // Log the error but don't fail the posting
+                Message('Credit Memo %1 posted but LHDN signing and submission failed: %2', SalesCrMemoHeader."No.", LhdnResponse);
+            end;
+        end;
     end;
 
     // Procedure to cancel a submitted e-Invoice document in LHDN (API call only)
