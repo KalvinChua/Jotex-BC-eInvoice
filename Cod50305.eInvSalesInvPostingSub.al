@@ -41,15 +41,13 @@ codeunit 50305 "eInv Posting Subscribers"
             SalesInvoiceHeader."eInvoice Currency Code" := SalesHeader."eInvoice Currency Code";
             SalesInvoiceHeader."eInvoice Version Code" := SalesHeader."eInvoice Version Code";
 
-            // Force the modification and commit immediately
+            // Force the modification without commit (commit will be handled by the posting process)
             if not SalesInvoiceHeader.Modify(true) then begin
                 TelemetryDimensions.Add('DocumentNo', SalesInvHdrNo);
                 Session.LogMessage('0000EIV', 'Failed to update e-Invoice fields for posted invoice',
                     Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                     TelemetryDimensions);
             end;
-
-            Commit();
 
             // Check if customer requires e-Invoice for auto-submission
             CustomerRequiresEInvoice := Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") and Customer."Requires e-Invoice";
@@ -102,6 +100,98 @@ codeunit 50305 "eInv Posting Subscribers"
         end;
     end;
 
+    // Event to copy credit memo line fields during line insertion
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforeSalesCrMemoLineInsert', '', false, false)]
+    local procedure CopyEInvoiceCreditMemoLineFields(
+        var SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        SalesLine: Record "Sales Line";
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        CommitIsSuppressed: Boolean)
+    var
+        CompanyInfo: Record "Company Information";
+        TelemetryDimensions: Dictionary of [Text, Text];
+    begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
+        // Only copy e-Invoice fields for item and resource lines
+        if SalesLine.Type in [SalesLine.Type::Item, SalesLine.Type::Resource] then begin
+            SalesCrMemoLine."e-Invoice Classification" := SalesLine."e-Invoice Classification";
+            SalesCrMemoLine."e-Invoice UOM" := SalesLine."e-Invoice UOM";
+            SalesCrMemoLine."e-Invoice Tax Type" := SalesLine."e-Invoice Tax Type";
+        end;
+
+        // Log the copying process for debugging
+        Clear(TelemetryDimensions);
+        TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+        TelemetryDimensions.Add('LineNo', Format(SalesCrMemoLine."Line No."));
+        TelemetryDimensions.Add('Description', CopyStr(SalesCrMemoLine.Description, 1, 50));
+        TelemetryDimensions.Add('Type', Format(SalesCrMemoLine.Type));
+        TelemetryDimensions.Add('Quantity', Format(SalesCrMemoLine.Quantity));
+        TelemetryDimensions.Add('UnitPrice', Format(SalesCrMemoLine."Unit Price"));
+        Session.LogMessage('0000EIV03', 'Credit memo line copying completed',
+            Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+            TelemetryDimensions);
+    end;
+
+    // Event to ensure credit memo line fields are properly copied after insertion
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterSalesCrMemoLineInsert', '', false, false)]
+    local procedure OnAfterSalesCrMemoLineInsert(var SalesCrMemoLine: Record "Sales Cr.Memo Line"; SalesLine: Record "Sales Line"; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        CompanyInfo: Record "Company Information";
+        TelemetryDimensions: Dictionary of [Text, Text];
+        Modified: Boolean;
+    begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit;
+
+        Modified := false;
+
+        // Only copy e-Invoice fields for item and resource lines if they're missing
+        if SalesLine.Type in [SalesLine.Type::Item, SalesLine.Type::Resource] then begin
+            if SalesCrMemoLine."e-Invoice Classification" = '' then begin
+                SalesCrMemoLine."e-Invoice Classification" := SalesLine."e-Invoice Classification";
+                Modified := true;
+            end;
+            if SalesCrMemoLine."e-Invoice UOM" = '' then begin
+                SalesCrMemoLine."e-Invoice UOM" := SalesLine."e-Invoice UOM";
+                Modified := true;
+            end;
+            if SalesCrMemoLine."e-Invoice Tax Type" = '' then begin
+                SalesCrMemoLine."e-Invoice Tax Type" := SalesLine."e-Invoice Tax Type";
+                Modified := true;
+            end;
+        end;
+
+        // Save the changes if any were made
+        if Modified then begin
+            if not SalesCrMemoLine.Modify(true) then begin
+                Clear(TelemetryDimensions);
+                TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+                TelemetryDimensions.Add('LineNo', Format(SalesCrMemoLine."Line No."));
+                TelemetryDimensions.Add('Error', 'Failed to modify credit memo line');
+                Session.LogMessage('0000EIV04', 'Failed to modify credit memo line after insertion',
+                    Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                    TelemetryDimensions);
+            end;
+        end;
+
+        // Log the copying process for debugging
+        Clear(TelemetryDimensions);
+        TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+        TelemetryDimensions.Add('LineNo', Format(SalesCrMemoLine."Line No."));
+        TelemetryDimensions.Add('Description', CopyStr(SalesCrMemoLine.Description, 1, 50));
+        TelemetryDimensions.Add('Type', Format(SalesCrMemoLine.Type));
+        TelemetryDimensions.Add('Quantity', Format(SalesCrMemoLine.Quantity));
+        TelemetryDimensions.Add('UnitPrice', Format(SalesCrMemoLine."Unit Price"));
+        TelemetryDimensions.Add('Modified', Format(Modified));
+        Session.LogMessage('0000EIV05', 'Credit memo line post-insertion processing completed',
+            Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+            TelemetryDimensions);
+    end;
+
     // Event to verify fields before posting
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnBeforePostSalesDoc', '', false, false)]
     local procedure VerifyEInvoiceFieldsBeforePosting(
@@ -135,27 +225,29 @@ codeunit 50305 "eInv Posting Subscribers"
                 MissingFields := MissingFields + '\- Currency Code';
         end;
 
-        // Check lines
-        SalesLine.SetRange("Document Type", SalesHeader."Document Type");
-        SalesLine.SetRange("Document No.", SalesHeader."No.");
-        SalesLine.SetFilter(Type, '<>%1', SalesLine.Type::" ");
-        if SalesLine.FindSet() then
-            repeat
-                if SalesLine."e-Invoice Classification" = '' then
-                    MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' Classification';
+        // Check lines for invoices and credit memos
+        if SalesHeader."Document Type" in [SalesHeader."Document Type"::Invoice, SalesHeader."Document Type"::"Credit Memo"] then begin
+            SalesLine.SetRange("Document Type", SalesHeader."Document Type");
+            SalesLine.SetRange("Document No.", SalesHeader."No.");
+            SalesLine.SetFilter(Type, '<>%1', SalesLine.Type::" ");
+            if SalesLine.FindSet() then
+                repeat
+                    if SalesLine."e-Invoice Classification" = '' then
+                        MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' Classification';
 
-                if SalesLine."e-Invoice UOM" = '' then
-                    MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' UOM';
+                    if SalesLine."e-Invoice UOM" = '' then
+                        MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' UOM';
 
-                if SalesLine."e-Invoice Tax Type" = '' then
-                    MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' Tax Type';
-            until SalesLine.Next() = 0;
+                    if SalesLine."e-Invoice Tax Type" = '' then
+                        MissingFields := MissingFields + '\- Line ' + Format(SalesLine."Line No.") + ' Tax Type';
+                until SalesLine.Next() = 0;
+        end;
 
         if MissingFields <> '' then
             Error(MissingFieldsErr, SalesHeader."No.", MissingFields);
     end;
 
-    // Event to copy header fields after posting is complete AND auto-submit to LHDN
+    // Enhanced credit memo posting subscriber following the same pattern as sales invoices
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterSalesCrMemoHeaderInsert', '', false, false)]
     local procedure OnAfterSalesCrMemoHeaderInsert(var SalesCrMemoHeader: Record "Sales Cr.Memo Header")
     var
@@ -166,12 +258,11 @@ codeunit 50305 "eInv Posting Subscribers"
         LhdnResponse: Text;
         SalesHeader: Record "Sales Header";
         TelemetryDimensions: Dictionary of [Text, Text];
+        CustomerRequiresEInvoice: Boolean;
     begin
-        // Only process for JOTEX company
+        // Only process for JOTEX SDN BHD
         if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
             exit;
-
-        // Credit Memos are always Credit Memos, so no need to check document type
 
         // Find the original sales header to copy e-Invoice fields
         if SalesHeader.Get(SalesHeader."Document Type"::"Credit Memo", SalesCrMemoHeader."Pre-Assigned No.") then begin
@@ -189,7 +280,7 @@ codeunit 50305 "eInv Posting Subscribers"
                     SalesCrMemoHeader."eInvoice Currency Code" := SalesCrMemoHeader."Currency Code";
             end;
 
-            // Force the modification and commit immediately
+            // Force the modification without commit (commit will be handled by the posting process)
             if not SalesCrMemoHeader.Modify(true) then begin
                 TelemetryDimensions.Add('DocumentNo', SalesCrMemoHeader."No.");
                 Session.LogMessage('0000EIV', 'Failed to update e-Invoice fields for posted credit memo',
@@ -197,32 +288,31 @@ codeunit 50305 "eInv Posting Subscribers"
                     TelemetryDimensions);
             end;
 
-            Commit();
-        end;
+            // Check if customer requires e-Invoice for auto-submission
+            CustomerRequiresEInvoice := Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") and Customer."Requires e-Invoice";
 
-        // Validate required fields for e-Invoice submission
-        MissingFields := '';
+            // Auto-submit to LHDN if customer requires e-Invoice
+            if CustomerRequiresEInvoice then begin
+                // Wait a moment to ensure all data is committed (but don't call Commit() here)
+                Sleep(2000);
 
-        if SalesCrMemoHeader."eInvoice Document Type" = '' then
-            MissingFields := MissingFields + '\- Document Type';
-
-        if MissingFields <> '' then
-            Error('Missing required e-Invoice fields for Credit Memo %1:%2', SalesCrMemoHeader."No.", MissingFields);
-
-        // Validate customer e-Invoice requirements
-        if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then begin
-            if Customer."Requires e-Invoice" and (SalesCrMemoHeader."eInvoice Document Type" = '') then
-                Error('e-Invoice Document Type must be specified for customer %1', Customer."No.");
-        end;
-
-        // Auto-submit to LHDN if customer requires e-Invoice
-        if Customer."Requires e-Invoice" then begin
-            if eInvoiceJSONGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse) then begin
-                // Successfully submitted
-                Message('Credit Memo %1 signed and submitted to LHDN successfully.', SalesCrMemoHeader."No.");
-            end else begin
-                // Log the error but don't fail the posting
-                Message('Credit Memo %1 posted but LHDN signing and submission failed: %2', SalesCrMemoHeader."No.", LhdnResponse);
+                if eInvoiceJSONGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse) then begin
+                    // Success - log the successful submission
+                    Clear(TelemetryDimensions);
+                    TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+                    TelemetryDimensions.Add('CustomerNo', SalesCrMemoHeader."Sell-to Customer No.");
+                    Session.LogMessage('0000EIV01', 'Automatic e-Invoice credit memo submission successful',
+                        Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                        TelemetryDimensions);
+                end else begin
+                    // Failure - log the error but don't stop the posting process
+                    Clear(TelemetryDimensions);
+                    TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+                    TelemetryDimensions.Add('Error', CopyStr(LhdnResponse, 1, 250));
+                    Session.LogMessage('0000EIV02', 'Automatic e-Invoice credit memo submission failed',
+                        Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                        TelemetryDimensions);
+                end;
             end;
         end;
     end;
@@ -473,7 +563,7 @@ codeunit 50305 "eInv Posting Subscribers"
     begin
         // Perform the actual cancellation in an isolated transaction
         if CancelEInvoiceDocument(SalesInvoiceHeader, CancellationReason) then begin
-            Commit(); // Commit any pending changes
+            // Commit will be handled by the calling procedure if needed
         end else
             Error('Cancellation API call failed');
     end;
