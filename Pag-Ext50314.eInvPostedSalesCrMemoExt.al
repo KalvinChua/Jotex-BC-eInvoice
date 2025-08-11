@@ -74,27 +74,6 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
     actions
     {
-        addfirst(Processing)
-        {
-            action(DebugCreditMemoPosting)
-            {
-                ApplicationArea = All;
-                Caption = 'Debug e-Invoice Posting';
-                Image = Troubleshoot;
-                ToolTip = 'Debug e-Invoice field copying during posting process';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
-                begin
-                    if not IsJotexCompany then
-                        exit;
-
-                    eInvPostingSubscribers.TestCreditMemoLineCopying(Rec."No.");
-                end;
-            }
-        }
         addlast(Processing)
         {
             action(GenerateEInvoiceJSON)
@@ -161,37 +140,161 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 end;
             }
 
-            action(DebugAzureFunctionPayload)
+            action(CancelEInvoice)
             {
                 ApplicationArea = All;
-                Caption = 'Debug Azure Function Payload';
-                ToolTip = 'Debug the Azure Function payload for this credit memo. Downloads both unsigned and signed JSON for troubleshooting.';
-                Image = Debug;
-                Visible = IsJotexCompany;
+                Caption = 'Cancel e-Invoice';
+                Image = Cancel;
+                ToolTip = 'Cancel this e-Invoice submission in LHDN system';
+                Visible = IsJotexCompany and (Rec."eInvoice Validation Status" = 'Valid');
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    eInvoiceCancellationHelper: Codeunit "eInvoice Cancellation Helper";
+                    CancellationReason: Text;
                 begin
-                    // Call the simplified debugging function
-                    eInvoiceGenerator.DebugCreditMemoPayload(Rec."No.");
+                    if not IsJotexCompany then
+                        exit;
+
+                    if Rec."eInvoice Validation Status" <> 'Valid' then begin
+                        Message('Can only cancel e-Invoices with Valid status. Current status: %1', Rec."eInvoice Validation Status");
+                        exit;
+                    end;
+
+                    CancellationReason := '';
+                    if not (StrMenu('User Error,Duplicate Entry,Wrong Amount,Other', 1, 'Select cancellation reason:') > 0) then
+                        exit;
+
+                    case StrMenu('User Error,Duplicate Entry,Wrong Amount,Other', 1, 'Select cancellation reason:') of
+                        1:
+                            CancellationReason := 'User Error';
+                        2:
+                            CancellationReason := 'Duplicate Entry';
+                        3:
+                            CancellationReason := 'Wrong Amount';
+                        4:
+                            CancellationReason := 'Other';
+                        else
+                            exit;
+                    end;
+
+                    if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then
+                        CurrPage.Update();
                 end;
             }
-            action(ShowAvailableCreditMemos)
+
+            action(RefreshStatus)
             {
                 ApplicationArea = All;
-                Caption = 'Show Available Credit Memos';
-                ToolTip = 'Show a list of available credit memos for debugging purposes.';
+                Caption = 'Refresh Status';
+                Image = Refresh;
+                ToolTip = 'Refresh the e-Invoice status from LHDN system';
+                Visible = IsJotexCompany and (Rec."eInvoice UUID" <> '');
+
+                trigger OnAction()
+                var
+                    eInvoiceSubmissionStatus: Codeunit "eInvoice Submission Status";
+                    eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+                    StatusRefreshed: Boolean;
+                begin
+                    if not IsJotexCompany then
+                        exit;
+
+                    if Rec."eInvoice UUID" = '' then begin
+                        Message('No e-Invoice UUID found. Cannot refresh status.');
+                        exit;
+                    end;
+
+                    // Find the submission log entry for this credit memo
+                    eInvoiceSubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    eInvoiceSubmissionLog.SetRange("Document Type", '02'); // Credit Memo
+
+                    // DEBUG: Check what entries exist for this credit memo
+                    if not eInvoiceSubmissionLog.FindSet() then begin
+                        Message('No submission log entries found for Credit Memo %1.\Please check if the credit memo was submitted to LHDN.', Rec."No.");
+                        exit;
+                    end;
+
+                    // Look for any valid entry (not just 'Valid' status)
+                    eInvoiceSubmissionLog.SetRange(Status); // Clear status filter
+                    if not eInvoiceSubmissionLog.FindLast() then begin
+                        Message('No submission log entry found for Credit Memo %1', Rec."No.");
+                        exit;
+                    end;
+
+                    // Check if the entry has a valid status for refresh
+                    if eInvoiceSubmissionLog.Status in ['Valid', 'Pending', 'Processing'] then begin
+                        // Can refresh these statuses
+                    end else begin
+                        Message('Cannot refresh status for Credit Memo %1.\Current status: %2\Only Valid, Pending, or Processing entries can be refreshed.',
+                            Rec."No.", eInvoiceSubmissionLog.Status);
+                        exit;
+                    end;
+
+                    StatusRefreshed := eInvoiceSubmissionStatus.RefreshSubmissionLogStatus(eInvoiceSubmissionLog);
+
+                    if StatusRefreshed then begin
+                        // Update the credit memo header with the refreshed status
+                        if eInvoiceSubmissionLog.Status = 'Valid' then
+                            Rec."eInvoice Validation Status" := 'Valid'
+                        else if eInvoiceSubmissionLog.Status = 'Cancelled' then
+                            Rec."eInvoice Validation Status" := 'Cancelled'
+                        else
+                            Rec."eInvoice Validation Status" := eInvoiceSubmissionLog.Status;
+
+                        Rec.Modify();
+                        CurrPage.Update();
+                        Message('Status refreshed successfully for Credit Memo %1. Current status: %2', Rec."No.", Rec."eInvoice Validation Status");
+                    end else begin
+                        Message('Failed to refresh status for Credit Memo %1. Please check the submission log for details.', Rec."No.");
+                    end;
+                end;
+            }
+
+            action(ShowSubmissionLogEntries)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Submission Log Entries';
                 Image = List;
+                ToolTip = 'Show all submission log entries for this credit memo for debugging';
                 Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
-                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                    AvailableMemos: Text;
+                    eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+                    LogInfo: Text;
+                    EntryCount: Integer;
                 begin
-                    AvailableMemos := eInvoiceGenerator.GetAvailableCreditMemosForDebugging();
-                    Message(AvailableMemos);
+                    if not IsJotexCompany then
+                        exit;
+
+                    LogInfo := StrSubstNo('Submission Log Entries for Credit Memo: %1\\\', Rec."No.");
+                    EntryCount := 0;
+
+                    // Find all submission log entries for this credit memo
+                    eInvoiceSubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    if eInvoiceSubmissionLog.FindSet() then begin
+                        repeat
+                            EntryCount += 1;
+                            LogInfo += StrSubstNo('Entry %1:\- Document Type: %2\- Status: %3\- Submission UID: %4\- Document UUID: %5\- Customer Name: %6\- Submission Date: %7\\',
+                                EntryCount,
+                                eInvoiceSubmissionLog."Document Type",
+                                eInvoiceSubmissionLog.Status,
+                                eInvoiceSubmissionLog."Submission UID",
+                                eInvoiceSubmissionLog."Document UUID",
+                                eInvoiceSubmissionLog."Customer Name",
+                                Format(eInvoiceSubmissionLog."Submission Date"));
+                        until eInvoiceSubmissionLog.Next() = 0;
+                    end else begin
+                        LogInfo += 'No submission log entries found for this credit memo.\';
+                    end;
+
+                    if EntryCount = 0 then
+                        LogInfo += '\This credit memo may not have been submitted to LHDN yet.'
+                    else
+                        LogInfo += StrSubstNo('\Total entries found: %1', EntryCount);
+
+                    Message(LogInfo);
                 end;
             }
         }

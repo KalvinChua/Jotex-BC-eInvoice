@@ -94,7 +94,11 @@ codeunit 50305 "eInv Posting Subscribers"
     local procedure ProcessPostedCreditMemo(SalesHeader: Record "Sales Header"; SalesCrMemoHdrNo: Code[20])
     var
         SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        Customer: Record Customer;
+        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
         TelemetryDimensions: Dictionary of [Text, Text];
+        CustomerRequiresEInvoice: Boolean;
+        LhdnResponse: Text;
     begin
         // Find the posted credit memo and update fields
         if SalesCrMemoHeader.Get(SalesCrMemoHdrNo) then begin
@@ -117,6 +121,33 @@ codeunit 50305 "eInv Posting Subscribers"
                 Session.LogMessage('0000EIV07', 'Successfully updated e-Invoice fields for posted credit memo',
                     Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                     TelemetryDimensions);
+            end;
+
+            // ENHANCED: Check if customer requires e-Invoice for auto-submission (same as invoices)
+            CustomerRequiresEInvoice := Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") and Customer."Requires e-Invoice";
+
+            // Auto-submit to LHDN if customer requires e-Invoice
+            if CustomerRequiresEInvoice then begin
+                // Wait a moment to ensure all data is committed
+                Sleep(2000);
+
+                if eInvoiceJSONGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse) then begin
+                    // Success - log the successful submission
+                    Clear(TelemetryDimensions);
+                    TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHdrNo);
+                    TelemetryDimensions.Add('CustomerNo', SalesCrMemoHeader."Sell-to Customer No.");
+                    Session.LogMessage('0000EIV08', 'Automatic e-Invoice credit memo submission successful',
+                        Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                        TelemetryDimensions);
+                end else begin
+                    // Failure - log the error but don't stop the posting process
+                    Clear(TelemetryDimensions);
+                    TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHdrNo);
+                    TelemetryDimensions.Add('Error', CopyStr(LhdnResponse, 1, 250));
+                    Session.LogMessage('0000EIV09', 'Automatic e-Invoice credit memo submission failed',
+                        Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                        TelemetryDimensions);
+                end;
             end;
         end;
     end;

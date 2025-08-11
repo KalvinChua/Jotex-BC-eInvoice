@@ -109,13 +109,14 @@ codeunit 50320 "eInvoice Cancellation Helper"
 
     /// <summary>
     /// Updates Customer Name for existing e-invoice submission log entries that have empty customer names.
-    /// This procedure can be called manually to populate customer names for historical records.
+    /// Enhanced to support both invoices and credit memos.
     /// </summary>
     procedure UpdateExistingCustomerNames()
     var
         SubmissionLog: Record "eInvoice Submission Log";
         Customer: Record Customer;
         SalesInvoiceHeader: Record "Sales Invoice Header";
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
         CustomerName: Text;
         UpdatedCount: Integer;
     begin
@@ -127,10 +128,33 @@ codeunit 50320 "eInvoice Cancellation Helper"
             repeat
                 CustomerName := '';
 
-                // Try to get customer name from the invoice
-                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
-                    if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
-                        CustomerName := Customer.Name;
+                // ENHANCED: Check document type to determine which table to lookup
+                case SubmissionLog."Document Type" of
+                    '01': // Invoice
+                        begin
+                            if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                                if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+                                    CustomerName := Customer.Name;
+                            end;
+                        end;
+                    '02': // Credit Memo
+                        begin
+                            if SalesCrMemoHeader.Get(SubmissionLog."Invoice No.") then begin
+                                if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then
+                                    CustomerName := Customer.Name;
+                            end;
+                        end;
+                    else
+                        // Fallback: Try invoice first, then credit memo
+                        begin
+                        if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                            if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+                                CustomerName := Customer.Name;
+                        end else if SalesCrMemoHeader.Get(SubmissionLog."Invoice No.") then begin
+                            if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then
+                                CustomerName := Customer.Name;
+                        end;
+                    end;
                 end;
 
                 // Update the record if we found a customer name
@@ -147,5 +171,68 @@ codeunit 50320 "eInvoice Cancellation Helper"
             Message('Successfully updated Customer Name for %1 existing submission log entries.', UpdatedCount)
         else
             Message('No submission log entries with empty Customer Name were found.');
+    end;
+
+    /// <summary>
+    /// Enhanced cancellation procedure that supports both invoices and credit memos
+    /// </summary>
+    procedure CancelDocument(DocumentNo: Code[20]; CancellationReason: Text): Boolean
+    var
+        eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        DocumentType: Text;
+        IsInvoice: Boolean;
+        IsCreditMemo: Boolean;
+    begin
+        // Determine document type by checking which table contains the document
+        IsInvoice := SalesInvoiceHeader.Get(DocumentNo);
+        IsCreditMemo := SalesCrMemoHeader.Get(DocumentNo);
+
+        if IsInvoice then
+            DocumentType := '01'
+        else if IsCreditMemo then
+            DocumentType := '02'
+        else begin
+            Message('Document %1 not found in either Sales Invoice or Sales Credit Memo tables.', DocumentNo);
+            exit(false);
+        end;
+
+        // Find the submission log entry
+        eInvoiceSubmissionLog.SetRange("Invoice No.", DocumentNo);
+        eInvoiceSubmissionLog.SetRange("Document Type", DocumentType);
+        eInvoiceSubmissionLog.SetRange(Status, 'Valid');
+
+        if not eInvoiceSubmissionLog.FindLast() then begin
+            if IsInvoice then
+                Message('No valid submission found for Invoice %1', DocumentNo)
+            else
+                Message('No valid submission found for Credit Memo %1', DocumentNo);
+            exit(false);
+        end;
+
+        // Update the cancellation status
+        if UpdateCancellationStatusByInvoice(DocumentNo, CancellationReason) then begin
+            // Also update the source document if needed
+            if IsInvoice then begin
+                SalesInvoiceHeader."eInvoice Validation Status" := 'Cancelled';
+                SalesInvoiceHeader.Modify();
+            end else if IsCreditMemo then begin
+                SalesCrMemoHeader."eInvoice Validation Status" := 'Cancelled';
+                SalesCrMemoHeader.Modify();
+            end;
+
+            if IsInvoice then
+                Message('Successfully cancelled Invoice %1', DocumentNo)
+            else
+                Message('Successfully cancelled Credit Memo %1', DocumentNo);
+            exit(true);
+        end else begin
+            if IsInvoice then
+                Message('Failed to cancel Invoice %1. Please check the submission log for details.', DocumentNo)
+            else
+                Message('Failed to cancel Credit Memo %1. Please check the submission log for details.', DocumentNo);
+            exit(false);
+        end;
     end;
 }
