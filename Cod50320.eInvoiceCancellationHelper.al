@@ -1,6 +1,9 @@
 codeunit 50320 "eInvoice Cancellation Helper"
 {
     TableNo = "eInvoice Submission Log";
+    Permissions = tabledata "Sales Invoice Header" = M,
+                  tabledata "Sales Cr.Memo Header" = M,
+                  tabledata "eInvoice Submission Log" = M;
 
     trigger OnRun()
     begin
