@@ -1,6 +1,7 @@
 codeunit 50313 "eInv Sales Order Posting Sub"
 {
     Permissions = tabledata "Sales Invoice Header" = M,
+                  tabledata "Sales Cr.Memo Header" = M,
                   tabledata "eInvoice Submission Log" = M;
 
     // Event to handle e-Invoice submission for Sales Orders when posted with "Ship and Invoice"
