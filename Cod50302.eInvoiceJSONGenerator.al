@@ -305,9 +305,13 @@ codeunit 50302 "eInvoice JSON Generator"
             EnvironmentText := 'PREPROD'; // Default to preprod if setup not found
         end;
 
-        // Credit Note specific settings
-        DocumentTypeCode := '02'; // LHDN Credit Note type
+        // Determine document type based on credit memo (same logic as invoice)
+        DocumentTypeCode := GetDocumentTypeFromSalesCreditMemo(SalesCrMemoHeader);
         InvoiceTypeCode := '01'; // Business process type
+
+        // Get invoice type from Sales Credit Memo Header as fallback
+        if SalesCrMemoHeader."eInvoice Document Type" <> '' then
+            InvoiceTypeCode := SalesCrMemoHeader."eInvoice Document Type";
 
         // Create request payload matching Azure Function expectations
         JsonObj.Add('unsignedJson', JsonText);
@@ -522,14 +526,20 @@ codeunit 50302 "eInvoice JSON Generator"
 
     local procedure BuildCreditMemoEInvoiceJson(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; IncludeSignature: Boolean) JsonObject: JsonObject
     var
-        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
-        UBLDocument: JsonObject;
+        CreditMemoArray: JsonArray;
+        CreditMemoObject: JsonObject;
     begin
-        // Use the enhanced UBL Document Builder for credit memos with proper LHDN structure
-        UBLDocument := UBLDocumentBuilder.BuildEnhancedCreditMemoDocument(SalesCrMemoHeader);
+        // UBL 2.1 namespace declarations for Credit Note (CRITICAL for LHDN compliance)
+        JsonObject.Add('_D', 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2');
+        JsonObject.Add('_A', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        JsonObject.Add('_B', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
 
-        // Copy the UBL document structure to our JsonObject
-        JsonObject := UBLDocument;
+        // Use the existing CreateCreditMemoObject procedure that follows the same JSON structure as invoices
+        CreditMemoObject := CreateCreditMemoObject(SalesCrMemoHeader, IncludeSignature);
+
+        // Wrap in array structure (required by LHDN format)
+        CreditMemoArray.Add(CreditMemoObject);
+        JsonObject.Add('CreditNote', CreditMemoArray);
     end;
 
     local procedure CreateInvoiceObject(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) InvoiceObject: JsonObject
@@ -5230,20 +5240,37 @@ codeunit 50302 "eInvoice JSON Generator"
         end;
     end;
 
-    // Overloaded version for credit memos
+    // Overloaded version for credit memos - Enhanced for LHDN compliance
     local procedure AddBillingReference(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
     var
         BillingReferenceArray: JsonArray;
         BillingReferenceObject: JsonObject;
+        InvoiceDocumentReferenceArray: JsonArray;
+        InvoiceDocumentReferenceObject: JsonObject;
         IDObject: JsonObject;
+        IssueDateObject: JsonObject;
+        SalesInvoiceHeader: Record "Sales Invoice Header";
     begin
         // Add billing reference for credit memos if applicable
+        // This is OPTIONAL but recommended for better traceability
         if SalesCrMemoHeader."Applies-to Doc. No." <> '' then begin
+            // Enhanced billing reference structure for credit notes
             AddBasicField(IDObject, 'ID', SalesCrMemoHeader."Applies-to Doc. No.");
-            BillingReferenceObject.Add('ID', IDObject);
+            InvoiceDocumentReferenceObject.Add('ID', IDObject);
+
+            // Add issue date of the original invoice if available
+            if SalesInvoiceHeader.Get(SalesCrMemoHeader."Applies-to Doc. No.") then begin
+                AddBasicField(IssueDateObject, 'IssueDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+                InvoiceDocumentReferenceObject.Add('IssueDate', IssueDateObject);
+            end;
+
+            InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
+            BillingReferenceObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
             BillingReferenceArray.Add(BillingReferenceObject);
             InvoiceObject.Add('BillingReference', BillingReferenceArray);
         end;
+        // If no "Applies-to Doc. No." is set, skip billing reference
+        // LHDN accepts credit notes without billing references
     end;
 
     // Overloaded version for credit memos - FIXED: Use proper UBL 2.1 array format
@@ -5859,18 +5886,26 @@ codeunit 50302 "eInvoice JSON Generator"
     begin
         // Check if there's a specific document type field
         if SalesInvoiceHeader."eInvoice Document Type" <> '' then begin
-            // Return the actual document type from the header
+            // Return the actual document type from the header (per LHDN official specification)
             case SalesInvoiceHeader."eInvoice Document Type" of
                 '01':
-                    exit('01'); // Standard Invoice
+                    exit('01'); // Invoice
                 '02':
                     exit('02'); // Credit Note
                 '03':
                     exit('03'); // Debit Note
+                '04':
+                    exit('04'); // Refund Note
                 '11':
                     exit('11'); // Self-billed Invoice
+                '12':
+                    exit('12'); // Self-billed Credit Note
+                '13':
+                    exit('13'); // Self-billed Debit Note
+                '14':
+                    exit('14'); // Self-billed Refund Note
                 else
-                    exit('01'); // Default to standard invoice
+                    exit('01'); // Default to Invoice for sales invoices
             end;
         end;
 
@@ -5882,5 +5917,401 @@ codeunit 50302 "eInvoice JSON Generator"
         exit('01'); // LHDN Standard Invoice type by default
     end;
 
+    /// <summary>
+    /// Determines document type based on Sales Credit Memo Header
+    /// Can be extended with business logic for different document types
+    /// </summary>
+    local procedure GetDocumentTypeFromSalesCreditMemo(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Text
+    begin
+        // Check if there's a specific document type field
+        if SalesCrMemoHeader."eInvoice Document Type" <> '' then begin
+            // Return the actual document type from the header (per LHDN official specification)
+            case SalesCrMemoHeader."eInvoice Document Type" of
+                '01':
+                    exit('01'); // Invoice
+                '02':
+                    exit('02'); // Credit Note
+                '03':
+                    exit('03'); // Debit Note
+                '04':
+                    exit('04'); // Refund Note
+                '11':
+                    exit('11'); // Self-billed Invoice
+                '12':
+                    exit('12'); // Self-billed Credit Note
+                '13':
+                    exit('13'); // Self-billed Debit Note
+                '14':
+                    exit('14'); // Self-billed Refund Note
+                else
+                    exit('02'); // Default to Credit Note for credit memos
+            end;
+        end;
 
+        // Credit memos should default to credit note type
+        exit('02'); // LHDN Credit Note type by default
+    end;
+
+    // ADD THIS: Credit Note specific procedure
+    procedure PostCreditNoteToAzureFunction(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; AzureFunctionUrl: Text; var ResponseText: Text)
+    var
+        JsonText: Text;
+        Success: Boolean;
+        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
+    begin
+        // Generate credit note UBL JSON
+        JsonText := UBLDocumentBuilder.BuildCreditMemoUBLJson(SalesCrMemoHeader);
+
+        // Send to Azure Function for signing
+        Success := TryPostToAzureFunctionSafe(JsonText, AzureFunctionUrl, ResponseText);
+
+        if not Success then
+            Error('Failed to process credit note through Azure Function: %1', ResponseText);
+    end;
+
+    // ADD THIS: Credit note submission to LHDN
+    procedure SubmitCreditNoteToLHDN(SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        AzureFunctionUrl: Text;
+        ResponseText: Text;
+        ResponseJson: JsonObject;
+        SignedJson: JsonToken;
+        LhdnPayload: JsonToken;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        LhdnResponse: Text;
+        Success: Boolean;
+    begin
+        // Get Azure Function URL from setup
+        eInvoiceSetup.Get();
+        AzureFunctionUrl := eInvoiceSetup."Azure Function URL";
+
+        // Send credit note for signing
+        PostCreditNoteToAzureFunction(SalesCrMemoHeader, AzureFunctionUrl, ResponseText);
+
+        // Parse response
+        ResponseJson.ReadFrom(ResponseText);
+
+        // Extract signed JSON and LHDN payload
+        ResponseJson.Get('signedJson', SignedJson);
+        ResponseJson.Get('lhdnPayload', LhdnPayload);
+
+        // Submit to LHDN MyInvois API
+        LhdnResponse := SafeJsonValueToText(LhdnPayload);
+        Success := ProcessCreditMemoLhdnPayload(LhdnResponse, SalesCrMemoHeader, LhdnResponse);
+
+        // Update credit note status
+        if Success then begin
+            SalesCrMemoHeader."eInvoice Validation Status" := 'Submitted';
+            SalesCrMemoHeader.Modify();
+        end else begin
+            SalesCrMemoHeader."eInvoice Validation Status" := 'Submission Failed';
+            SalesCrMemoHeader.Modify();
+        end;
+
+        // Log submission details
+        LogCreditMemoSubmissionToTable(SalesCrMemoHeader,
+            SafeJsonValueToText(SignedJson),
+            LhdnResponse,
+            SalesCrMemoHeader."eInvoice Validation Status",
+            LhdnResponse,
+            SalesCrMemoHeader."eInvoice Document Type");
+    end;
+
+    // ADDED: Function to download Azure Function payload for debugging LHDN API issues
+    /// <summary>
+    /// Downloads the payload from Azure Function for debugging purposes
+    /// This helps troubleshoot "Invalid structured submission" errors from LHDN API
+    /// </summary>
+    /// <param name="DocumentType">Type of document: 'Invoice' or 'CreditMemo'</param>
+    /// <param name="DocumentNo">Document number to process</param>
+    /// <param name="Setup">eInvoice setup record</param>
+    procedure DownloadAzureFunctionPayloadForDebugging(DocumentType: Text; DocumentNo: Code[20]; Setup: Record "eInvoiceSetup")
+    var
+        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
+        UnsignedJson: Text;
+        AzureFunctionUrl: Text;
+        ResponseText: Text;
+        Success: Boolean;
+        FileName: Text;
+        TempBlob: Codeunit "Temp Blob";
+        OutStream: OutStream;
+        InStream: InStream;
+        PayloadPreview: Text;
+        CorrelationId: Text;
+    begin
+        if Setup."Azure Function URL" = '' then
+            Error('Azure Function URL is not configured. Please configure it first.');
+
+        AzureFunctionUrl := Setup."Azure Function URL";
+        CorrelationId := CreateGuid();
+
+        // Generate the appropriate UBL JSON based on document type
+        case DocumentType of
+            'Invoice':
+                begin
+                    // For invoices, we need to get the posted sales invoice
+                    // This would need to be implemented based on your specific requirements
+                    Error('Invoice debugging not yet implemented. Please use CreditMemo for now.');
+                end;
+            'CreditMemo':
+                begin
+                    // Generate credit memo UBL JSON
+                    UnsignedJson := UBLDocumentBuilder.BuildCreditMemoUBLJson(GetSalesCrMemoHeader(DocumentNo));
+                end;
+            else
+                Error('Invalid document type. Use ''Invoice'' or ''CreditMemo''.');
+        end;
+
+        if UnsignedJson = '' then
+            Error('Failed to generate UBL JSON for document %1', DocumentNo);
+
+        // Show preview of unsigned JSON
+        PayloadPreview := CopyStr(UnsignedJson, 1, 500);
+        Message('Generated UBL JSON Preview (first 500 chars):' + '\\' + '\\' + '%1' + '\\' + '\\' + '[Full payload will be downloaded as file]',
+            PayloadPreview);
+
+        // Send to Azure Function for signing
+        Success := TryPostToAzureFunctionSafe(UnsignedJson, AzureFunctionUrl, ResponseText);
+
+        if not Success then begin
+            // Download the unsigned JSON for debugging
+            FileName := StrSubstNo('DEBUG_Unsigned_%1_%2_%3.json',
+                DocumentType,
+                DocumentNo,
+                Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+            TempBlob.CreateOutStream(OutStream);
+            OutStream.WriteText(UnsignedJson);
+            TempBlob.CreateInStream(InStream);
+            DownloadFromStream(InStream, 'Download Unsigned UBL JSON for Debugging', '', 'JSON files (*.json)|*.json', FileName);
+
+            Error('Failed to communicate with Azure Function. Unsigned JSON has been downloaded for debugging.\\' +
+                  'Error Details: %1\\' +
+                  'Correlation ID: %2', ResponseText, CorrelationId);
+        end;
+
+        // Download the signed response from Azure Function
+        FileName := StrSubstNo('DEBUG_AzureFunction_Response_%1_%2_%3.json',
+            DocumentType,
+            DocumentNo,
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(ResponseText);
+        TempBlob.CreateInStream(InStream);
+        DownloadFromStream(InStream, 'Download Azure Function Response for Debugging', '', 'JSON files (*.json)|*.json', FileName);
+
+        // Also download the unsigned JSON for comparison
+        FileName := StrSubstNo('DEBUG_Unsigned_Comparison_%1_%2_%3.json',
+            DocumentType,
+            DocumentNo,
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(UnsignedJson);
+        TempBlob.CreateInStream(InStream);
+        DownloadFromStream(InStream, 'Download Unsigned UBL JSON for Comparison', '', 'JSON files (*.json)|*.json', FileName);
+
+        Message('Debug files downloaded successfully!\\' +
+                '1. Azure Function Response: Contains the signed JSON and LHDN payload\\' +
+                '2. Unsigned UBL JSON: For comparison and validation\\' +
+                '\\' +
+                'Use these files to debug the "Invalid structured submission" error.\\' +
+                'Correlation ID: %1', CorrelationId);
+    end;
+
+    /// <summary>
+    /// Helper function to get Sales Cr.Memo Header record
+    /// </summary>
+    /// <param name="DocumentNo">Credit memo document number</param>
+    /// <returns>Sales Cr.Memo Header record</returns>
+    local procedure GetSalesCrMemoHeader(DocumentNo: Code[20]) SalesCrMemoHeader: Record "Sales Cr.Memo Header"
+    begin
+        if not SalesCrMemoHeader.Get(DocumentNo) then
+            Error('Credit Memo %1 not found.', DocumentNo);
+    end;
+
+    /// <summary>
+    /// Downloads the LHDN submission payload for debugging
+    /// This extracts the LHDN payload from the Azure Function response
+    /// </summary>
+    /// <param name="AzureFunctionResponse">Response from Azure Function</param>
+    /// <param name="DocumentType">Type of document</param>
+    /// <param name="DocumentNo">Document number</param>
+    procedure DownloadLHDNSubmissionPayload(AzureFunctionResponse: Text; DocumentType: Text; DocumentNo: Code[20])
+    var
+        ResponseJson: JsonObject;
+        LhdnPayload: JsonToken;
+        LhdnPayloadText: Text;
+        FileName: Text;
+        TempBlob: Codeunit "Temp Blob";
+        OutStream: OutStream;
+        InStream: InStream;
+        PayloadPreview: Text;
+    begin
+        // Parse the Azure Function response
+        if not ResponseJson.ReadFrom(AzureFunctionResponse) then
+            Error('Invalid JSON response from Azure Function');
+
+        // Extract LHDN payload
+        if not ResponseJson.Get('lhdnPayload', LhdnPayload) then
+            Error('LHDN payload not found in Azure Function response');
+
+        LhdnPayloadText := SafeJsonValueToText(LhdnPayload);
+
+        if LhdnPayloadText = '' then
+            Error('LHDN payload is empty');
+
+        // Show preview
+        PayloadPreview := CopyStr(LhdnPayloadText, 1, 500);
+        Message('LHDN Submission Payload Preview (first 500 chars):' + '\\' + '\\' + '%1' + '\\' + '\\' + '[Full payload will be downloaded as file]',
+            PayloadPreview);
+
+        // Download the LHDN payload
+        FileName := StrSubstNo('DEBUG_LHDN_Submission_Payload_%1_%2_%3.json',
+            DocumentType,
+            DocumentNo,
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(LhdnPayloadText);
+        TempBlob.CreateInStream(InStream);
+        DownloadFromStream(InStream, 'Download LHDN Submission Payload for Debugging', '', 'JSON files (*.json)|*.json', FileName);
+
+        Message('LHDN submission payload downloaded successfully!\\' +
+                'File: %1\\' +
+                '\\' +
+                'This is the exact payload that will be sent to LHDN API.\\' +
+                'Use it to validate against LHDN requirements and identify\\' +
+                'the cause of "Invalid structured submission" errors.', FileName);
+    end;
+
+    /// <summary>
+    /// Debug Azure Function payload for credit memo - Developer Console friendly version
+    /// This procedure can be called directly from the developer console for testing
+    /// </summary>
+    /// <param name="DocumentNo">Credit memo document number to debug</param>
+    procedure DebugCreditMemoPayload(DocumentNo: Code[20])
+    var
+        eInvoiceSetup: Record "eInvoiceSetup";
+        UBLDocumentBuilder: Codeunit "eInvoice UBL Document Builder";
+        UnsignedJson: Text;
+        AzureFunctionUrl: Text;
+        ResponseText: Text;
+        Success: Boolean;
+        FileName: Text;
+        TempBlob: Codeunit "Temp Blob";
+        OutStream: OutStream;
+        InStream: InStream;
+        PayloadPreview: Text;
+        CorrelationId: Text;
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+    begin
+        // Check if setup exists
+        if not eInvoiceSetup.Get('SETUP') then
+            Error('eInvoice setup not found. Please configure eInvoice setup first.');
+
+        // Check if Azure Function URL is configured
+        if eInvoiceSetup."Azure Function URL" = '' then
+            Error('Azure Function URL is not configured. Please configure it first.');
+
+        // Check if credit memo exists
+        if not SalesCrMemoHeader.Get(DocumentNo) then
+            Error('Credit Memo %1 not found.', DocumentNo);
+
+        AzureFunctionUrl := eInvoiceSetup."Azure Function URL";
+        CorrelationId := CreateGuid();
+
+        // Generate credit memo UBL JSON
+        UnsignedJson := UBLDocumentBuilder.BuildCreditMemoUBLJson(SalesCrMemoHeader);
+
+        if UnsignedJson = '' then
+            Error('Failed to generate UBL JSON for credit memo %1', DocumentNo);
+
+        // Show preview of unsigned JSON
+        PayloadPreview := CopyStr(UnsignedJson, 1, 500);
+        Message('Generated UBL JSON Preview (first 500 chars):' + '\\' + '\\' + '%1' + '\\' + '\\' + '[Full payload will be downloaded as file]',
+            PayloadPreview);
+
+        // Send to Azure Function for signing
+        Success := TryPostToAzureFunctionSafe(UnsignedJson, AzureFunctionUrl, ResponseText);
+
+        if not Success then begin
+            // Download the unsigned JSON for debugging
+            FileName := StrSubstNo('DEBUG_Unsigned_CreditMemo_%1_%2.json',
+                DocumentNo,
+                Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+            TempBlob.CreateOutStream(OutStream);
+            OutStream.WriteText(UnsignedJson);
+            TempBlob.CreateInStream(InStream);
+            DownloadFromStream(InStream, 'Download Unsigned UBL JSON for Debugging', '', 'JSON files (*.json)|*.json', FileName);
+
+            Error('Failed to communicate with Azure Function. Unsigned JSON has been downloaded for debugging.\\' +
+                  'Error Details: %1\\' +
+                  'Correlation ID: %2', ResponseText, CorrelationId);
+        end;
+
+        // Download the signed response from Azure Function
+        FileName := StrSubstNo('DEBUG_AzureFunction_Response_CreditMemo_%1_%2.json',
+            DocumentNo,
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(ResponseText);
+        TempBlob.CreateInStream(InStream);
+        DownloadFromStream(InStream, 'Download Azure Function Response for Debugging', '', 'JSON files (*.json)|*.json', FileName);
+
+        // Also download the unsigned JSON for comparison
+        FileName := StrSubstNo('DEBUG_Unsigned_Comparison_CreditMemo_%1_%2.json',
+            DocumentNo,
+            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+        TempBlob.CreateOutStream(OutStream);
+        OutStream.WriteText(UnsignedJson);
+        TempBlob.CreateInStream(InStream);
+        DownloadFromStream(InStream, 'Download Unsigned UBL JSON for Comparison', '', 'JSON files (*.json)|*.json', FileName);
+
+        Message('Debug files downloaded successfully!\\' +
+                '1. Azure Function Response: Contains the signed JSON and LHDN payload\\' +
+                '2. Unsigned UBL JSON: For comparison and validation\\' +
+                '\\' +
+                'Use these files to debug the "Invalid structured submission" error.\\' +
+                'Correlation ID: %1', CorrelationId);
+    end;
+
+    /// <summary>
+    /// Get a list of available credit memos for debugging
+    /// This helps developers find document numbers to test with
+    /// </summary>
+    /// <returns>Text containing available credit memo numbers</returns>
+    procedure GetAvailableCreditMemosForDebugging(): Text
+    var
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        ResultText: Text;
+        Count: Integer;
+    begin
+        Count := 0;
+        ResultText := 'Available Credit Memos for Debugging:\\';
+
+        if SalesCrMemoHeader.FindSet() then
+            repeat
+                Count += 1;
+                if Count <= 10 then begin // Limit to first 10 for readability
+                    ResultText += StrSubstNo('- %1 (Posted: %2)\\',
+                        SalesCrMemoHeader."No.",
+                        Format(SalesCrMemoHeader."Posting Date"));
+                end;
+            until (SalesCrMemoHeader.Next() = 0) or (Count >= 10);
+
+        if Count > 10 then
+            ResultText += StrSubstNo('... and %1 more credit memos available.', Count - 10);
+
+        if Count = 0 then
+            ResultText += 'No credit memos found in the system.';
+
+        ResultText += '\\To debug a specific credit memo, use: DebugCreditMemoPayload(''DOCUMENT_NO'')';
+
+        exit(ResultText);
+    end;
 }

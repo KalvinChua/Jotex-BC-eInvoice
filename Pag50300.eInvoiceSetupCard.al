@@ -298,6 +298,32 @@ page 50300 eInvoiceSetupCard
                     Message(MessageText);
                 end;
             }
+
+            action(DebugCreditMemoPayload)
+            {
+                Caption = 'Debug Credit Memo Payload';
+                ApplicationArea = All;
+                Image = Troubleshoot;
+                ToolTip = 'Debug credit memo payload generation and Azure Function response for LHDN API troubleshooting';
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+                    eInvoiceSetup: Record "eInvoiceSetup";
+                    DocumentNo: Code[20];
+                begin
+                    // Get the first available credit memo for testing
+                    SalesCrMemoHeader.SetRange("eInvoice Document Type", '02'); // Credit Note
+                    if not SalesCrMemoHeader.FindFirst() then
+                        Error('No credit memos found for debugging. Please create a credit memo first.');
+
+                    DocumentNo := SalesCrMemoHeader."No.";
+
+                    // Call the debugging function
+                    eInvoiceGenerator.DownloadAzureFunctionPayloadForDebugging('CreditMemo', DocumentNo, Rec);
+                end;
+            }
         }
     }
 

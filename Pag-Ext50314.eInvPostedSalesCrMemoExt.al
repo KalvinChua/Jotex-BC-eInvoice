@@ -74,6 +74,27 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
     actions
     {
+        addfirst(Processing)
+        {
+            action(DebugCreditMemoPosting)
+            {
+                ApplicationArea = All;
+                Caption = 'Debug e-Invoice Posting';
+                Image = Troubleshoot;
+                ToolTip = 'Debug e-Invoice field copying during posting process';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
+                begin
+                    if not IsJotexCompany then
+                        exit;
+
+                    eInvPostingSubscribers.TestCreditMemoLineCopying(Rec."No.");
+                end;
+            }
+        }
         addlast(Processing)
         {
             action(GenerateEInvoiceJSON)
@@ -137,6 +158,40 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         Message(StrSubstNo('Failed to complete signing and submission process.\' +
                             'Response: %1', LhdnResponse));
                     end;
+                end;
+            }
+
+            action(DebugAzureFunctionPayload)
+            {
+                ApplicationArea = All;
+                Caption = 'Debug Azure Function Payload';
+                ToolTip = 'Debug the Azure Function payload for this credit memo. Downloads both unsigned and signed JSON for troubleshooting.';
+                Image = Debug;
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                begin
+                    // Call the simplified debugging function
+                    eInvoiceGenerator.DebugCreditMemoPayload(Rec."No.");
+                end;
+            }
+            action(ShowAvailableCreditMemos)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Available Credit Memos';
+                ToolTip = 'Show a list of available credit memos for debugging purposes.';
+                Image = List;
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    AvailableMemos: Text;
+                begin
+                    AvailableMemos := eInvoiceGenerator.GetAvailableCreditMemosForDebugging();
+                    Message(AvailableMemos);
                 end;
             }
         }
