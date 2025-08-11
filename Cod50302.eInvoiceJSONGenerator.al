@@ -307,7 +307,7 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Determine document type based on credit memo (same logic as invoice)
         DocumentTypeCode := GetDocumentTypeFromSalesCreditMemo(SalesCrMemoHeader);
-        InvoiceTypeCode := '01'; // Business process type
+        InvoiceTypeCode := '02'; // Credit Note as per LHDN types
 
         // Get invoice type from Sales Credit Memo Header as fallback
         if SalesCrMemoHeader."eInvoice Document Type" <> '' then
@@ -529,8 +529,8 @@ codeunit 50302 "eInvoice JSON Generator"
         CreditMemoArray: JsonArray;
         CreditMemoObject: JsonObject;
     begin
-        // UBL 2.1 namespace declarations for Credit Note (CRITICAL for LHDN compliance)
-        JsonObject.Add('_D', 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2');
+        // UBL 2.1 namespace declarations (use Invoice root for Credit Note submissions per LHDN)
+        JsonObject.Add('_D', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
         JsonObject.Add('_A', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
         JsonObject.Add('_B', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
 
@@ -539,7 +539,8 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Wrap in array structure (required by LHDN format)
         CreditMemoArray.Add(CreditMemoObject);
-        JsonObject.Add('CreditNote', CreditMemoArray);
+        // Use 'Invoice' as the root element for credit notes (type code distinguishes it)
+        JsonObject.Add('Invoice', CreditMemoArray);
     end;
 
     local procedure CreateInvoiceObject(SalesInvoiceHeader: Record "Sales Invoice Header"; IncludeSignature: Boolean) InvoiceObject: JsonObject
@@ -573,11 +574,9 @@ codeunit 50302 "eInvoice JSON Generator"
         // MANDATORY: UBL Version ID for LHDN compliance
         AddBasicField(InvoiceObject, 'UBLVersionID', '2.1');
 
-        // MANDATORY: Customization ID for LHDN compliance
-        AddBasicField(InvoiceObject, 'CustomizationID', 'LHDN-MY-1.0');
-
-        // MANDATORY: Profile ID for LHDN compliance
-        AddBasicField(InvoiceObject, 'ProfileID', 'LHDN-MY');
+        // MANDATORY: Customization/Profile IDs as per LHDN
+        AddBasicField(InvoiceObject, 'CustomizationID', 'MY:1.0');
+        AddBasicField(InvoiceObject, 'ProfileID', 'reporting:1.0');
 
         // Invoice type code with list version
         if SalesInvoiceHeader."eInvoice Version Code" <> '' then
@@ -670,11 +669,9 @@ codeunit 50302 "eInvoice JSON Generator"
         // MANDATORY: UBL Version ID for LHDN compliance
         AddBasicField(InvoiceObject, 'UBLVersionID', '2.1');
 
-        // MANDATORY: Customization ID for LHDN compliance
-        AddBasicField(InvoiceObject, 'CustomizationID', 'LHDN-MY-1.0');
-
-        // MANDATORY: Profile ID for LHDN compliance
-        AddBasicField(InvoiceObject, 'ProfileID', 'LHDN-MY');
+        // MANDATORY: Customization/Profile IDs as per LHDN
+        AddBasicField(InvoiceObject, 'CustomizationID', 'MY:1.0');
+        AddBasicField(InvoiceObject, 'ProfileID', 'reporting:1.0');
 
         // Credit memo type code (02 = Credit Note)
         if SalesCrMemoHeader."eInvoice Version Code" <> '' then
@@ -693,8 +690,8 @@ codeunit 50302 "eInvoice JSON Generator"
         // Invoice Period
         AddInvoicePeriod(InvoiceObject, SalesCrMemoHeader);
 
-        // Billing reference (if applicable)
-        AddBillingReference(InvoiceObject, SalesCrMemoHeader);
+        // Billing reference (credit note requires reference to original invoice)
+        AddCreditMemoBillingReference(InvoiceObject, SalesCrMemoHeader);
 
         // Additional document references
         AddAdditionalDocumentReferences(InvoiceObject, SalesCrMemoHeader);
@@ -788,9 +785,9 @@ codeunit 50302 "eInvoice JSON Generator"
         // You can customize this logic based on your business requirements
 
         case SalesInvoiceHeader."eInvoice Document Type" of
-            '02': // Debit note
+            '02': // Credit Note (LHDN code list)
                 exit(true);
-            '03': // Credit note  
+            '03': // Debit Note
                 exit(true);
             '11': // Self-billed invoice
                 exit(true);
@@ -865,6 +862,37 @@ codeunit 50302 "eInvoice JSON Generator"
             BillingRefArray.Add(BillingRefObject);
             InvoiceObject.Add('BillingReference', BillingRefArray);
         end;
+    end;
+
+    local procedure AddCreditMemoBillingReference(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        BillingRefArray: JsonArray;
+        BillingRefObject: JsonObject;
+        InvoiceDocumentReferenceArray: JsonArray;
+        InvoiceDocumentReferenceObject: JsonObject;
+        OriginalInvoiceNo: Code[20];
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        // Credit Note must reference the original invoice via BillingReference/InvoiceDocumentReference
+        OriginalInvoiceNo := SalesCrMemoHeader."Applies-to Doc. No.";
+
+        if (OriginalInvoiceNo = '') and (SalesCrMemoHeader."External Document No." <> '') then
+            OriginalInvoiceNo := SalesCrMemoHeader."External Document No.";
+
+        if OriginalInvoiceNo = '' then
+            exit; // Nothing to reference
+
+        AddBasicField(InvoiceDocumentReferenceObject, 'ID', OriginalInvoiceNo);
+
+        // If original invoice exists and has an LHDN UUID, include it
+        if SalesInvoiceHeader.Get(OriginalInvoiceNo) then
+            if SalesInvoiceHeader."eInvoice UUID" <> '' then
+                AddBasicField(InvoiceDocumentReferenceObject, 'UUID', SalesInvoiceHeader."eInvoice UUID");
+
+        InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
+        BillingRefObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
+        BillingRefArray.Add(BillingRefObject);
+        InvoiceObject.Add('BillingReference', BillingRefArray);
     end;
 
     local procedure AddAdditionalDocumentReferences(var InvoiceObject: JsonObject; SalesInvoiceHeader: Record "Sales Invoice Header")
