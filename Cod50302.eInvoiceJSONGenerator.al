@@ -570,6 +570,15 @@ codeunit 50302 "eInvoice JSON Generator"
 
         AddBasicField(InvoiceObject, 'IssueTime', Format(DT2Time(NowUTC), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
 
+        // MANDATORY: UBL Version ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'UBLVersionID', '2.1');
+
+        // MANDATORY: Customization ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'CustomizationID', 'LHDN-MY-1.0');
+
+        // MANDATORY: Profile ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'ProfileID', 'LHDN-MY');
+
         // Invoice type code with list version
         if SalesInvoiceHeader."eInvoice Version Code" <> '' then
             AddFieldWithAttribute(InvoiceObject, 'InvoiceTypeCode', SalesInvoiceHeader."eInvoice Document Type", 'listVersionID', SalesInvoiceHeader."eInvoice Version Code")
@@ -657,6 +666,15 @@ codeunit 50302 "eInvoice JSON Generator"
         NowUTC := CurrentDateTime - 300000;
         AddBasicField(InvoiceObject, 'IssueDate', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
         AddBasicField(InvoiceObject, 'IssueTime', Format(DT2Time(NowUTC), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+
+        // MANDATORY: UBL Version ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'UBLVersionID', '2.1');
+
+        // MANDATORY: Customization ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'CustomizationID', 'LHDN-MY-1.0');
+
+        // MANDATORY: Profile ID for LHDN compliance
+        AddBasicField(InvoiceObject, 'ProfileID', 'LHDN-MY');
 
         // Credit memo type code (02 = Credit Note)
         if SalesCrMemoHeader."eInvoice Version Code" <> '' then
@@ -5566,7 +5584,7 @@ codeunit 50302 "eInvoice JSON Generator"
             repeat
                 AddCreditMemoInvoiceLine(LineArray, SalesCrMemoLine, SalesCrMemoHeader."Currency Code");
             until SalesCrMemoLine.Next() = 0;
-        InvoiceObject.Add('InvoiceLine', LineArray);
+        InvoiceObject.Add('CreditNoteLine', LineArray);
     end;
 
     // Credit memo line implementation using proper UBL 2.1 array format
