@@ -957,9 +957,9 @@ codeunit 50311 "eInvoice UBL Document Builder"
         IssueTime.Add('_text', Format(DT2Time(CurrentDateTime - 300000), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
         CreditNoteObject.Add('cbc:IssueTime', IssueTime);
 
-        // Invoice Type Code (02 = Credit Note) with LHDN v1.1 listVersionID attribute
-        InvoiceTypeCode.Add('_text', '02');
-        InvoiceTypeCodeAttributes.Add('listVersionID', '1.1');
+        // CRITICAL: Correct InvoiceTypeCode for credit notes
+        InvoiceTypeCode.Add('_text', '02'); // Credit Note
+        InvoiceTypeCodeAttributes.Add('listVersionID', '1.1'); // LHDN v1.1 requirement
         InvoiceTypeCode.Add('_attributes', InvoiceTypeCodeAttributes);
         CreditNoteObject.Add('cbc:InvoiceTypeCode', InvoiceTypeCode);
 
@@ -992,8 +992,8 @@ codeunit 50311 "eInvoice UBL Document Builder"
                 BuildSingleCreditMemoLine(CreditNoteLinesArray, SalesCrMemoLine);
             until SalesCrMemoLine.Next() = 0;
 
-        // Add credit note lines to document
-        CreditNoteObject.Add('cac:CreditNoteLine', CreditNoteLinesArray);
+        // FIXED: LHDN expects InvoiceLine even for credit memos
+        CreditNoteObject.Add('cac:InvoiceLine', CreditNoteLinesArray);
 
         // Update the document
         UBLDocument.Replace('CreditNote', CreditNoteObject);
@@ -1020,7 +1020,6 @@ codeunit 50311 "eInvoice UBL Document Builder"
         LineTaxAmount: JsonObject;
         LineTaxableAmount: JsonObject;
         LineTaxSubtotalAmount: JsonObject;
-        CreditAmount: JsonObject; // ADDED: Proper credit amount element
     begin
         // CORRECTED: Use positive amounts for credit notes
         TaxAmount := SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine."Line Amount";
@@ -1029,7 +1028,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
         ID.Add('_text', Format(SalesCrMemoLine."Line No."));
         CreditNoteLineObject.Add('cbc:ID', ID);
 
-        // CORRECTED: Use positive quantity
+        // CORRECTED: Use positive quantity for credit memo (LHDN expects positive values)
         InvoicedQuantity.Add('_text', Format(SalesCrMemoLine.Quantity));
         InvoicedQuantity.Add('unitCode', 'C62');
         CreditNoteLineObject.Add('cbc:InvoicedQuantity', InvoicedQuantity);
@@ -1038,11 +1037,6 @@ codeunit 50311 "eInvoice UBL Document Builder"
         LineExtensionAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
         LineExtensionAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
         CreditNoteLineObject.Add('cbc:LineExtensionAmount', LineExtensionAmount);
-
-        // ADDED: Proper credit amount element for credit notes (LHDN requirement)
-        CreditAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
-        CreditAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
-        CreditNoteLineObject.Add('cbc:CreditAmount', CreditAmount);
 
         // Add Tax Total for this line
         LineTaxAmount.Add('_text', Format(TaxAmount));
@@ -1107,7 +1101,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
 
         // Add item and price to line
         CreditNoteLineObject.Add('cac:Item', Item);
-        CreditNoteLineObject.Add('cbc:Price', Price);
+        CreditNoteLineObject.Add('cac:Price', Price);
 
         // Add line to array
         CreditNoteLinesArray.Add(CreditNoteLineObject);
@@ -1146,27 +1140,27 @@ codeunit 50311 "eInvoice UBL Document Builder"
         // Calculate totals
         CalculateCreditMemoTotals(SalesCrMemoHeader, TotalAmount, TotalTaxAmount);
 
-        // Initialize document structure following UBL 2.1 standard for CREDIT NOTES
-        InitializeCreditMemoUBLStructure(UBLDocument);
+        // FIXED: LHDN expects credit memos to use Invoice structure, not CreditNote
+        InitializeUBLStructure(UBLDocument);
 
-        // Build core credit memo identification
-        BuildCreditMemoIdentification(UBLDocument, SalesCrMemoHeader);
+        // Build core credit memo identification using Invoice structure
+        BuildCreditMemoIdentificationAsInvoice(UBLDocument, SalesCrMemoHeader);
 
         // Build billing reference for original invoice (LHDN v1.1 requirement)
-        BuildCreditMemoBillingReference(UBLDocument, SalesCrMemoHeader);
+        BuildCreditMemoBillingReferenceAsInvoice(UBLDocument, SalesCrMemoHeader);
 
-        // Build parties (supplier and customer)
-        BuildSupplierParty(UBLDocument, SalesCrMemoHeader);
-        BuildCustomerParty(UBLDocument, SalesCrMemoHeader);
+        // Build parties (supplier and customer) - these already work with Invoice structure
+        BuildSupplierPartyAsInvoice(UBLDocument, SalesCrMemoHeader);
+        BuildCustomerPartyAsInvoice(UBLDocument, SalesCrMemoHeader);
 
-        // Build credit memo lines
-        BuildCreditMemoLines(UBLDocument, SalesCrMemoHeader);
+        // Build credit memo lines using Invoice structure
+        BuildCreditMemoLinesAsInvoice(UBLDocument, SalesCrMemoHeader);
 
         // Build Document-level Legal Monetary Total (required by LHDN)
-        BuildDocumentLevelLegalMonetaryTotal(UBLDocument, SalesCrMemoHeader);
+        BuildDocumentLevelLegalMonetaryTotalAsInvoice(UBLDocument, SalesCrMemoHeader);
 
         // Build Document-level Tax Total (required by LHDN)
-        BuildDocumentLevelTaxTotal(UBLDocument, SalesCrMemoHeader);
+        BuildDocumentLevelTaxTotalAsInvoice(UBLDocument, SalesCrMemoHeader);
 
         // Validate final document structure
         if not ValidateUBLDocument(UBLDocument) then
@@ -1522,18 +1516,20 @@ codeunit 50311 "eInvoice UBL Document Builder"
         UBLDocument.Replace('CreditNote', CreditNoteObject);
     end;
 
-    // Build billing reference for original invoice (LHDN v1.1 requirement)
+    // ADD: Billing Reference (Required for credit notes)
     local procedure BuildCreditMemoBillingReference(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
     var
         CreditNoteToken: JsonToken;
         CreditNoteObject: JsonObject;
-        BillingReference: JsonObject;
-        InvoiceDocumentReference: JsonObject;
-        ID: JsonObject;
+        BillingReferenceArray: JsonArray;
+        BillingReferenceObject: JsonObject;
+        InvoiceDocumentReferenceArray: JsonArray;
+        InvoiceDocumentReferenceObject: JsonObject;
+        IDObject: JsonObject;
+        UUIDObject: JsonObject;
         eInvoiceSubmissionLog: Record "eInvoice Submission Log";
         OriginalInvoiceUUID: Text;
     begin
-        // Only add billing reference if there's an applies-to document
         if SalesCrMemoHeader."Applies-to Doc. No." = '' then
             exit;
 
@@ -1544,23 +1540,23 @@ codeunit 50311 "eInvoice UBL Document Builder"
         eInvoiceSubmissionLog.SetRange("Invoice No.", SalesCrMemoHeader."Applies-to Doc. No.");
         eInvoiceSubmissionLog.SetRange(Status, 'Valid');
         if eInvoiceSubmissionLog.FindLast() then
-            OriginalInvoiceUUID := eInvoiceSubmissionLog."Document UUID";
+            OriginalInvoiceUUID := eInvoiceSubmissionLog."Document UUID"
+        else
+            OriginalInvoiceUUID := 'Reference Invoice UUID'; // Fallback
 
-        // Build billing reference structure
-        if OriginalInvoiceUUID <> '' then begin
-            // Add UUID for LHDN reference
-            ID.Add('_text', OriginalInvoiceUUID);
-            InvoiceDocumentReference.Add('cbc:UUID', ID);
-        end;
+        // Reference to original invoice
+        IDObject.Add('_', SalesCrMemoHeader."Applies-to Doc. No.");
+        InvoiceDocumentReferenceObject.Add('ID', IDObject);
 
-        // Add internal ID reference
-        Clear(ID);
-        ID.Add('_text', SalesCrMemoHeader."Applies-to Doc. No.");
-        InvoiceDocumentReference.Add('cbc:ID', ID);
+        // Add UUID if available from submission log
+        UUIDObject.Add('_', OriginalInvoiceUUID);
+        InvoiceDocumentReferenceObject.Add('UUID', UUIDObject);
 
-        BillingReference.Add('cac:InvoiceDocumentReference', InvoiceDocumentReference);
-        CreditNoteObject.Add('cac:BillingReference', BillingReference);
+        InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
+        BillingReferenceObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
+        BillingReferenceArray.Add(BillingReferenceObject);
 
+        CreditNoteObject.Add('BillingReference', BillingReferenceArray);
         UBLDocument.Replace('CreditNote', CreditNoteObject);
     end;
 
@@ -2261,5 +2257,436 @@ codeunit 50311 "eInvoice UBL Document Builder"
         UBLDocument.WriteTo(JsonText);
 
         exit(JsonText);
+    end;
+
+    // ADDED: Credit memo identification using Invoice structure (LHDN requirement)
+    local procedure BuildCreditMemoIdentificationAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        UBLVersionID: JsonObject;
+        CustomizationID: JsonObject;
+        ProfileID: JsonObject;
+        ID: JsonObject;
+        IssueDate: JsonObject;
+        IssueTime: JsonObject;
+        InvoiceTypeCode: JsonObject;
+        DocumentCurrencyCode: JsonObject;
+        InvoiceTypeCodeAttributes: JsonObject;
+    begin
+        // Get Invoice object from UBL structure
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // UBL Version (required by myinvois)
+        UBLVersionID.Add('_text', '2.1');
+        InvoiceObject.Add('cbc:UBLVersionID', UBLVersionID);
+
+        // Customization ID (Malaysia e-Invoice specific)
+        CustomizationID.Add('_text', 'MY:1.0');
+        InvoiceObject.Add('cbc:CustomizationID', CustomizationID);
+
+        // Profile ID (Malaysia e-Invoice profile)
+        ProfileID.Add('_text', 'reporting:1.0');
+        InvoiceObject.Add('cbc:ProfileID', ProfileID);
+
+        // Credit Memo Number
+        ID.Add('_text', SalesCrMemoHeader."No.");
+        InvoiceObject.Add('cbc:ID', ID);
+
+        // FORCE: Always use yesterday's date to ensure it's never in the future
+        IssueDate.Add('_text', Format(CalcDate('-1D', Today()), 0, '<Year4>-<Month,2>-<Day,2>'));
+        InvoiceObject.Add('cbc:IssueDate', IssueDate);
+
+        IssueTime.Add('_text', Format(DT2Time(CurrentDateTime - 300000), 0, '<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        InvoiceObject.Add('cbc:IssueTime', IssueTime);
+
+        // CRITICAL: Correct InvoiceTypeCode for credit notes
+        InvoiceTypeCode.Add('_text', '02'); // Credit Note
+        InvoiceTypeCodeAttributes.Add('listVersionID', '1.1'); // LHDN v1.1 requirement
+        InvoiceTypeCode.Add('_attributes', InvoiceTypeCodeAttributes);
+        InvoiceObject.Add('cbc:InvoiceTypeCode', InvoiceTypeCode);
+
+        // Document Currency Code
+        DocumentCurrencyCode.Add('_text', GetDocumentCurrencyCode(SalesCrMemoHeader));
+        InvoiceObject.Add('cbc:DocumentCurrencyCode', DocumentCurrencyCode);
+
+        // ADDED: Tax Currency Code (required by LHDN)
+        InvoiceObject.Add('cbc:TaxCurrencyCode', DocumentCurrencyCode);
+
+        // Update the document
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Credit memo billing reference using Invoice structure
+    local procedure BuildCreditMemoBillingReferenceAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        BillingReferenceArray: JsonArray;
+        BillingReferenceObject: JsonObject;
+        InvoiceDocumentReferenceArray: JsonArray;
+        InvoiceDocumentReferenceObject: JsonObject;
+        IDObject: JsonObject;
+        UUIDObject: JsonObject;
+        eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+        OriginalInvoiceUUID: Text;
+    begin
+        if SalesCrMemoHeader."Applies-to Doc. No." = '' then
+            exit;
+
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Try to find the original invoice UUID from submission log
+        eInvoiceSubmissionLog.SetRange("Invoice No.", SalesCrMemoHeader."Applies-to Doc. No.");
+        eInvoiceSubmissionLog.SetRange(Status, 'Valid');
+        if eInvoiceSubmissionLog.FindLast() then
+            OriginalInvoiceUUID := eInvoiceSubmissionLog."Document UUID"
+        else
+            OriginalInvoiceUUID := 'Reference Invoice UUID'; // Fallback
+
+        // Reference to original invoice
+        IDObject.Add('_', SalesCrMemoHeader."Applies-to Doc. No.");
+        InvoiceDocumentReferenceObject.Add('ID', IDObject);
+
+        // Add UUID if available from submission log
+        UUIDObject.Add('_', OriginalInvoiceUUID);
+        InvoiceDocumentReferenceObject.Add('UUID', UUIDObject);
+
+        InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
+        BillingReferenceObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
+        BillingReferenceArray.Add(BillingReferenceObject);
+
+        InvoiceObject.Add('BillingReference', BillingReferenceArray);
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Credit memo lines using Invoice structure
+    local procedure BuildCreditMemoLinesAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        InvoiceLinesArray: JsonArray;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+    begin
+        // Get Invoice object from UBL structure
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Build invoice lines array (for credit memo)
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                BuildSingleCreditMemoLineAsInvoice(InvoiceLinesArray, SalesCrMemoLine);
+            until SalesCrMemoLine.Next() = 0;
+
+        // Add invoice lines to document
+        InvoiceObject.Add('cac:InvoiceLine', InvoiceLinesArray);
+
+        // Update the document
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Single credit memo line using Invoice structure
+    local procedure BuildSingleCreditMemoLineAsInvoice(var InvoiceLinesArray: JsonArray; SalesCrMemoLine: Record "Sales Cr.Memo Line")
+    var
+        InvoiceLineObject: JsonObject;
+        ID: JsonObject;
+        InvoicedQuantity: JsonObject;
+        LineExtensionAmount: JsonObject;
+        TaxTotal: JsonObject;
+        TaxSubtotal: JsonObject;
+        TaxCategory: JsonObject;
+        TaxScheme: JsonObject;
+        Item: JsonObject;
+        ItemDescription: JsonObject;
+        Name: JsonObject;
+        SellersItemIdentification: JsonObject;
+        ID2: JsonObject;
+        Price: JsonObject;
+        PriceAmount: JsonObject;
+        TaxAmount: Decimal;
+        LineTaxAmount: JsonObject;
+        LineTaxableAmount: JsonObject;
+        LineTaxSubtotalAmount: JsonObject;
+    begin
+        // CORRECTED: Use positive amounts for credit notes
+        TaxAmount := SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine."Line Amount";
+
+        // Invoice Line ID
+        ID.Add('_text', Format(SalesCrMemoLine."Line No."));
+        InvoiceLineObject.Add('cbc:ID', ID);
+
+        // CORRECTED: Use positive quantity for credit memo (LHDN expects positive values)
+        InvoicedQuantity.Add('_text', Format(SalesCrMemoLine.Quantity));
+        InvoicedQuantity.Add('unitCode', 'C62');
+        InvoiceLineObject.Add('cbc:InvoicedQuantity', InvoicedQuantity);
+
+        // CORRECTED: Use positive line amount
+        LineExtensionAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
+        LineExtensionAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        InvoiceLineObject.Add('cbc:LineExtensionAmount', LineExtensionAmount);
+
+        // Add Tax Total for this line
+        LineTaxAmount.Add('_text', Format(TaxAmount));
+        LineTaxAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        TaxTotal.Add('cbc:TaxAmount', LineTaxAmount);
+
+        // Tax Subtotal
+        LineTaxableAmount.Add('_text', Format(SalesCrMemoLine."Line Amount"));
+        LineTaxableAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        TaxSubtotal.Add('cbc:TaxableAmount', LineTaxableAmount);
+
+        LineTaxSubtotalAmount.Add('_text', Format(TaxAmount));
+        LineTaxSubtotalAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        TaxSubtotal.Add('cbc:TaxAmount', LineTaxSubtotalAmount);
+
+        // Tax Category
+        TaxCategory.Add('cbc:ID', 'S'); // Standard rate
+        TaxCategory.Add('cbc:Percent', Format(SalesCrMemoLine."VAT %"));
+
+        // ADDED: Tax Exemption Reason (required by LHDN)
+        TaxCategory.Add('cbc:TaxExemptionReason', BuildTaxExemptionReason());
+
+        // Tax Scheme
+        TaxScheme.Add('cbc:ID', 'OTH');
+        TaxScheme.Add('schemeID', 'UN/ECE 5153');
+        TaxScheme.Add('schemeAgencyID', '6'); // ADDED: Scheme Agency ID (required by LHDN)
+        TaxCategory.Add('cac:TaxScheme', TaxScheme);
+        TaxSubtotal.Add('cac:TaxCategory', TaxCategory);
+
+        TaxTotal.Add('cac:TaxSubtotal', TaxSubtotal);
+        InvoiceLineObject.Add('cac:TaxTotal', TaxTotal);
+
+        // Item Information
+        Item.Add('cbc:Description', SalesCrMemoLine.Description);
+
+        // ADDED: Commodity Classification (required by LHDN)
+        Item.Add('cac:CommodityClassification', BuildCommodityClassification());
+
+        // Item Name
+        Name.Add('_text', SalesCrMemoLine.Description);
+        ItemDescription.Add('cbc:Name', Name);
+        Item.Add('cac:Description', ItemDescription);
+
+        // Item ID
+        ID2.Add('_text', SalesCrMemoLine."No.");
+        SellersItemIdentification.Add('cbc:ID', ID2);
+        Item.Add('cac:SellersItemIdentification', SellersItemIdentification);
+
+        // ADDED: Origin Country (required by LHDN)
+        Item.Add('cac:OriginCountry', BuildOriginCountry());
+
+        // Price Information
+        PriceAmount.Add('_text', Format(SalesCrMemoLine."Unit Price"));
+        PriceAmount.Add('currencyID', GetDocumentCurrencyCode(SalesCrMemoLine));
+        Price.Add('cbc:PriceAmount', PriceAmount);
+
+        // ADDED: Item Price Extension (required by LHDN)
+        InvoiceLineObject.Add('cac:ItemPriceExtension', BuildItemPriceExtension(SalesCrMemoLine));
+
+        // ADDED: Allowance Charge (required by LHDN)
+        InvoiceLineObject.Add('cac:AllowanceCharge', BuildAllowanceCharge(SalesCrMemoLine));
+
+        // Add item and price to line
+        InvoiceLineObject.Add('cac:Item', Item);
+        InvoiceLineObject.Add('cac:Price', Price);
+
+        // Add line to array
+        InvoiceLinesArray.Add(InvoiceLineObject);
+    end;
+
+    // ADDED: Supplier party using Invoice structure
+    local procedure BuildSupplierPartyAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        AccountingSupplierParty: JsonObject;
+        PartyObject: JsonObject;
+        PartyIdentification: JsonObject;
+        PartyName: JsonObject;
+        CompanyInfo: Record "Company Information";
+    begin
+        CompanyInfo.Get();
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Build supplier party structure with basic information
+        BuildPartyIdentification(PartyIdentification, CompanyInfo."Registration No.");
+        PartyObject.Add('cac:PartyIdentification', PartyIdentification);
+
+        BuildPartyName(PartyName, CompanyInfo.Name);
+        PartyObject.Add('cac:PartyName', PartyName);
+
+        AccountingSupplierParty.Add('cac:Party', PartyObject);
+        InvoiceObject.Add('cac:AccountingSupplierParty', AccountingSupplierParty);
+
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Customer party using Invoice structure
+    local procedure BuildCustomerPartyAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        AccountingCustomerParty: JsonObject;
+        PartyObject: JsonObject;
+        PartyIdentification: JsonObject;
+        PartyName: JsonObject;
+        Customer: Record Customer;
+        CustomerTIN: Text;
+    begin
+        Customer.Get(SalesCrMemoHeader."Sell-to Customer No.");
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Use VAT Registration No. as TIN placeholder
+        CustomerTIN := Customer."VAT Registration No.";
+        if CustomerTIN = '' then
+            CustomerTIN := Customer."No."; // Fallback to customer number
+
+        // Build customer party structure with basic information
+        BuildPartyIdentification(PartyIdentification, CustomerTIN);
+        PartyObject.Add('cac:PartyIdentification', PartyIdentification);
+
+        BuildPartyName(PartyName, SalesCrMemoHeader."Sell-to Customer Name");
+        PartyObject.Add('cac:PartyName', PartyName);
+
+        AccountingCustomerParty.Add('cac:Party', PartyObject);
+        InvoiceObject.Add('cac:AccountingCustomerParty', AccountingCustomerParty);
+
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Document-level legal monetary total using Invoice structure
+    local procedure BuildDocumentLevelLegalMonetaryTotalAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        LegalMonetaryTotal: JsonObject;
+        LineExtensionAmount: JsonObject;
+        TaxExclusiveAmount: JsonObject;
+        TaxInclusiveAmount: JsonObject;
+        PayableAmount: JsonObject;
+        CurrencyCode: Text;
+        TotalAmount: Decimal;
+        TotalTaxAmount: Decimal;
+    begin
+        CurrencyCode := GetDocumentCurrencyCode(SalesCrMemoHeader);
+        TotalAmount := SalesCrMemoHeader."Amount";
+        TotalTaxAmount := SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount";
+
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Line Extension Amount
+        LineExtensionAmount.Add('_text', Format(TotalAmount));
+        LineExtensionAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:LineExtensionAmount', LineExtensionAmount);
+
+        // Tax Exclusive Amount
+        TaxExclusiveAmount.Add('_text', Format(TotalAmount));
+        TaxExclusiveAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:TaxExclusiveAmount', TaxExclusiveAmount);
+
+        // Tax Inclusive Amount
+        TaxInclusiveAmount.Add('_text', Format(TotalAmount + TotalTaxAmount));
+        TaxInclusiveAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:TaxInclusiveAmount', TaxInclusiveAmount);
+
+        // Payable Amount
+        PayableAmount.Add('_text', Format(TotalAmount + TotalTaxAmount));
+        PayableAmount.Add('currencyID', CurrencyCode);
+        LegalMonetaryTotal.Add('cbc:PayableAmount', PayableAmount);
+
+        InvoiceObject.Add('cac:LegalMonetaryTotal', LegalMonetaryTotal);
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // ADDED: Document-level tax total using Invoice structure
+    local procedure BuildDocumentLevelTaxTotalAsInvoice(var UBLDocument: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        InvoiceToken: JsonToken;
+        InvoiceObject: JsonObject;
+        TaxTotal: JsonObject;
+        TaxSubtotal: JsonObject;
+        TaxCategory: JsonObject;
+        TaxScheme: JsonObject;
+        TaxAmount: JsonObject;
+        TaxableAmount: JsonObject;
+        CurrencyCode: Text;
+        TotalTaxAmount: Decimal;
+    begin
+        CurrencyCode := GetDocumentCurrencyCode(SalesCrMemoHeader);
+        TotalTaxAmount := SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount";
+
+        UBLDocument.Get('Invoice', InvoiceToken);
+        InvoiceObject := InvoiceToken.AsObject();
+
+        // Document-level Tax Total
+        TaxAmount.Add('_text', Format(TotalTaxAmount));
+        TaxAmount.Add('currencyID', CurrencyCode);
+        TaxTotal.Add('cbc:TaxAmount', TaxAmount);
+
+        // Tax Subtotal
+        TaxableAmount.Add('_text', Format(SalesCrMemoHeader."Amount"));
+        TaxableAmount.Add('currencyID', CurrencyCode);
+        TaxSubtotal.Add('cbc:TaxableAmount', TaxableAmount);
+
+        // Tax Category
+        TaxCategory.Add('cbc:ID', 'S'); // Standard rate
+        TaxCategory.Add('cbc:Percent', '10'); // Default VAT rate
+
+        // Tax Scheme
+        TaxScheme.Add('cbc:ID', 'OTH');
+        TaxScheme.Add('schemeID', 'UN/ECE 5153');
+        TaxScheme.Add('schemeAgencyID', '6'); // ADDED: Scheme Agency ID (required by LHDN)
+        TaxCategory.Add('cac:TaxScheme', TaxScheme);
+        TaxSubtotal.Add('cac:TaxCategory', TaxCategory);
+
+        TaxTotal.Add('cac:TaxSubtotal', TaxSubtotal);
+        InvoiceObject.Add('cac:TaxTotal', TaxTotal);
+        UBLDocument.Replace('Invoice', InvoiceObject);
+    end;
+
+    // UPDATE: Add document type parameter for credit memos
+    local procedure BuildAzureFunctionPayload(JsonText: Text; CorrelationId: Text; DocumentType: Text): Text
+    var
+        RequestJson: JsonObject;
+        RequestText: Text;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        Environment: Text;
+    begin
+        // Get environment setting
+        if eInvoiceSetup.Get() then begin
+            case eInvoiceSetup.Environment of
+                eInvoiceSetup.Environment::Preprod:
+                    Environment := 'PREPROD';
+                eInvoiceSetup.Environment::Production:
+                    Environment := 'PRODUCTION';
+                else
+                    Environment := 'PREPROD'; // Default fallback
+            end;
+        end else
+            Environment := 'PREPROD';
+
+        RequestJson.Add('unsignedJson', JsonText);
+        RequestJson.Add('invoiceType', '01'); // Keep for compatibility
+        RequestJson.Add('documentType', DocumentType); // ADD THIS
+        RequestJson.Add('environment', Environment);
+        RequestJson.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        RequestJson.Add('requestId', CorrelationId);
+        RequestJson.WriteTo(RequestText);
+        exit(RequestText);
+    end;
+
+    // ADD: Credit memo specific procedure
+    procedure PostCreditMemoToAzureFunction(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; AzureFunctionUrl: Text; var ResponseText: Text)
+    var
+        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+    begin
+        // FIXED: Use the JSON Generator's credit memo method which already uses correct Invoice structure
+        eInvoiceJSONGenerator.PostCreditMemoToAzureFunction(SalesCrMemoHeader, AzureFunctionUrl, ResponseText);
     end;
 }

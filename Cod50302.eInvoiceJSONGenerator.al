@@ -56,7 +56,7 @@ codeunit 50302 "eInvoice JSON Generator"
     begin
         CorrelationId := CreateGuid();
         MaxRetries := 3;
-        Success := TryDirectHttpClient(AzureFunctionUrl, BuildAzureFunctionPayload(JsonText, CorrelationId), ResponseText, CorrelationId, MaxRetries);
+        Success := TryDirectHttpClient(AzureFunctionUrl, BuildAzureFunctionPayload(JsonText, CorrelationId, '01'), ResponseText, CorrelationId, MaxRetries);
         if not Success then begin
             Error('Failed to communicate with Azure Function: %1', ResponseText);
         end;
@@ -775,25 +775,17 @@ codeunit 50302 "eInvoice JSON Generator"
 
     local procedure ShouldIncludeInvoicePeriod(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
     begin
-        // Define business logic for when to include invoice period
-        // Examples:
-        // - Only for specific document types
-        // - Only when custom period fields are populated
-        // - Only for recurring/subscription invoices
+        // FIXED: Make invoice period optional - only include when there are actual period values
+        // Check if there are custom period fields populated (you would need to add these fields to Sales Invoice Header)
+        // For now, return false to make it completely optional since period data should come from actual business data
 
-        // For now, only include for specific document types that require period information
-        // You can customize this logic based on your business requirements
+        // You can enable this by adding custom fields to Sales Invoice Header:
+        // if (SalesInvoiceHeader."Custom Period Start" <> 0D) or 
+        //    (SalesInvoiceHeader."Custom Period End" <> 0D) or 
+        //    (SalesInvoiceHeader."Custom Period Description" <> '') then
+        //     exit(true);
 
-        case SalesInvoiceHeader."eInvoice Document Type" of
-            '02': // Credit Note (LHDN code list)
-                exit(true);
-            '03': // Debit Note
-                exit(true);
-            '11': // Self-billed invoice
-                exit(true);
-            else
-                exit(false); // Don't include for standard invoices unless specifically needed
-        end;
+        exit(false); // Optional by default - only include when business logic requires it
     end;
 
     local procedure ShouldIncludeDelivery(SalesInvoiceHeader: Record "Sales Invoice Header"): Boolean
@@ -3956,29 +3948,39 @@ codeunit 50302 "eInvoice JSON Generator"
     /// <summary>
     /// Builds Azure Function payload in BusinessCentralSigningRequest format
     /// </summary>
-    local procedure BuildAzureFunctionPayload(JsonText: Text; CorrelationId: Text): Text
+    // UPDATE: Add document type parameter for credit memos
+    local procedure BuildAzureFunctionPayload(JsonText: Text; CorrelationId: Text; DocumentType: Text): Text
     var
-        RequestPayload: JsonObject;
-        Setup: Record "eInvoiceSetup";
+        RequestJson: JsonObject;
         RequestText: Text;
-        InvoiceTypeCode: Text;
     begin
-        // Get setup for environment information
-        if Setup.Get('SETUP') then;
-
-        // Extract invoice type from the UBL JSON payload
-        InvoiceTypeCode := ExtractInvoiceTypeFromJson(JsonText);
-
-        // Build BusinessCentralSigningRequest payload matching Azure Function model
-        RequestPayload.Add('correlationId', CorrelationId);
-        RequestPayload.Add('environment', Format(Setup.Environment));
-        RequestPayload.Add('invoiceType', InvoiceTypeCode);
-        RequestPayload.Add('unsignedJson', JsonText);
-        RequestPayload.Add('submissionId', CorrelationId);
-        RequestPayload.Add('requestedBy', UserId());
-        RequestPayload.WriteTo(RequestText);
-
+        RequestJson.Add('unsignedJson', JsonText);
+        RequestJson.Add('invoiceType', '01'); // Keep for compatibility
+        RequestJson.Add('documentType', DocumentType); // ADD THIS
+        RequestJson.Add('environment', GetEnvironmentSetting());
+        RequestJson.Add('timestamp', Format(CurrentDateTime, 0, '<Year4>-<Month,2>-<Day,2>T<Hours24,2>:<Minutes,2>:<Seconds,2>Z'));
+        RequestJson.Add('requestId', CorrelationId);
+        RequestJson.WriteTo(RequestText);
         exit(RequestText);
+    end;
+
+    // ADD: Credit memo specific procedure
+    procedure PostCreditMemoToAzureFunction(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; AzureFunctionUrl: Text; var ResponseText: Text)
+    var
+        JsonText: Text;
+        CorrelationId: Text;
+        RequestText: Text;
+    begin
+        // Generate credit memo JSON
+        JsonText := GenerateCreditMemoEInvoiceJson(SalesCrMemoHeader, false);
+
+        // Build request with document type '02'
+        CorrelationId := CreateGuid();
+        RequestText := BuildAzureFunctionPayload(JsonText, CorrelationId, '02');
+
+        // Send to Azure Function
+        if not TryDirectHttpClient(AzureFunctionUrl, RequestText, ResponseText, CorrelationId, 3) then
+            Error('Failed to process credit note: %1', ResponseText);
     end;
 
     /// <summary>
@@ -5586,10 +5588,10 @@ codeunit 50302 "eInvoice JSON Generator"
     begin
         CurrencyCode := GetCurrencyCodeFromText(SalesCrMemoHeader."Currency Code");
 
-        // Calculate totals (negative amounts for credit memos)
-        Subtotal := -SalesCrMemoHeader."Amount";
-        TaxTotal := -(SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount");
-        GrandTotal := -SalesCrMemoHeader."Amount Including VAT";
+        // FIXED: LHDN expects positive amounts for credit memos (document type distinguishes it)
+        Subtotal := SalesCrMemoHeader."Amount";
+        TaxTotal := (SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount");
+        GrandTotal := SalesCrMemoHeader."Amount Including VAT";
 
         AddAmountField(LegalTotalObject, 'LineExtensionAmount', Subtotal, CurrencyCode);
         AddAmountField(LegalTotalObject, 'TaxExclusiveAmount', Subtotal, CurrencyCode);
@@ -5612,7 +5614,8 @@ codeunit 50302 "eInvoice JSON Generator"
             repeat
                 AddCreditMemoInvoiceLine(LineArray, SalesCrMemoLine, SalesCrMemoHeader."Currency Code");
             until SalesCrMemoLine.Next() = 0;
-        InvoiceObject.Add('CreditNoteLine', LineArray);
+        // FIXED: LHDN expects InvoiceLine even for credit memos
+        InvoiceObject.Add('InvoiceLine', LineArray);
     end;
 
     // Credit memo line implementation using proper UBL 2.1 array format
@@ -5853,15 +5856,17 @@ codeunit 50302 "eInvoice JSON Generator"
     // Overloaded version for credit memos
     local procedure ShouldIncludeInvoicePeriod(SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Boolean
     begin
-        // Define business logic for when to include invoice period for credit memos
-        case SalesCrMemoHeader."eInvoice Document Type" of
-            '02': // Credit note
-                exit(true);
-            '03': // Debit note
-                exit(true);
-            else
-                exit(false);
-        end;
+        // FIXED: Make invoice period optional - only include when there are actual period values
+        // Check if there are custom period fields populated (you would need to add these fields to Sales Cr.Memo Header)
+        // For now, return false to make it completely optional since period data should come from actual business data
+
+        // You can enable this by adding custom fields to Sales Cr.Memo Header:
+        // if (SalesCrMemoHeader."Custom Period Start" <> 0D) or 
+        //    (SalesCrMemoHeader."Custom Period End" <> 0D) or 
+        //    (SalesCrMemoHeader."Custom Period Description" <> '') then
+        //     exit(true);
+
+        exit(false); // Optional by default - only include when business logic requires it
     end;
 
     // Overloaded version for credit memos
