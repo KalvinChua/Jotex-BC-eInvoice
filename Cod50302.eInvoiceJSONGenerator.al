@@ -5549,13 +5549,15 @@ codeunit 50302 "eInvoice JSON Generator"
         SalesCrMemoLine.SetFilter("VAT %", '>0');
         if SalesCrMemoLine.FindSet() then
             repeat
-                TotalTaxAmount += SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount;
-                TaxableAmount += SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity;
+                // Calculate tax amount from the line (ensure positive)
+                TotalTaxAmount += Abs(SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount);
+                // Calculate taxable amount from unit price and quantity (ensure positive)
+                TaxableAmount += Abs(SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity);
             until SalesCrMemoLine.Next() = 0;
 
         AddAmountField(TaxTotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCodeFromText(SalesCrMemoHeader."Currency Code"));
 
-        // Tax subtotal with proper array structure
+        // Tax subtotal with proper array structure - Use positive amounts for LHDN
         AddAmountField(TaxSubtotalObject, 'TaxableAmount', TaxableAmount, GetCurrencyCodeFromText(SalesCrMemoHeader."Currency Code"));
         AddAmountField(TaxSubtotalObject, 'TaxAmount', TotalTaxAmount, GetCurrencyCodeFromText(SalesCrMemoHeader."Currency Code"));
 
@@ -5585,13 +5587,34 @@ codeunit 50302 "eInvoice JSON Generator"
         Subtotal: Decimal;
         TaxTotal: Decimal;
         GrandTotal: Decimal;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        LineAmount: Decimal;
+        LineTaxAmount: Decimal;
     begin
         CurrencyCode := GetCurrencyCodeFromText(SalesCrMemoHeader."Currency Code");
 
-        // FIXED: LHDN expects positive amounts for credit memos (document type distinguishes it)
-        Subtotal := SalesCrMemoHeader."Amount";
-        TaxTotal := (SalesCrMemoHeader."Amount Including VAT" - SalesCrMemoHeader."Amount");
-        GrandTotal := SalesCrMemoHeader."Amount Including VAT";
+        // Calculate amounts from lines to ensure accuracy (BC header amounts may be negative)
+        Subtotal := 0;
+        TaxTotal := 0;
+        GrandTotal := 0;
+
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        SalesCrMemoLine.SetFilter(Type, '<>%1', SalesCrMemoLine.Type::" ");
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                // Calculate line amounts - ensure they're positive for LHDN
+                LineAmount := Abs(SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity);
+                LineTaxAmount := Abs(SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount);
+
+                Subtotal += LineAmount;
+                TaxTotal += LineTaxAmount;
+                GrandTotal += LineAmount + LineTaxAmount;
+            until SalesCrMemoLine.Next() = 0;
+
+        // Ensure all amounts are positive for LHDN
+        Subtotal := Abs(Subtotal);
+        TaxTotal := Abs(TaxTotal);
+        GrandTotal := Abs(GrandTotal);
 
         AddAmountField(LegalTotalObject, 'LineExtensionAmount', Subtotal, CurrencyCode);
         AddAmountField(LegalTotalObject, 'TaxExclusiveAmount', Subtotal, CurrencyCode);
@@ -5654,22 +5677,23 @@ codeunit 50302 "eInvoice JSON Generator"
 
         UnitCode := GetUBLUnitCode(SalesCrMemoLine);
         AddQuantityField(LineObject, 'InvoicedQuantity', SalesCrMemoLine.Quantity, UnitCode);
-        AddAmountField(LineObject, 'LineExtensionAmount', SalesCrMemoLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
+        // Use Unit Price * Quantity for line extension amount to ensure positive value
+        AddAmountField(LineObject, 'LineExtensionAmount', Abs(SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity), GetCurrencyCodeFromText(CurrencyCode));
 
-        // Line allowances/charges
-        if SalesCrMemoLine."Line Discount Amount" > 0 then
+        // Line allowances/charges - Use positive amounts for LHDN
+        if SalesCrMemoLine."Line Discount Amount" <> 0 then
             AddLineAllowanceCharge(AllowanceChargeArray, false, '',
-                SalesCrMemoLine."Line Discount %", SalesCrMemoLine."Line Discount Amount", GetCurrencyCodeFromText(CurrencyCode));
+                SalesCrMemoLine."Line Discount %", Abs(SalesCrMemoLine."Line Discount Amount"), GetCurrencyCodeFromText(CurrencyCode));
 
         if AllowanceChargeArray.Count > 0 then
             LineObject.Add('AllowanceCharge', AllowanceChargeArray);
 
-        // Tax total for line
-        AddAmountField(TaxTotalObject, 'TaxAmount', SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
+        // Tax total for line - Use positive amounts for LHDN
+        AddAmountField(TaxTotalObject, 'TaxAmount', Abs(SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount), GetCurrencyCodeFromText(CurrencyCode));
 
-        // Tax subtotal
-        AddAmountField(TaxSubtotalObject, 'TaxableAmount', SalesCrMemoLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
-        AddAmountField(TaxSubtotalObject, 'TaxAmount', SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
+        // Tax subtotal - Use positive amounts for LHDN
+        AddAmountField(TaxSubtotalObject, 'TaxableAmount', Abs(SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity), GetCurrencyCodeFromText(CurrencyCode));
+        AddAmountField(TaxSubtotalObject, 'TaxAmount', Abs(SalesCrMemoLine."Amount Including VAT" - SalesCrMemoLine.Amount), GetCurrencyCodeFromText(CurrencyCode));
         AddNumericField(TaxSubtotalObject, 'Percent', SalesCrMemoLine."VAT %");
 
         // Tax category
@@ -5727,13 +5751,13 @@ codeunit 50302 "eInvoice JSON Generator"
         ItemArray.Add(ItemObject);
         LineObject.Add('Item', ItemArray);
 
-        // Price
-        AddAmountField(PriceObject, 'PriceAmount', SalesCrMemoLine."Unit Price", GetCurrencyCodeFromText(CurrencyCode));
+        // Price - Use positive amounts for LHDN
+        AddAmountField(PriceObject, 'PriceAmount', Abs(SalesCrMemoLine."Unit Price"), GetCurrencyCodeFromText(CurrencyCode));
         PriceArray.Add(PriceObject);
         LineObject.Add('Price', PriceArray);
 
-        // Item price extension
-        AddAmountField(ItemPriceExtensionObject, 'Amount', SalesCrMemoLine.Amount, GetCurrencyCodeFromText(CurrencyCode));
+        // Item price extension - Use positive amounts for LHDN
+        AddAmountField(ItemPriceExtensionObject, 'Amount', Abs(SalesCrMemoLine."Unit Price" * SalesCrMemoLine.Quantity), GetCurrencyCodeFromText(CurrencyCode));
         ItemPriceExtensionArray.Add(ItemPriceExtensionObject);
         LineObject.Add('ItemPriceExtension', ItemPriceExtensionArray);
 
@@ -5905,7 +5929,9 @@ codeunit 50302 "eInvoice JSON Generator"
 
         if SalesCrMemoLine.FindSet() then
             repeat
-                TotalDiscount += SalesCrMemoLine."Line Discount Amount";
+                // Only add non-zero discounts (could be positive or negative in BC)
+                if SalesCrMemoLine."Line Discount Amount" <> 0 then
+                    TotalDiscount += Abs(SalesCrMemoLine."Line Discount Amount");
             until SalesCrMemoLine.Next() = 0;
 
         exit(TotalDiscount);

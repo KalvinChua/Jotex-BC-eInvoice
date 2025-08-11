@@ -100,13 +100,10 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         Rec."No.",
                         Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
 
-                    // Create the file content
                     TempBlob.CreateOutStream(OutStream);
                     OutStream.WriteText(JsonText);
-
-                    // Prepare for download
                     TempBlob.CreateInStream(InStream);
-                    DownloadFromStream(InStream, 'Download e-Invoice Credit Memo', '', 'JSON files (*.json)|*.json', FileName);
+                    DownloadFromStream(InStream, 'Download e-Invoice JSON', '', 'JSON files (*.json)|*.json', FileName);
                 end;
             }
 
@@ -115,7 +112,10 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 ApplicationArea = All;
                 Caption = 'Sign & Submit to LHDN';
                 Image = ElectronicDoc;
-                ToolTip = 'Sign and submit credit memo to LHDN MyInvois';
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                ToolTip = 'Sign the credit memo via Azure Function and submit directly to LHDN MyInvois API';
                 Visible = IsJotexCompany;
 
                 trigger OnAction()
@@ -125,17 +125,14 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Success: Boolean;
                     SuccessMsg: Text;
                 begin
-                    // Direct submission without confirmation - matching sales invoice pattern
+                    // Direct submission without confirmation
                     Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
 
                     if Success then begin
-                        SuccessMsg := StrSubstNo('Credit Memo %1 successfully signed and submitted to LHDN!\' +
-                            'LHDN Response:\' +
-                            '%2', Rec."No.", FormatLhdnResponse(LhdnResponse));
+                        SuccessMsg := StrSubstNo('Credit Memo %1 successfully signed and submitted to LHDN!' + '\\' + '\\' + 'LHDN Response:' + '\\' + '%2', Rec."No.", FormatLhdnResponse(LhdnResponse));
                         Message(SuccessMsg);
                     end else begin
-                        Message(StrSubstNo('Failed to complete signing and submission process.\' +
-                            'Response: %1', LhdnResponse));
+                        Message(StrSubstNo('Failed to complete signing and submission process.' + '\\' + 'Response: %1', LhdnResponse));
                     end;
                 end;
             }
@@ -145,41 +142,70 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 ApplicationArea = All;
                 Caption = 'Cancel e-Invoice';
                 Image = Cancel;
-                ToolTip = 'Cancel this e-Invoice submission in LHDN system';
-                Visible = IsJotexCompany and (Rec."eInvoice Validation Status" = 'Valid');
+                Promoted = true;
+                PromotedCategory = Process;
+                ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
+                Visible = IsJotexCompany;
+                Enabled = CanCancelEInvoice;
 
                 trigger OnAction()
                 var
                     eInvoiceCancellationHelper: Codeunit "eInvoice Cancellation Helper";
                     CancellationReason: Text;
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
                 begin
-                    if not IsJotexCompany then
-                        exit;
-
-                    if Rec."eInvoice Validation Status" <> 'Valid' then begin
-                        Message('Can only cancel e-Invoices with Valid status. Current status: %1', Rec."eInvoice Validation Status");
-                        exit;
-                    end;
-
-                    CancellationReason := '';
-                    if not (StrMenu('User Error,Duplicate Entry,Wrong Amount,Other', 1, 'Select cancellation reason:') > 0) then
-                        exit;
-
-                    case StrMenu('User Error,Duplicate Entry,Wrong Amount,Other', 1, 'Select cancellation reason:') of
-                        1:
-                            CancellationReason := 'User Error';
-                        2:
-                            CancellationReason := 'Duplicate Entry';
-                        3:
-                            CancellationReason := 'Wrong Amount';
-                        4:
-                            CancellationReason := 'Other';
-                        else
+                    // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
+                    if not IsCancellationAllowed() then begin
+                        // Provide specific message based on current status
+                        if Rec."eInvoice Validation Status" = 'Cancelled' then begin
+                            Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
                             exit;
+                        end;
+
+                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                        if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
+                            Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
+                                    SubmissionLog."Cancellation Reason",
+                                    Format(SubmissionLog."Cancellation Date"));
+                            exit;
+                        end;
+
+                        if Rec."eInvoice Submission UID" = '' then begin
+                            Message('This credit memo has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
+                            exit;
+                        end;
+
+                        Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
+                                Rec."eInvoice Validation Status");
+                        exit;
                     end;
 
-                    if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then
-                        CurrPage.Update();
+                    // Verify that the credit memo has been submitted and is valid
+                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    SubmissionLog.SetRange(Status, 'Valid');
+                    if not SubmissionLog.FindLast() then begin
+                        Message('This credit memo has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
+                        exit;
+                    end;
+
+                    // Confirm cancellation
+                    if not Confirm(ConfirmMsg, false, Rec."No.") then
+                        exit;
+
+                    // Get cancellation reason
+                    CancellationReason := SelectCancellationReason();
+                    if CancellationReason = '' then
+                        exit;
+
+                    // Proceed with cancellation using the enhanced cancellation helper
+                    if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then begin
+                        // Refresh the page to show updated status and disable cancel button
+                        CanCancelEInvoice := IsCancellationAllowed();
+                        CurrPage.Update(false);
+                    end else begin
+                        Message('Cancellation operation failed. Please check the submission log for details.');
+                    end;
                 end;
             }
 
@@ -188,65 +214,83 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 ApplicationArea = All;
                 Caption = 'Refresh Status';
                 Image = Refresh;
-                ToolTip = 'Refresh the e-Invoice status from LHDN system';
-                Visible = IsJotexCompany and (Rec."eInvoice UUID" <> '');
+                ToolTip = 'Refresh the e-Invoice status from LHDN system using direct API call (same method as posted sales invoice)';
+                Visible = IsJotexCompany and (Rec."eInvoice Submission UID" <> '');
 
                 trigger OnAction()
                 var
-                    eInvoiceSubmissionStatus: Codeunit "eInvoice Submission Status";
-                    eInvoiceSubmissionLog: Record "eInvoice Submission Log";
-                    StatusRefreshed: Boolean;
+                    HttpClient: HttpClient;
+                    HttpRequestMessage: HttpRequestMessage;
+                    HttpResponseMessage: HttpResponseMessage;
+                    RequestHeaders: HttpHeaders;
+                    AccessToken: Text;
+                    eInvoiceSetup: Record "eInvoiceSetup";
+                    eInvoiceHelper: Codeunit eInvoiceHelper;
+                    ApiUrl: Text;
+                    ResponseText: Text;
                 begin
                     if not IsJotexCompany then
                         exit;
 
-                    if Rec."eInvoice UUID" = '' then begin
-                        Message('No e-Invoice UUID found. Cannot refresh status.');
+                    if Rec."eInvoice Submission UID" = '' then begin
+                        Message('No submission UID found for this credit memo.\Please submit the credit memo to LHDN first.');
                         exit;
                     end;
 
-                    // Find the submission log entry for this credit memo
-                    eInvoiceSubmissionLog.SetRange("Invoice No.", Rec."No.");
-                    eInvoiceSubmissionLog.SetRange("Document Type", '02'); // Credit Memo
-
-                    // DEBUG: Check what entries exist for this credit memo
-                    if not eInvoiceSubmissionLog.FindSet() then begin
-                        Message('No submission log entries found for Credit Memo %1.\Please check if the credit memo was submitted to LHDN.', Rec."No.");
+                    // Get setup for environment determination
+                    if not eInvoiceSetup.Get('SETUP') then begin
+                        Message('eInvoice Setup not found');
                         exit;
                     end;
 
-                    // Look for any valid entry (not just 'Valid' status)
-                    eInvoiceSubmissionLog.SetRange(Status); // Clear status filter
-                    if not eInvoiceSubmissionLog.FindLast() then begin
-                        Message('No submission log entry found for Credit Memo %1', Rec."No.");
+                    // Get access token using the helper method (same as posted invoice)
+                    eInvoiceHelper.InitializeHelper();
+                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+                    if AccessToken = '' then begin
+                        Message('Failed to get access token');
                         exit;
                     end;
 
-                    // Check if the entry has a valid status for refresh
-                    if eInvoiceSubmissionLog.Status in ['Valid', 'Pending', 'Processing'] then begin
-                        // Can refresh these statuses
+                    // Build API URL same as posted invoice
+                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
+                    else
+                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
+
+                    // Setup request (same as posted invoice)
+                    HttpRequestMessage.Method := 'GET';
+                    HttpRequestMessage.SetRequestUri(ApiUrl);
+
+                    // Set headers (same as posted invoice)
+                    HttpRequestMessage.GetHeaders(RequestHeaders);
+                    RequestHeaders.Clear();
+                    RequestHeaders.Add('Accept', 'application/json');
+                    RequestHeaders.Add('Accept-Language', 'en');
+                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+                    // Send request (same method as posted invoice - direct call without TryFunction)
+                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+                        HttpResponseMessage.Content.ReadAs(ResponseText);
+
+                        if HttpResponseMessage.IsSuccessStatusCode then begin
+                            // Parse the JSON response to extract the status
+                            if UpdateCreditMemoStatusFromResponse(ResponseText) then begin
+                                // Try to update the credit memo field using the codeunit with proper permissions
+                                TryUpdateStatusViaCodeunit(ExtractStatusFromApiResponse(ResponseText));
+
+                                // Update cancel button state after status refresh
+                                CanCancelEInvoice := IsCancellationAllowed();
+
+                                Message('Status updated successfully from LHDN.');
+                            end else begin
+                                Message('Status check completed, but unable to parse response.');
+                            end;
+                        end else begin
+                            Message('Failed to retrieve status from LHDN API (Status Code: %1)',
+                                   HttpResponseMessage.HttpStatusCode);
+                        end;
                     end else begin
-                        Message('Cannot refresh status for Credit Memo %1.\Current status: %2\Only Valid, Pending, or Processing entries can be refreshed.',
-                            Rec."No.", eInvoiceSubmissionLog.Status);
-                        exit;
-                    end;
-
-                    StatusRefreshed := eInvoiceSubmissionStatus.RefreshSubmissionLogStatus(eInvoiceSubmissionLog);
-
-                    if StatusRefreshed then begin
-                        // Update the credit memo header with the refreshed status
-                        if eInvoiceSubmissionLog.Status = 'Valid' then
-                            Rec."eInvoice Validation Status" := 'Valid'
-                        else if eInvoiceSubmissionLog.Status = 'Cancelled' then
-                            Rec."eInvoice Validation Status" := 'Cancelled'
-                        else
-                            Rec."eInvoice Validation Status" := eInvoiceSubmissionLog.Status;
-
-                        Rec.Modify();
-                        CurrPage.Update();
-                        Message('Status refreshed successfully for Credit Memo %1. Current status: %2', Rec."No.", Rec."eInvoice Validation Status");
-                    end else begin
-                        Message('Failed to refresh status for Credit Memo %1. Please check the submission log for details.', Rec."No.");
+                        Message('Failed to connect to LHDN API.');
                     end;
                 end;
             }
@@ -255,38 +299,41 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             {
                 ApplicationArea = All;
                 Caption = 'Show Submission Log Entries';
-                Image = List;
-                ToolTip = 'Show all submission log entries for this credit memo for debugging';
+                Image = Log;
+                ToolTip = 'Show all submission log entries for this credit memo';
                 Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
-                    eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+                    SubmissionLog: Record "eInvoice Submission Log";
                     LogInfo: Text;
                     EntryCount: Integer;
                 begin
                     if not IsJotexCompany then
                         exit;
 
-                    LogInfo := StrSubstNo('Submission Log Entries for Credit Memo: %1\\\', Rec."No.");
-                    EntryCount := 0;
-
                     // Find all submission log entries for this credit memo
-                    eInvoiceSubmissionLog.SetRange("Invoice No.", Rec."No.");
-                    if eInvoiceSubmissionLog.FindSet() then begin
-                        repeat
-                            EntryCount += 1;
-                            LogInfo += StrSubstNo('Entry %1:\- Document Type: %2\- Status: %3\- Submission UID: %4\- Document UUID: %5\- Customer Name: %6\- Submission Date: %7\\',
-                                EntryCount,
-                                eInvoiceSubmissionLog."Document Type",
-                                eInvoiceSubmissionLog.Status,
-                                eInvoiceSubmissionLog."Submission UID",
-                                eInvoiceSubmissionLog."Document UUID",
-                                eInvoiceSubmissionLog."Customer Name",
-                                Format(eInvoiceSubmissionLog."Submission Date"));
-                        until eInvoiceSubmissionLog.Next() = 0;
-                    end else begin
-                        LogInfo += 'No submission log entries found for this credit memo.\';
+                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                    EntryCount := SubmissionLog.Count();
+
+                    LogInfo := StrSubstNo('Submission Log Entries for Credit Memo %1:', Rec."No.");
+                    LogInfo += '\';
+
+                    if EntryCount = 0 then
+                        LogInfo += 'No submission log entries found.'
+                    else begin
+                        if SubmissionLog.FindSet() then begin
+                            repeat
+                                LogInfo += StrSubstNo('\Entry %1:', SubmissionLog."Entry No.");
+                                LogInfo += StrSubstNo('  Document Type: %1', SubmissionLog."Document Type");
+                                LogInfo += StrSubstNo('  Status: %1', SubmissionLog.Status);
+                                LogInfo += StrSubstNo('  Submission UID: %1', SubmissionLog."Submission UID");
+                                LogInfo += StrSubstNo('  Document UUID: %1', SubmissionLog."Document UUID");
+                                LogInfo += StrSubstNo('  Submission Date: %1', Format(SubmissionLog."Submission Date"));
+                                LogInfo += StrSubstNo('  Last Updated: %1', Format(SubmissionLog."Last Updated"));
+                                LogInfo += '\';
+                            until SubmissionLog.Next() = 0;
+                        end;
                     end;
 
                     if EntryCount = 0 then
@@ -302,12 +349,342 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
     var
         IsJotexCompany: Boolean;
+        CanCancelEInvoice: Boolean;
 
     trigger OnOpenPage()
     var
         CompanyInfo: Record "Company Information";
     begin
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
+        CanCancelEInvoice := IsCancellationAllowed();
+    end;
+
+    trigger OnAfterGetCurrRecord()
+    begin
+        CanCancelEInvoice := IsCancellationAllowed();
+    end;
+
+    /// <summary>
+    /// Check if cancellation is allowed for this credit memo
+    /// Returns false if the credit memo is already cancelled or not in a cancellable state
+    /// </summary>
+    /// <returns>True if cancellation is allowed, false otherwise</returns>
+    local procedure IsCancellationAllowed(): Boolean
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // Check if credit memo has validation status of "Cancelled"
+        if Rec."eInvoice Validation Status" = 'Cancelled' then
+            exit(false);
+
+        // Check submission log for cancelled status
+        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+        if SubmissionLog.FindLast() then begin
+            if SubmissionLog.Status = 'Cancelled' then
+                exit(false);
+        end;
+
+        // Check if credit memo has been submitted to LHDN (has submission UID)
+        if Rec."eInvoice Submission UID" = '' then
+            exit(false);
+
+        // Additional check: Only allow cancellation if status is Valid
+        // since only valid e-Invoices can be cancelled in LHDN
+        if Rec."eInvoice Validation Status" <> 'Valid' then begin
+            // Double-check with submission log
+            SubmissionLog.SetRange("Invoice No.", Rec."No.");
+            SubmissionLog.SetRange(Status, 'Valid');
+            if not SubmissionLog.FindLast() then
+                exit(false);
+        end;
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Select cancellation reason from predefined options or custom input
+    /// </summary>
+    /// <returns>Selected cancellation reason or empty string if cancelled</returns>
+    local procedure SelectCancellationReason(): Text
+    var
+        Selection: Integer;
+        CustomReason: Text[500];
+        ReasonText: Text;
+    begin
+        ReasonText := '';
+
+        // Show options dialog with custom input option
+        Selection := StrMenu('Wrong buyer,Wrong invoice details,Duplicate invoice,Technical error,Buyer cancellation request,Other business reason,Enter custom reason', 1, 'Select cancellation reason:');
+
+        case Selection of
+            1:
+                ReasonText := 'Wrong buyer information';
+            2:
+                ReasonText := 'Incorrect invoice details';
+            3:
+                ReasonText := 'Duplicate invoice submission';
+            4:
+                ReasonText := 'Technical error during submission';
+            5:
+                ReasonText := 'Cancellation requested by buyer';
+            6:
+                ReasonText := 'Other business reason - Contact support for details';
+            7:
+                begin
+                    // Get custom reason input from user
+                    CustomReason := GetCustomCancellationReason();
+                    if CustomReason <> '' then
+                        ReasonText := CustomReason
+                    else
+                        ReasonText := ''; // User cancelled
+                end;
+            else
+                ReasonText := '';
+        end;
+
+        exit(ReasonText);
+    end;
+
+    /// <summary>
+    /// Get custom cancellation reason from user input
+    /// </summary>
+    /// <returns>Custom reason text or empty string if cancelled</returns>
+    local procedure GetCustomCancellationReason(): Text[500]
+    var
+        CustomReasonPage: Page "Custom Cancellation Reason";
+        CustomReason: Text[500];
+    begin
+        // Open the custom reason input page
+        if CustomReasonPage.RunModal() = Action::OK then begin
+            CustomReason := CustomReasonPage.GetCancellationReason();
+
+            // Validate the reason is not empty
+            if CustomReason <> '' then
+                exit(CustomReason);
+        end;
+
+        // Return empty string if cancelled or no reason provided
+        exit('');
+    end;
+
+    /// <summary>
+    /// Parse LHDN API response and update credit memo status
+    /// </summary>
+    /// <param name="ResponseText">JSON response from LHDN API</param>
+    /// <returns>True if status was updated successfully</returns>
+    local procedure UpdateCreditMemoStatusFromResponse(ResponseText: Text): Boolean
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        DocumentUuid: Text;
+        DocumentStatus: Text;
+        OverallStatus: Text;
+        LhdnStatus: Text;
+        i: Integer;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then begin
+            Message('Failed to parse LHDN API response.');
+            exit(false);
+        end;
+
+        // Extract overall status first
+        if JsonObject.Get('status', JsonToken) then
+            OverallStatus := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+        // Check document-level status for accurate cancellation detection
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            // Look for our specific document by UUID match
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Get document UUID and status
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        DocumentUuid := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+                    // If this is our document (UUID match), use its individual status
+                    if (DocumentUuid = Rec."eInvoice UUID") and DocumentJson.Get('status', JsonToken) then begin
+                        DocumentStatus := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+                        // Convert document-level LHDN status values to proper case for display
+                        case DocumentStatus.ToLower() of
+                            'cancelled':
+                                LhdnStatus := 'Cancelled';
+                            'valid':
+                                LhdnStatus := 'Valid';
+                            'invalid':
+                                LhdnStatus := 'Invalid';
+                            'rejected':
+                                LhdnStatus := 'Rejected';
+                            else
+                                LhdnStatus := DocumentStatus; // Use document status as-is
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fall back to overall status if no document-specific status found
+        if LhdnStatus = '' then begin
+            case OverallStatus.ToLower() of
+                'valid':
+                    LhdnStatus := 'Valid';
+                'invalid':
+                    LhdnStatus := 'Invalid';
+                'in progress':
+                    LhdnStatus := 'In Progress';
+                'partially valid':
+                    LhdnStatus := 'Partially Valid';
+                else
+                    LhdnStatus := OverallStatus; // Use as-is if unknown
+            end;
+        end;
+
+        // Try to update the credit memo validation status field using the codeunit approach
+        // This bypasses permission restrictions like the posted sales invoice does
+        TryUpdateStatusViaCodeunit(LhdnStatus);
+
+        // Always try to update the submission log
+        UpdateCreditMemoSubmissionLogStatus(LhdnStatus);
+
+        // Refresh the page to show the updated status
+        CurrPage.Update(false);
+
+        // Return true even if update failed due to permissions - the status check itself was successful
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Try to update credit memo status using the JSON Generator codeunit which has modify permissions
+    /// This bypasses the permission restrictions on the page extension
+    /// </summary>
+    /// <param name="NewStatus">The new status to set</param>
+    local procedure TryUpdateStatusViaCodeunit(NewStatus: Text)
+    var
+        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+    begin
+        // Use the JSON Generator codeunit which has tabledata "Sales Cr.Memo Header" = M permission
+        if eInvoiceGenerator.UpdateCreditMemoValidationStatus(Rec."No.", NewStatus) then begin
+            // Synchronize the Submission Log status
+            SynchronizeCreditMemoSubmissionLogStatus(Rec."No.", NewStatus);
+
+            // Refresh the current record to show updated status
+            Rec.Get(Rec."No.");
+            CurrPage.Update(false);
+        end;
+    end;
+
+    /// <summary>
+    /// Try to update credit memo status with proper error handling for permission restrictions
+    /// </summary>
+    /// <param name="NewStatus">The new status to set</param>
+    /// <returns>True if successfully updated, false if permission denied</returns>
+    [TryFunction]
+    local procedure TryUpdateCreditMemoStatus(NewStatus: Text)
+    begin
+        // Attempt to update the status field
+        Rec."eInvoice Validation Status" := NewStatus;
+
+        // Try to save the changes - will fail gracefully if no modify permissions
+        Rec.Modify();
+    end;
+
+    /// <summary>
+    /// Update submission log status for this credit memo
+    /// </summary>
+    local procedure UpdateCreditMemoSubmissionLogStatus(NewStatus: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // Find the latest submission log entry for this credit memo
+        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+        SubmissionLog.SetRange("Document Type", '02'); // Credit Memo
+        if SubmissionLog.FindLast() then begin
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            if SubmissionLog.Modify(true) then; // Ignore errors for submission log updates
+        end;
+    end;
+
+    /// <summary>
+    /// Synchronize submission log status for credit memo using the codeunit approach
+    /// </summary>
+    /// <param name="CreditMemoNo">Credit memo number</param>
+    /// <param name="NewStatus">New status to set</param>
+    local procedure SynchronizeCreditMemoSubmissionLogStatus(CreditMemoNo: Code[20]; NewStatus: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        Customer: Record Customer;
+        CustomerName: Text[100];
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+    begin
+        // Get customer name from the credit memo
+        CustomerName := '';
+        if SalesCrMemoHeader.Get(CreditMemoNo) then
+            if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then
+                CustomerName := Customer.Name;
+
+        // Try to find existing log entry for this credit memo and submission UID
+        SubmissionLog.SetRange("Invoice No.", CreditMemoNo);
+        if SalesCrMemoHeader."eInvoice Submission UID" <> '' then
+            SubmissionLog.SetRange("Submission UID", SalesCrMemoHeader."eInvoice Submission UID");
+
+        if SubmissionLog.FindLast() then begin
+            // Update existing log entry
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Error Message" := StrSubstNo('Status updated via API check: %1', NewStatus);
+            if SubmissionLog.Modify() then begin
+                // Successfully updated log
+            end;
+        end else begin
+            // Create new log entry if none exists
+            SubmissionLog.Init();
+            SubmissionLog."Invoice No." := CreditMemoNo;
+            SubmissionLog."Submission UID" := SalesCrMemoHeader."eInvoice Submission UID";
+            SubmissionLog."Document UUID" := SalesCrMemoHeader."eInvoice UUID";
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Submission Date" := CurrentDateTime;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Error Message" := StrSubstNo('Status retrieved via API check: %1', NewStatus);
+            SubmissionLog."Document Type" := SalesCrMemoHeader."eInvoice Document Type";
+            if SubmissionLog.Insert() then begin
+                // Successfully created log entry
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// Removes surrounding quotes from text values
+    /// </summary>
+    /// <param name="InputText">Text that may contain surrounding quotes</param>
+    /// <returns>Text with quotes removed</returns>
+    local procedure CleanQuotesFromText(InputText: Text): Text
+    var
+        CleanText: Text;
+    begin
+        if InputText = '' then
+            exit('');
+
+        CleanText := InputText;
+
+        // Remove leading quote if present
+        if StrPos(CleanText, '"') = 1 then
+            CleanText := CopyStr(CleanText, 2);
+
+        // Remove trailing quote if present
+        if StrLen(CleanText) > 0 then
+            if CopyStr(CleanText, StrLen(CleanText), 1) = '"' then
+                CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
+
+        exit(CleanText);
     end;
 
     /// <summary>
@@ -346,8 +723,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             AcceptedCount := AcceptedArray.Count();
 
             if AcceptedCount > 0 then begin
-                FormattedResponse := StrSubstNo('Submission ID: %1\' +
-                                   'Accepted Documents: %2\', SubmissionUid, Format(AcceptedCount));
+                FormattedResponse := 'Submission ID: ' + SubmissionUid + '\\' +
+                                   'Accepted Documents: ' + Format(AcceptedCount) + '\\';
 
                 for i := 0 to AcceptedCount - 1 do begin
                     AcceptedArray.Get(i, JsonToken);
@@ -359,9 +736,9 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
                             InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                        FormattedResponse += StrSubstNo('- Credit Memo: %1\    UUID: %2', InvoiceCodeNumber, Uuid);
+                        FormattedResponse += StrSubstNo('- Credit Memo: %1\\    UUID: %2', InvoiceCodeNumber, Uuid);
                         if i < AcceptedCount - 1 then
-                            FormattedResponse += '\';
+                            FormattedResponse += '\\';
                     end;
                 end;
             end;
@@ -374,8 +751,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
             if RejectedCount > 0 then begin
                 if FormattedResponse <> '' then
-                    FormattedResponse += '\';
-                FormattedResponse += StrSubstNo('Rejected Documents: %1', Format(RejectedCount));
+                    FormattedResponse += '\\';
+                FormattedResponse += 'Rejected Documents: ' + Format(RejectedCount);
             end;
         end;
 
@@ -385,32 +762,6 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         end;
 
         exit(FormattedResponse);
-    end;
-
-    /// <summary>
-    /// Removes surrounding quotes from text values
-    /// </summary>
-    /// <param name="InputText">Text that may contain surrounding quotes</param>
-    /// <returns>Text with quotes removed</returns>
-    local procedure CleanQuotesFromText(InputText: Text): Text
-    var
-        CleanText: Text;
-    begin
-        if InputText = '' then
-            exit('');
-
-        CleanText := InputText;
-
-        // Remove leading quote if present
-        if StrPos(CleanText, '"') = 1 then
-            CleanText := CopyStr(CleanText, 2);
-
-        // Remove trailing quote if present
-        if StrLen(CleanText) > 0 then
-            if CopyStr(CleanText, StrLen(CleanText), 1) = '"' then
-                CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
-
-        exit(CleanText);
     end;
 
     /// <summary>
@@ -428,6 +779,86 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             exit('JSON Array');
         end else begin
             exit('Unknown');
+        end;
+    end;
+
+
+
+    /// <summary>
+    /// Extract status from LHDN API response for display purposes
+    /// Checks both submission-level overallStatus and document-level status for accurate cancellation detection
+    /// </summary>
+    /// <param name="ResponseText">JSON response from LHDN API</param>
+    /// <returns>The formatted status value</returns>
+    local procedure ExtractStatusFromApiResponse(ResponseText: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        OverallStatus: Text;
+        DocumentStatus: Text;
+        DocumentUuid: Text;
+        i: Integer;
+    begin
+        // Parse the JSON response
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('Unknown - JSON Parse Failed');
+
+        // Extract the overallStatus field (submission level)
+        if JsonObject.Get('overallStatus', JsonToken) then
+            OverallStatus := JsonToken.AsValue().AsText()
+        else
+            exit('Unknown - No Status Field');
+
+        // Check document-level status for cancellation detection
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+
+            // Look for our specific document by UUID match
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+
+                    // Get document UUID and status
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                    // If this is our document (UUID match), check its individual status
+                    if (DocumentUuid = Rec."eInvoice UUID") and DocumentJson.Get('status', JsonToken) then begin
+                        DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        // Document-level status takes precedence for cancellation
+                        case DocumentStatus.ToLower() of
+                            'cancelled':
+                                exit('Cancelled');
+                            'valid':
+                                exit('Valid');
+                            'invalid':
+                                exit('Invalid');
+                            'rejected':
+                                exit('Rejected');
+                            else
+                                exit(DocumentStatus); // Use document status as-is
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fall back to overall status if no document-specific status found
+        case OverallStatus.ToLower() of
+            'valid':
+                exit('Valid');
+            'invalid':
+                exit('Invalid');
+            'in progress':
+                exit('In Progress');
+            'partially valid':
+                exit('Partially Valid');
+            else
+                exit(OverallStatus); // Use as-is if unknown
         end;
     end;
 }

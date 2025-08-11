@@ -1728,15 +1728,7 @@ codeunit 50312 "eInvoice Submission Status"
                                                        1, MaxStrLen(SubmissionLogRec."Error Message"));
             SubmissionLogRec.Modify();
 
-            Message('Status refreshed successfully!\\\\' +
-                   'New Status: %1\\' +
-                   'Submission UID: %2\\' +
-                   'Updated: %3\\' +
-                   'Method: %4',
-                   LhdnStatus,
-                   SubmissionLogRec."Submission UID",
-                   Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
-                   SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status');
+            // Status refreshed successfully - no message needed as requested by user
             exit(true);
         end else begin
             // Direct call failed - likely due to context restrictions
@@ -1812,11 +1804,7 @@ codeunit 50312 "eInvoice Submission Status"
                 SubmissionLogRec."Document Type" := DocumentType;
 
             if SubmissionLogRec.Modify() then begin
-                Message('Status refreshed successfully!\\' +
-                       'New Status: %1\\' +
-                       'Updated: %2',
-                       LhdnStatus,
-                       Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
+                // Status refreshed successfully - no message needed as requested by user
                 exit(true);
             end else begin
                 Message('Failed to update the log entry. Please try again.');
@@ -2013,16 +2001,7 @@ codeunit 50312 "eInvoice Submission Status"
                     // Synchronize the Posted Sales Invoice status
                     SynchronizePostedSalesInvoiceStatus(SubmissionLogRec."Invoice No.", LhdnStatus);
 
-                    if ShowMessages then
-                        Message('Status refreshed successfully via direct API!\\' +
-                               'New Status: %1\\' +
-                               'Updated: %2\\' +
-                               'Method: %3\\' +
-                               'API Response: Direct HttpClient call\\' +
-                               'Posted Sales Invoice status synchronized',
-                               LhdnStatus,
-                               Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'),
-                               SubmissionLogRec."Document UUID" <> '' ? 'Document-level UUID matching' : 'Submission-level status');
+                    // Status refreshed successfully - no message needed as requested by user
                     exit(true);
                 end else begin
                     if ShowMessages then

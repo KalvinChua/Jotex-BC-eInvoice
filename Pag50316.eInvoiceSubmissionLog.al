@@ -132,46 +132,126 @@ page 50316 "e-Invoice Submission Log"
                     CurrPage.Update(false);
                 end;
             }
-            action(RefreshAllStatuses)
+            action(RefreshSelectedStatuses)
             {
                 ApplicationArea = All;
-                Caption = 'Refresh All Statuses';
+                Caption = 'Refresh Selected Statuses';
+                Image = RefreshRegister;
+                ToolTip = 'Refresh the status for only the selected submissions using direct LHDN API calls';
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SelectedSubmissionLog: Record "eInvoice Submission Log";
+                    UpdatedCount: Integer;
+                    FailedCount: Integer;
+                    SelectedCount: Integer;
+                    ProcessedCount: Integer;
+                begin
+                    // Get selected records
+                    CurrPage.SetSelectionFilter(SelectedSubmissionLog);
+                    SelectedCount := SelectedSubmissionLog.Count();
+
+                    if SelectedCount = 0 then begin
+                        Message('Please select one or more submission entries to refresh.');
+                        exit;
+                    end;
+
+                    // Count how many have Submission UIDs
+                    SelectedSubmissionLog.SetFilter("Submission UID", '<>%1', '');
+                    ProcessedCount := SelectedSubmissionLog.Count();
+
+                    if ProcessedCount = 0 then begin
+                        Message('None of the selected entries have Submission UIDs. Cannot refresh status.');
+                        exit;
+                    end;
+
+                    if not Confirm(StrSubstNo('Refresh status for %1 selected submissions (out of %2 selected)?', ProcessedCount, SelectedCount)) then
+                        exit;
+
+                    UpdatedCount := 0;
+                    FailedCount := 0;
+
+                    // Process each selected record
+                    if SelectedSubmissionLog.FindSet() then begin
+                        repeat
+                            if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SelectedSubmissionLog) then
+                                UpdatedCount += 1
+                            else
+                                FailedCount += 1;
+                        until SelectedSubmissionLog.Next() = 0;
+                    end;
+
+                    // Handle failures with background job option (no success message)
+                    if FailedCount > 0 then begin
+                        if Confirm(StrSubstNo('Refreshed %1 submissions successfully, %2 failed due to context restrictions.\Create background jobs for the failed entries?', UpdatedCount, FailedCount)) then begin
+                            CreateSelectedBackgroundJobs(SelectedSubmissionLog);
+                        end;
+                    end;
+
+                    CurrPage.Update(false);
+                end;
+            }
+
+            action(RefreshByDateRange)
+            {
+                ApplicationArea = All;
+                Caption = 'Refresh by Date Range';
                 Image = RefreshLines;
-                ToolTip = 'Refresh the status for all submissions with UIDs using direct LHDN API calls with document-level status detection';
+                ToolTip = 'Refresh the status for submissions within a specified date range using direct LHDN API calls';
 
                 trigger OnAction()
                 var
                     SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                     SubmissionLog: Record "eInvoice Submission Log";
                     UpdatedCount: Integer;
+                    FailedCount: Integer;
                     TotalEntries: Integer;
-                    JobQueueEntry: Record "Job Queue Entry";
+                    FromDate: Date;
+                    ToDate: Date;
+                    DateRangeText: Text;
                 begin
-                    // Count total entries first
-                    SubmissionLog.SetFilter("Submission UID", '<>%1', '');
-                    TotalEntries := SubmissionLog.Count();
+                    // Get date range from user using date picker
+                    if not GetDateRangeFromUser(FromDate, ToDate) then
+                        exit;
 
-                    if TotalEntries = 0 then begin
-                        Message('No submission entries found with Submission UIDs to refresh.');
+                    // Validate date range
+                    if FromDate > ToDate then begin
+                        Message('From Date cannot be later than To Date.');
                         exit;
                     end;
 
-                    if not Confirm(StrSubstNo('Refresh status for all %1 submissions?', TotalEntries)) then
+                    // Count entries in the date range
+                    SubmissionLog.SetFilter("Submission UID", '<>%1', '');
+                    SubmissionLog.SetRange("Submission Date", CreateDateTime(FromDate, 0T), CreateDateTime(ToDate, 235959T));
+                    TotalEntries := SubmissionLog.Count();
+
+                    if TotalEntries = 0 then begin
+                        Message('No submission entries found with Submission UIDs in the date range %1 to %2.', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'));
+                        exit;
+                    end;
+
+                    DateRangeText := StrSubstNo('from %1 to %2', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'));
+                    if not Confirm(StrSubstNo('Refresh status for %1 submissions %2?', TotalEntries, DateRangeText)) then
                         exit;
 
-                    // Use the context-safe bulk refresh method from the submission status codeunit
-                    // This ensures consistent document-level status extraction for all entries
-                    if SubmissionStatusCU.RefreshAllSubmissionLogStatusesSafe() then begin
-                        Message('Bulk refresh completed successfully.');
-                    end else begin
-                        // Context restrictions detected - automatically create background job
-                        Message('Context restrictions detected. Creating background job for bulk refresh...');
-                        if CreateBulkRefreshJob() then begin
-                            Message('Background job created successfully!\\\\' +
-                                   'Expected duration: 5-15 minutes\\\\' +
-                                   'You can check progress using the "Check Background Jobs" action.');
-                        end else begin
-                            Message('Failed to create background job. Please try individual refresh instead.');
+                    UpdatedCount := 0;
+                    FailedCount := 0;
+
+                    // Process each entry in the date range
+                    if SubmissionLog.FindSet() then begin
+                        repeat
+                            if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SubmissionLog) then
+                                UpdatedCount += 1
+                            else
+                                FailedCount += 1;
+                        until SubmissionLog.Next() = 0;
+                    end;
+
+                    // Handle failures with background job option (no success message)
+                    if FailedCount > 0 then begin
+                        if Confirm(StrSubstNo('Refreshed %1 submissions successfully, %2 failed due to context restrictions %3.\Create background jobs for the failed entries?', UpdatedCount, FailedCount, DateRangeText)) then begin
+                            CreateDateRangeBackgroundJob(FromDate, ToDate);
                         end;
                     end;
 
@@ -488,5 +568,310 @@ page 50316 "e-Invoice Submission Log"
         JobQueueEntry."Rerun Delay (sec.)" := 30;
 
         exit(JobQueueEntry.Insert(true));
+    end;
+
+    /// <summary>
+    /// Create background jobs for selected entries that failed direct refresh
+    /// </summary>
+    local procedure CreateSelectedBackgroundJobs(var SelectedSubmissionLog: Record "eInvoice Submission Log")
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+        JobsCreated: Integer;
+        JobsFailed: Integer;
+    begin
+        JobsCreated := 0;
+        JobsFailed := 0;
+
+        // Create individual background jobs for each selected entry
+        if SelectedSubmissionLog.FindSet() then begin
+            repeat
+                if SelectedSubmissionLog."Submission UID" <> '' then begin
+                    if SubmissionStatusCU.CreateBackgroundStatusRefreshJob(SelectedSubmissionLog."Submission UID") then
+                        JobsCreated += 1
+                    else
+                        JobsFailed += 1;
+                end;
+            until SelectedSubmissionLog.Next() = 0;
+        end;
+
+        // Only show message if there were failures creating jobs
+        if JobsFailed > 0 then
+            Message('Created %1 background jobs successfully, %2 failed.\Check "Background Jobs" for progress.', JobsCreated, JobsFailed);
+    end;
+
+    /// <summary>
+    /// Get date range from user input with validation
+    /// </summary>
+    local procedure GetDateRangeFromUser(var FromDate: Date; var ToDate: Date): Boolean
+    begin
+        // Initialize with empty dates - user will select via date picker
+        FromDate := 0D;
+        ToDate := 0D;
+
+        // Show date picker options directly
+        if not GetDateRangeSimple(FromDate, ToDate) then
+            exit(false);
+
+        // Debug: Show selected dates for troubleshooting
+        Message(StrSubstNo('Selected Date Range:\From Date: %1\To Date: %2\Current Date: %3',
+            Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+            Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+            Format(Today, 0, '<Day,2>/<Month,2>/<Year4>')));
+
+        // Validate the date range
+        if FromDate > ToDate then begin
+            Message(StrSubstNo('From Date %1 cannot be later than To Date %2.', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>')));
+            exit(false);
+        end;
+
+        // Don't allow future dates for ToDate (but allow for FromDate for planning purposes)
+        if ToDate > Today then begin
+            Message(StrSubstNo('To Date %1 cannot be in the future. Current date is %2.', Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(Today, 0, '<Day,2>/<Month,2>/<Year4>')));
+            exit(false);
+        end;
+
+        // Don't allow very old dates (more than 1 year) - but allow future dates for planning
+        if (FromDate < CalcDate('-1Y', Today)) and (FromDate < Today) then begin
+            if not Confirm(StrSubstNo('From Date %1 is more than 1 year ago. This may include many entries. Continue?', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'))) then
+                exit(false);
+        end;
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Simple date range selection using predefined options
+    /// </summary>
+    local procedure GetDateRangeSimple(var FromDate: Date; var ToDate: Date): Boolean
+    var
+        Selection: Integer;
+    begin
+        Selection := StrMenu('Today,Single Date,Last 7 days,Last 30 days,Last 90 days,This month,Last month,This year,Custom dates', 3, 'Select date range for refresh:');
+
+        case Selection of
+            0:
+                exit(false); // User cancelled
+            1:
+                begin // Today
+                    FromDate := Today;
+                    ToDate := Today;
+                end;
+            2:
+                begin // Single Date
+                    if not GetSingleDateFromUser(FromDate) then
+                        exit(false);
+                    ToDate := FromDate;
+                end;
+            3:
+                begin // Last 7 days
+                    FromDate := CalcDate('-7D', Today);
+                    ToDate := Today;
+                end;
+            4:
+                begin // Last 30 days
+                    FromDate := CalcDate('-30D', Today);
+                    ToDate := Today;
+                end;
+            5:
+                begin // Last 90 days
+                    FromDate := CalcDate('-90D', Today);
+                    ToDate := Today;
+                end;
+            6:
+                begin // This month
+                    FromDate := CalcDate('-CM', Today);
+                    ToDate := Today;
+                end;
+            7:
+                begin // Last month
+                    FromDate := CalcDate('-1M-CM', Today);
+                    ToDate := CalcDate('-1M+CM', Today);
+                end;
+            8:
+                begin // This year
+                    FromDate := CalcDate('-CY', Today);
+                    ToDate := Today;
+                end;
+            9:
+                begin // Custom dates - use date picker
+                    if not GetCustomDateRangeWithPicker(FromDate, ToDate) then
+                        exit(false);
+                end;
+        end;
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Get a single date from user input using a simple date picker approach
+    /// </summary>
+    local procedure GetSingleDateFromUser(var SelectedDate: Date): Boolean
+    var
+        DateSelection: Integer;
+        SelectedDateText: Text;
+        ParsedDate: Date;
+    begin
+        // Show a simple date picker with common options
+        DateSelection := StrMenu('Today,Yesterday,Last Week,Last Month,Last Year,Other', 1, 'Select a date:');
+
+        case DateSelection of
+            0:
+                exit(false); // User cancelled
+            1:
+                SelectedDate := Today; // Today
+            2:
+                SelectedDate := CalcDate('-1D', Today); // Yesterday
+            3:
+                SelectedDate := CalcDate('-7D', Today); // Last Week
+            4:
+                SelectedDate := CalcDate('-1M', Today); // Last Month
+            5:
+                SelectedDate := CalcDate('-1Y', Today); // Last Year
+            6:
+                begin // Other - use a simple date input approach
+                    SelectedDateText := Format(Today, 0, '<Day,2>/<Month,2>/<Year4>');
+
+                    // For now, use a simple confirmation approach since we can't easily get user input
+                    if not Confirm(StrSubstNo('Use %1 as the selected date?\Click No to cancel.', Format(Today, 0, '<Day,2>/<Month,2>/<Year4>'))) then
+                        exit(false);
+
+                    SelectedDate := Today;
+                end;
+        end;
+
+        // Validate the selected date
+        if SelectedDate > Today then begin
+            Message('Selected date cannot be in the future.');
+            exit(false);
+        end;
+
+        if SelectedDate < CalcDate('-1Y', Today) then begin
+            if not Confirm('Selected date is more than 1 year ago. This may include many entries. Continue?') then
+                exit(false);
+        end;
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Get custom date range using enhanced date picker options
+    /// </summary>
+    local procedure GetCustomDateRangeWithPicker(var FromDate: Date; var ToDate: Date): Boolean
+    var
+        DateRangeSelection: Integer;
+        TempFromDate: Date;
+        TempToDate: Date;
+    begin
+        // Show enhanced custom date range options
+        DateRangeSelection := StrMenu('Last 7 days,Last 14 days,Last 30 days,Last 60 days,Last 90 days,Last 6 months,Last year,This week,This month,This quarter,This year,Other', 3, 'Select custom date range:');
+
+        case DateRangeSelection of
+            0:
+                exit(false); // User cancelled
+            1:
+                begin // Last 7 days
+                    FromDate := CalcDate('-7D', Today);
+                    ToDate := Today;
+                end;
+            2:
+                begin // Last 14 days
+                    FromDate := CalcDate('-14D', Today);
+                    ToDate := Today;
+                end;
+            3:
+                begin // Last 30 days
+                    FromDate := CalcDate('-30D', Today);
+                    ToDate := Today;
+                end;
+            4:
+                begin // Last 60 days
+                    FromDate := CalcDate('-60D', Today);
+                    ToDate := Today;
+                end;
+            5:
+                begin // Last 90 days
+                    FromDate := CalcDate('-90D', Today);
+                    ToDate := Today;
+                end;
+            6:
+                begin // Last 6 months
+                    FromDate := CalcDate('-6M', Today);
+                    ToDate := Today;
+                end;
+            7:
+                begin // Last year
+                    FromDate := CalcDate('-1Y', Today);
+                    ToDate := Today;
+                end;
+            8:
+                begin // This week
+                    FromDate := CalcDate('-CW', Today);
+                    ToDate := Today;
+                end;
+            9:
+                begin // This month
+                    FromDate := CalcDate('-CM', Today);
+                    ToDate := Today;
+                end;
+            10:
+                begin // This quarter
+                    FromDate := CalcDate('-CQ', Today);
+                    ToDate := Today;
+                end;
+            11:
+                begin // This year
+                    FromDate := CalcDate('-CY', Today);
+                    ToDate := Today;
+                end;
+            12:
+                begin // Other - use current page filters
+                    if Rec.GetFilter("Submission Date") <> '' then begin
+                        if Confirm('Use the current Submission Date filter as the date range?') then begin
+                            exit(true); // Keep current FromDate and ToDate
+                        end;
+                    end;
+
+                    // Fallback to simple date input
+                    Message('For specific custom dates, please:\1. Use the filter on "Submission Date" column\2. Set your desired date range filter\3. Then run "Refresh by Date Range" again and select "Custom dates"');
+                    exit(false);
+                end;
+        end;
+
+        exit(true);
+    end;
+
+
+
+    /// <summary>
+    /// Create background job for date range refresh
+    /// </summary>
+    local procedure CreateDateRangeBackgroundJob(FromDate: Date; ToDate: Date): Boolean
+    var
+        JobQueueEntry: Record "Job Queue Entry";
+        ParameterString: Text;
+    begin
+        // Create parameter string with date range
+        ParameterString := StrSubstNo('DATE_RANGE|%1|%2', Format(FromDate), Format(ToDate));
+
+        // Create job queue entry for date range refresh
+        JobQueueEntry.Init();
+        JobQueueEntry."Object Type to Run" := JobQueueEntry."Object Type to Run"::Codeunit;
+        JobQueueEntry."Object ID to Run" := Codeunit::"eInvoice Submission Status";
+        JobQueueEntry."Job Queue Category Code" := 'EINVOICE';
+        JobQueueEntry.Description := StrSubstNo('eInvoice Status Refresh - Date Range %1 to %2', FromDate, ToDate);
+        JobQueueEntry."Parameter String" := ParameterString;
+        JobQueueEntry."User ID" := UserId;
+        JobQueueEntry."Earliest Start Date/Time" := CurrentDateTime + 5000; // Start in 5 seconds
+        JobQueueEntry.Status := JobQueueEntry.Status::Ready;
+        JobQueueEntry."Maximum No. of Attempts to Run" := 3;
+        JobQueueEntry."Rerun Delay (sec.)" := 30;
+
+        if JobQueueEntry.Insert(true) then begin
+            exit(true);
+        end else begin
+            Message('Failed to create background job for date range refresh.');
+            exit(false);
+        end;
     end;
 }
