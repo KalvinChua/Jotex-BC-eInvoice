@@ -198,13 +198,26 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     if CancellationReason = '' then
                         exit;
 
-                    // Proceed with cancellation using the enhanced cancellation helper
+                    // Proceed with cancellation (same pattern as posted sales invoice)
+                    ClearLastError();
                     if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then begin
                         // Refresh the page to show updated status and disable cancel button
                         CanCancelEInvoice := IsCancellationAllowed();
                         CurrPage.Update(false);
                     end else begin
-                        Message('Cancellation operation failed. Please check the submission log for details.');
+                        // Try alternative method with enhanced error handling
+                        ClearLastError();
+                        if eInvoiceCancellationHelper.CancelDocumentWithIsolation(Rec."No.", CancellationReason) then begin
+                            Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                            CanCancelEInvoice := IsCancellationAllowed();
+                            CurrPage.Update(false);
+                        end else begin
+                            // Show any error that occurred
+                            if GetLastErrorText() <> '' then
+                                Message('Cancellation failed with error:\%1', GetLastErrorText())
+                            else
+                                Message('Cancellation operation failed. Please check the submission log for details.');
+                        end;
                     end;
                 end;
             }

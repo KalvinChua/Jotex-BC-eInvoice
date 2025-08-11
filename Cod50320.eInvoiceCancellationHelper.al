@@ -177,9 +177,61 @@ codeunit 50320 "eInvoice Cancellation Helper"
     end;
 
     /// <summary>
-    /// Enhanced cancellation procedure that supports both invoices and credit memos
+    /// Enhanced cancellation procedure that supports both invoices and credit memos with LHDN API integration
     /// </summary>
     procedure CancelDocument(DocumentNo: Code[20]; CancellationReason: Text): Boolean
+    var
+        eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
+        DocumentType: Text;
+        IsInvoice: Boolean;
+        IsCreditMemo: Boolean;
+        Success: Boolean;
+    begin
+        // Determine document type by checking which table contains the document
+        IsInvoice := SalesInvoiceHeader.Get(DocumentNo);
+        IsCreditMemo := SalesCrMemoHeader.Get(DocumentNo);
+
+        if IsInvoice then begin
+            DocumentType := '01';
+            // For invoices, use the existing proven LHDN API cancellation method
+            Success := eInvPostingSubscribers.CancelEInvoiceDocument(SalesInvoiceHeader, CancellationReason);
+        end else if IsCreditMemo then begin
+            DocumentType := '02';
+            // For credit memos, use the new LHDN API cancellation method
+            Success := CancelCreditMemoInLHDN(SalesCrMemoHeader, CancellationReason);
+        end else begin
+            Message('Document %1 not found in either Sales Invoice or Sales Credit Memo tables.', DocumentNo);
+            exit(false);
+        end;
+
+        if Success then begin
+            // Update local status after successful LHDN cancellation
+            if IsInvoice then begin
+                SalesInvoiceHeader."eInvoice Validation Status" := 'Cancelled';
+                SalesInvoiceHeader.Modify();
+                Message('Successfully cancelled Invoice %1 in LHDN system', DocumentNo);
+            end else if IsCreditMemo then begin
+                SalesCrMemoHeader."eInvoice Validation Status" := 'Cancelled';
+                SalesCrMemoHeader.Modify();
+                Message('Successfully cancelled Credit Memo %1 in LHDN system', DocumentNo);
+            end;
+            exit(true);
+        end else begin
+            if IsInvoice then
+                Message('Failed to cancel Invoice %1 in LHDN system. Please check the submission log for details.', DocumentNo)
+            else
+                Message('Failed to cancel Credit Memo %1 in LHDN system. Please check the submission log for details.', DocumentNo);
+            exit(false);
+        end;
+    end;
+
+    /// <summary>
+    /// Alternative cancellation method with transaction isolation - mirrors posted sales invoice pattern
+    /// </summary>
+    procedure CancelDocumentWithIsolation(DocumentNo: Code[20]; CancellationReason: Text): Boolean
     var
         eInvoiceSubmissionLog: Record "eInvoice Submission Log";
         SalesInvoiceHeader: Record "Sales Invoice Header";
@@ -196,46 +248,167 @@ codeunit 50320 "eInvoice Cancellation Helper"
             DocumentType := '01'
         else if IsCreditMemo then
             DocumentType := '02'
-        else begin
-            Message('Document %1 not found in either Sales Invoice or Sales Credit Memo tables.', DocumentNo);
+        else
             exit(false);
-        end;
 
-        // Find the submission log entry
+        // Find the submission log first
         eInvoiceSubmissionLog.SetRange("Invoice No.", DocumentNo);
         eInvoiceSubmissionLog.SetRange("Document Type", DocumentType);
         eInvoiceSubmissionLog.SetRange(Status, 'Valid');
 
+        if not eInvoiceSubmissionLog.FindLast() then
+            exit(false);
+
+        // Try to perform cancellation with transaction isolation
+        exit(TryPerformCancellationWithTransaction(DocumentNo, CancellationReason, eInvoiceSubmissionLog));
+    end;
+
+    /// <summary>
+    /// Cancel credit memo in LHDN system via API - mirrors the invoice cancellation logic
+    /// </summary>
+    local procedure CancelCreditMemoInLHDN(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; CancellationReason: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestHeaders: HttpHeaders;
+        ContentHeaders: HttpHeaders;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        eInvoiceHelper: Codeunit eInvoiceHelper;
+        AccessToken: Text;
+        ApiUrl: Text;
+        RequestText: Text;
+        ResponseText: Text;
+        JsonObj: JsonObject;
+        JsonResponse: JsonObject;
+        JsonToken: JsonToken;
+        TelemetryDimensions: Dictionary of [Text, Text];
+        CompanyInfo: Record "Company Information";
+        DocumentUUID: Text;
+        SubmissionUID: Text;
+        eInvoiceSubmissionLog: Record "eInvoice Submission Log";
+        CorrelationId: Text;
+    begin
+        // Only process for JOTEX SDN BHD
+        if not CompanyInfo.Get() or (CompanyInfo.Name <> 'JOTEX SDN BHD') then
+            exit(false);
+
+        // Get setup for environment determination
+        if not eInvoiceSetup.Get('SETUP') then begin
+            Message('eInvoice Setup not found');
+            exit(false);
+        end;
+
+        // Find the submission log for this credit memo to get Document UUID and Submission UID
+        eInvoiceSubmissionLog.SetRange("Invoice No.", SalesCrMemoHeader."No.");
+        eInvoiceSubmissionLog.SetRange("Document Type", '02'); // Credit Memo
+        eInvoiceSubmissionLog.SetRange(Status, 'Valid');
         if not eInvoiceSubmissionLog.FindLast() then begin
-            if IsInvoice then
-                Message('No valid submission found for Invoice %1', DocumentNo)
-            else
-                Message('No valid submission found for Credit Memo %1', DocumentNo);
+            Message('No valid e-Invoice submission found for credit memo %1. Only valid/accepted credit memos can be cancelled.', SalesCrMemoHeader."No.");
             exit(false);
         end;
 
-        // Update the cancellation status
-        if UpdateCancellationStatusByInvoice(DocumentNo, CancellationReason) then begin
-            // Also update the source document if needed
-            if IsInvoice then begin
-                SalesInvoiceHeader."eInvoice Validation Status" := 'Cancelled';
-                SalesInvoiceHeader.Modify();
-            end else if IsCreditMemo then begin
-                SalesCrMemoHeader."eInvoice Validation Status" := 'Cancelled';
-                SalesCrMemoHeader.Modify();
+        DocumentUUID := eInvoiceSubmissionLog."Document UUID";
+        SubmissionUID := eInvoiceSubmissionLog."Submission UID";
+
+        if (DocumentUUID = '') or (SubmissionUID = '') then begin
+            Message('Document UUID or Submission UID is missing for credit memo %1. Cannot proceed with cancellation.', SalesCrMemoHeader."No.");
+            exit(false);
+        end;
+
+        // Get access token using the helper method (same as all other LHDN API calls)
+        eInvoiceHelper.InitializeHelper();
+        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+        if AccessToken = '' then begin
+            Message('Failed to get access token for credit memo cancellation');
+            exit(false);
+        end;
+
+        // Build API URL for cancellation (same environment pattern as invoice cancellation)
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documents/state/%1/state', DocumentUUID)
+        else
+            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documents/state/%1/state', DocumentUUID);
+
+        // Generate correlation ID for tracking
+        CorrelationId := CreateGuid();
+
+        // Build request payload for cancellation according to LHDN API spec
+        JsonObj.Add('status', 'cancelled');
+        JsonObj.Add('reason', CancellationReason);
+        JsonObj.WriteTo(RequestText);
+
+        // Setup LHDN API request with exact same headers as invoice cancellation
+        HttpRequestMessage.Method := 'PUT';
+        HttpRequestMessage.SetRequestUri(ApiUrl);
+        HttpRequestMessage.Content.WriteFrom(RequestText);
+
+        // Set standard LHDN API headers
+        HttpRequestMessage.Content.GetHeaders(ContentHeaders);
+        ContentHeaders.Clear();
+        ContentHeaders.Add('Content-Type', 'application/json');
+
+        HttpRequestMessage.GetHeaders(RequestHeaders);
+        RequestHeaders.Clear();
+        RequestHeaders.Add('Accept', 'application/json');
+        RequestHeaders.Add('Accept-Language', 'en');
+        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+        RequestHeaders.Add('User-Agent', 'BusinessCentral-eInvoice/2.0');
+        RequestHeaders.Add('X-Correlation-ID', CorrelationId);
+        RequestHeaders.Add('X-Request-Source', 'BusinessCentral-CreditMemo-Cancellation');
+
+        // Apply rate limiting
+        eInvoiceHelper.ApplyRateLimiting(ApiUrl);
+
+        // Send cancellation request to LHDN
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            HttpResponseMessage.Content.ReadAs(ResponseText);
+
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                // Parse response and update submission log
+                if JsonResponse.ReadFrom(ResponseText) then begin
+                    // Update submission log with cancellation details
+                    eInvoiceSubmissionLog.Status := 'Cancelled';
+                    eInvoiceSubmissionLog."Cancellation Reason" := CopyStr(CancellationReason, 1, MaxStrLen(eInvoiceSubmissionLog."Cancellation Reason"));
+                    eInvoiceSubmissionLog."Cancellation Date" := CurrentDateTime;
+                    eInvoiceSubmissionLog."Last Updated" := CurrentDateTime;
+                    eInvoiceSubmissionLog."Error Message" := 'Successfully cancelled in LHDN system';
+                    eInvoiceSubmissionLog.Modify(true);
+
+                    // Log successful cancellation
+                    TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+                    TelemetryDimensions.Add('DocumentUUID', DocumentUUID);
+                    Session.LogMessage('0000EIV08', 'Credit memo successfully cancelled in LHDN',
+                        Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                        TelemetryDimensions);
+
+                    exit(true);
+                end;
+            end else begin
+                // Log the error response
+                TelemetryDimensions.Add('CreditMemoNo', SalesCrMemoHeader."No.");
+                TelemetryDimensions.Add('StatusCode', Format(HttpResponseMessage.HttpStatusCode));
+                TelemetryDimensions.Add('Response', CopyStr(ResponseText, 1, 250));
+                Session.LogMessage('0000EIV09', 'Credit memo cancellation failed in LHDN',
+                    Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
+                    TelemetryDimensions);
+
+                Message('LHDN API returned error for credit memo cancellation: %1', ResponseText);
             end;
-
-            if IsInvoice then
-                Message('Successfully cancelled Invoice %1', DocumentNo)
-            else
-                Message('Successfully cancelled Credit Memo %1', DocumentNo);
-            exit(true);
         end else begin
-            if IsInvoice then
-                Message('Failed to cancel Invoice %1. Please check the submission log for details.', DocumentNo)
-            else
-                Message('Failed to cancel Credit Memo %1. Please check the submission log for details.', DocumentNo);
-            exit(false);
+            Message('Failed to connect to LHDN API for credit memo cancellation');
         end;
+
+        exit(false);
+    end;
+
+    [TryFunction]
+    local procedure TryPerformCancellationWithTransaction(DocumentNo: Code[20]; CancellationReason: Text; var eInvoiceSubmissionLog: Record "eInvoice Submission Log")
+    begin
+        // Perform the actual cancellation in an isolated transaction
+        if CancelDocument(DocumentNo, CancellationReason) then begin
+            // Commit will be handled by the calling procedure if needed
+        end else
+            Error('Cancellation failed');
     end;
 }
