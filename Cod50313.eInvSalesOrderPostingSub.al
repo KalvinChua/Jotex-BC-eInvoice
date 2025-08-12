@@ -16,7 +16,7 @@ codeunit 50313 "eInv Sales Order Posting Sub"
     var
         SalesInvoiceHeader: Record "Sales Invoice Header";
         Customer: Record Customer;
-        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceJSONGenerator: Codeunit 50302;
         TelemetryDimensions: Dictionary of [Text, Text];
         CompanyInfo: Record "Company Information";
         LhdnResponse: Text;

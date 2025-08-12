@@ -339,12 +339,12 @@ codeunit 50320 "eInvoice Cancellation Helper"
         JsonObj.WriteTo(RequestText);
 
         // Setup LHDN API request with exact same headers as invoice cancellation
-        HttpRequestMessage.Method := 'PUT';
+        HttpRequestMessage.Method('PUT');
         HttpRequestMessage.SetRequestUri(ApiUrl);
-        HttpRequestMessage.Content.WriteFrom(RequestText);
+        HttpRequestMessage.Content().WriteFrom(RequestText);
 
         // Set standard LHDN API headers
-        HttpRequestMessage.Content.GetHeaders(ContentHeaders);
+        HttpRequestMessage.Content().GetHeaders(ContentHeaders);
         ContentHeaders.Clear();
         ContentHeaders.Add('Content-Type', 'application/json');
 
@@ -362,7 +362,7 @@ codeunit 50320 "eInvoice Cancellation Helper"
 
         // Send cancellation request to LHDN
         if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-            HttpResponseMessage.Content.ReadAs(ResponseText);
+            HttpResponseMessage.Content().ReadAs(ResponseText);
 
             if HttpResponseMessage.IsSuccessStatusCode then begin
                 // Parse response and update submission log

@@ -2684,7 +2684,7 @@ codeunit 50311 "eInvoice UBL Document Builder"
     // ADD: Credit memo specific procedure
     procedure PostCreditMemoToAzureFunction(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; AzureFunctionUrl: Text; var ResponseText: Text)
     var
-        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceJSONGenerator: Codeunit 50302;
     begin
         // FIXED: Use the JSON Generator's credit memo method which already uses correct Invoice structure
         eInvoiceJSONGenerator.PostCreditMemoToAzureFunction(SalesCrMemoHeader, AzureFunctionUrl, ResponseText);

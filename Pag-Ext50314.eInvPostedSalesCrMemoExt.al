@@ -123,16 +123,14 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     LhdnResponse: Text;
                     Success: Boolean;
-                    SuccessMsg: Text;
                 begin
-                    // Direct submission without confirmation
+                    // Suppress generator popups; only show an error on failure
+                    eInvoiceGenerator.SetSuppressUserDialogs(true);
                     Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
-
                     if Success then begin
-                        SuccessMsg := StrSubstNo('Credit Memo %1 successfully signed and submitted to LHDN!' + '\\' + '\\' + 'LHDN Response:' + '\\' + '%2', Rec."No.", FormatLhdnResponse(LhdnResponse));
-                        Message(SuccessMsg);
+                        SendSubmissionNotification(true, Rec."No.", LhdnResponse);
                     end else begin
-                        Message(StrSubstNo('Failed to complete signing and submission process.' + '\\' + 'Response: %1', LhdnResponse));
+                        SendSubmissionNotification(false, Rec."No.", LhdnResponse);
                     end;
                 end;
             }
@@ -281,7 +279,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     RequestHeaders.Add('Accept-Language', 'en');
                     RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
 
-                    // Send request (same method as posted invoice - direct call without TryFunction)
+                    // Send request and use notifications like Posted Sales Invoice
                     if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
                         HttpResponseMessage.Content.ReadAs(ResponseText);
 
@@ -294,16 +292,15 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                                 // Update cancel button state after status refresh
                                 CanCancelEInvoice := IsCancellationAllowed();
 
-                                Message('Status updated successfully from LHDN.');
+                                SendStatusNotification(true, Rec."No.", ResponseText, Rec."eInvoice UUID");
                             end else begin
-                                Message('Status check completed, but unable to parse response.');
+                                SendStatusNotification(false, Rec."No.", 'Unable to parse LHDN response', '');
                             end;
                         end else begin
-                            Message('Failed to retrieve status from LHDN API (Status Code: %1)',
-                                   HttpResponseMessage.HttpStatusCode);
+                            SendStatusNotification(false, Rec."No.", StrSubstNo('HTTP %1', HttpResponseMessage.HttpStatusCode), '');
                         end;
                     end else begin
-                        Message('Failed to connect to LHDN API.');
+                        SendStatusNotification(false, Rec."No.", 'Failed to connect to LHDN API', '');
                     end;
                 end;
             }
@@ -375,6 +372,146 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
     trigger OnAfterGetCurrRecord()
     begin
         CanCancelEInvoice := IsCancellationAllowed();
+    end;
+
+    local procedure SendSubmissionNotification(Success: Boolean; DocNo: Code[20]; LhdnResponse: Text)
+    var
+        Notif: Notification;
+        Msg: Text;
+    begin
+        if Success then
+            Msg := StrSubstNo('LHDN submission successful for Credit Memo %1. %2', DocNo, FormatLhdnResponseInline(LhdnResponse))
+        else
+            Msg := StrSubstNo('LHDN submission failed for Credit Memo %1.\Response: %2', DocNo, CopyStr(LhdnResponse, 1, 250));
+
+        Notif.Scope := NotificationScope::LocalScope;
+        Notif.Message(Msg);
+        Notif.Send();
+    end;
+
+    local procedure FormatLhdnResponseInline(RawResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        AcceptedArray: JsonArray;
+        DocumentJson: JsonObject;
+        SubmissionUid: Text;
+        AcceptedCount: Integer;
+        InvoiceCodeNumber: Text;
+        Uuid: Text;
+        Summary: Text;
+    begin
+        if not ResponseJson.ReadFrom(RawResponse) then
+            exit(StrSubstNo('Raw Response: %1', CopyStr(RawResponse, 1, 200)));
+
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            AcceptedArray := JsonToken.AsArray();
+            AcceptedCount := AcceptedArray.Count();
+            if AcceptedCount > 0 then begin
+                AcceptedArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                        InvoiceCodeNumber := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        Uuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                end;
+            end;
+        end;
+
+        Summary := StrSubstNo('Submission ID: %1 | Accepted Documents: %2', SubmissionUid, Format(AcceptedCount));
+        if InvoiceCodeNumber <> '' then
+            Summary += StrSubstNo(' | Credit Memo: %1', InvoiceCodeNumber);
+        if Uuid <> '' then
+            Summary += StrSubstNo(' | UUID: %1', Uuid);
+
+        exit(Summary);
+    end;
+
+    local procedure SendStatusNotification(Success: Boolean; DocNo: Code[20]; RawResponseOrMessage: Text; CurrentUuid: Text)
+    var
+        Notif: Notification;
+        Msg: Text;
+        Inline: Text;
+    begin
+        if Success then begin
+            Inline := FormatLhdnStatusInline(RawResponseOrMessage, CurrentUuid);
+            Msg := StrSubstNo('LHDN status refreshed for Credit Memo %1. %2', DocNo, Inline);
+        end else begin
+            Msg := StrSubstNo('LHDN status refresh failed for Credit Memo %1. %2', DocNo, CopyStr(RawResponseOrMessage, 1, 250));
+        end;
+
+        Notif.Scope := NotificationScope::LocalScope;
+        Notif.Message(Msg);
+        Notif.Send();
+    end;
+
+    local procedure FormatLhdnStatusInline(RawResponse: Text; CurrentUuid: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        SubmissionUid: Text;
+        DocSummary: JsonArray;
+        DocObj: JsonObject;
+        i: Integer;
+        DocumentStatus: Text;
+        PickedUuid: Text;
+        Summary: Text;
+    begin
+        if not ResponseJson.ReadFrom(RawResponse) then
+            exit(StrSubstNo('Raw Response: %1', CopyStr(RawResponse, 1, 200)));
+
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+        // Prefer document-level status that matches our UUID
+        if ResponseJson.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocSummary := JsonToken.AsArray();
+            for i := 0 to DocSummary.Count() - 1 do begin
+                DocSummary.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocObj := JsonToken.AsObject();
+                    if DocObj.Get('uuid', JsonToken) then
+                        PickedUuid := CleanQuotesFromText(JsonToken.AsValue().AsText());
+                    if (CurrentUuid <> '') and (PickedUuid <> '') and (PickedUuid = CurrentUuid) then begin
+                        if DocObj.Get('status', JsonToken) then
+                            DocumentStatus := CleanQuotesFromText(JsonToken.AsValue().AsText());
+                        break;
+                    end;
+                end;
+            end;
+        end;
+
+        // Fallback to overallStatus if doc-level not found
+        if (DocumentStatus = '') and ResponseJson.Get('overallStatus', JsonToken) then
+            DocumentStatus := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+        // Normalize casing
+        case DocumentStatus.ToLower() of
+            'valid':
+                DocumentStatus := 'Valid';
+            'invalid':
+                DocumentStatus := 'Invalid';
+            'in progress':
+                DocumentStatus := 'In Progress';
+            'partially valid':
+                DocumentStatus := 'Partially Valid';
+            'cancelled':
+                DocumentStatus := 'Cancelled';
+            'rejected':
+                DocumentStatus := 'Rejected';
+        end;
+
+        Summary := StrSubstNo('Submission ID: %1 | Status: %2', SubmissionUid, DocumentStatus);
+        if (PickedUuid <> '') then
+            Summary += StrSubstNo(' | UUID: %1', PickedUuid)
+        else if (CurrentUuid <> '') then
+            Summary += StrSubstNo(' | UUID: %1', CurrentUuid);
+
+        exit(Summary);
     end;
 
     /// <summary>

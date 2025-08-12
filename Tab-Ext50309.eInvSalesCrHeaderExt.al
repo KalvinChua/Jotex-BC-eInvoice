@@ -2,7 +2,7 @@ tableextension 50309 eInvSalesCrHeaderExt extends "Sales Cr.Memo Header"
 {
     fields
     {
-        field(50300; "eInvoice Document Type"; Code[20])
+        field(50306; "eInvoice Document Type"; Code[20])
         {
             Caption = 'e-Invoice Document Type';
             TableRelation = eInvoiceTypes.Code;
@@ -37,7 +37,7 @@ tableextension 50309 eInvSalesCrHeaderExt extends "Sales Cr.Memo Header"
             Caption = 'e-Invoice Submission UID';
             DataClassification = CustomerContent;
         }
-        field(50306; "eInvoice Validation Status"; Text[50])
+        field(50310; "eInvoice Validation Status"; Text[50])
         {
             Caption = 'e-Invoice Validation Status';
             DataClassification = ToBeClassified;
@@ -47,5 +47,9 @@ tableextension 50309 eInvSalesCrHeaderExt extends "Sales Cr.Memo Header"
     begin
         if "eInvoice Version Code" = '' then
             "eInvoice Version Code" := '1.1';
+
+        // Credit memo documents must carry e-Invoice type '02'
+        if "eInvoice Document Type" = '' then
+            "eInvoice Document Type" := '02';
     end;
 }

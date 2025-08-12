@@ -7,7 +7,7 @@ permissionset 50300 "eInvoice Full Access"
     // COMPLETE PERMISSIONS FOR ALL eINVOICE TABLES AND OBJECTS
     // ======================================================================================================
 
-    Permissions = 
+    Permissions =
         // Custom e-Invoice tables
         table "eInvoiceSetup" = X,
         table "eInvoice TIN Log" = X,
@@ -22,7 +22,7 @@ permissionset 50300 "eInvoice Full Access"
         table "eInvoiceUOM" = X,
         table "eInvoice Version" = X,
         table "eInvoice Submission Log" = X,
-        
+
         // Table data permissions
         tabledata "eInvoiceSetup" = RIMD,
         tabledata "eInvoice TIN Log" = RIMD,
@@ -37,7 +37,7 @@ permissionset 50300 "eInvoice Full Access"
         tabledata "eInvoiceUOM" = RIMD,
         tabledata "eInvoice Version" = RIMD,
         tabledata "eInvoice Submission Log" = RIMD,
-        
+
         // Core Business Central tables - CRITICAL for e-Invoice
         tabledata "Sales Invoice Header" = RIMD,
         tabledata "Sales Invoice Line" = RIMD,
@@ -45,7 +45,7 @@ permissionset 50300 "eInvoice Full Access"
         tabledata Vendor = RIMD,
         tabledata Item = RIMD,
         tabledata "Company Information" = RIMD,
-        
+
         // Pages
         page eInvoiceSetupCard = X,
         page "TIN Validation Log" = X,
@@ -63,7 +63,7 @@ permissionset 50300 "eInvoice Full Access"
         page "e-Invoice Submission Log Card" = X,
         page "e-Invoice Submission Log" = X,
         page "Custom Cancellation Reason" = X,
-        
+
         // Codeunits
         codeunit eInvoiceHelper = X,
         codeunit "eInvoice TIN Validator" = X,

@@ -17,7 +17,7 @@ codeunit 50305 "eInv Posting Subscribers"
         SalesInvoiceHeader: Record "Sales Invoice Header";
         SalesCrMemoHeader: Record "Sales Cr.Memo Header";
         Customer: Record Customer;
-        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceJSONGenerator: Codeunit 50302;
         TelemetryDimensions: Dictionary of [Text, Text];
         CompanyInfo: Record "Company Information";
         LhdnResponse: Text;
@@ -40,11 +40,71 @@ codeunit 50305 "eInv Posting Subscribers"
             ProcessPostedCreditMemo(SalesHeader, SalesCrMemoHdrNo);
     end;
 
+    local procedure NotifyAutoSubmission(DocumentKind: Text; DocNo: Code[20]; Success: Boolean; RawResponse: Text)
+    var
+        Notif: Notification;
+        Msg: Text;
+        Inline: Text;
+    begin
+        if Success then begin
+            Inline := FormatInlineSummary(RawResponse);
+            Msg := StrSubstNo('LHDN submission successful for %1 %2. %3', DocumentKind, DocNo, Inline);
+        end else begin
+            Msg := StrSubstNo('LHDN submission failed for %1 %2. Response: %3', DocumentKind, DocNo, CopyStr(RawResponse, 1, 250));
+        end;
+
+        Notif.Scope := NotificationScope::LocalScope;
+        Notif.Message(Msg);
+        Notif.Send();
+    end;
+
+    local procedure FormatInlineSummary(RawResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        AcceptedArray: JsonArray;
+        DocumentJson: JsonObject;
+        SubmissionUid: Text;
+        AcceptedCount: Integer;
+        CodeNumber: Text;
+        Uuid: Text;
+        Summary: Text;
+    begin
+        if not ResponseJson.ReadFrom(RawResponse) then
+            exit(StrSubstNo('Raw Response: %1', CopyStr(RawResponse, 1, 200)));
+
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CopyStr(Format(JsonToken.AsValue()), 1, 100);
+
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            AcceptedArray := JsonToken.AsArray();
+            AcceptedCount := AcceptedArray.Count();
+            if AcceptedCount > 0 then begin
+                AcceptedArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                        CodeNumber := CopyStr(Format(JsonToken.AsValue()), 1, 50);
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        Uuid := CopyStr(Format(JsonToken.AsValue()), 1, 100);
+                end;
+            end;
+        end;
+
+        Summary := StrSubstNo('Submission ID: %1 | Accepted Documents: %2', SubmissionUid, Format(AcceptedCount));
+        if CodeNumber <> '' then
+            Summary += StrSubstNo(' | Document: %1', CodeNumber);
+        if Uuid <> '' then
+            Summary += StrSubstNo(' | UUID: %1', Uuid);
+
+        exit(Summary);
+    end;
+
     local procedure ProcessPostedInvoice(SalesHeader: Record "Sales Header"; SalesInvHdrNo: Code[20]; var CustomerRequiresEInvoice: Boolean; var LhdnResponse: Text)
     var
         SalesInvoiceHeader: Record "Sales Invoice Header";
         Customer: Record Customer;
-        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceJSONGenerator: Codeunit 50302;
         TelemetryDimensions: Dictionary of [Text, Text];
     begin
         // Find the posted invoice and update fields
@@ -70,6 +130,8 @@ codeunit 50305 "eInv Posting Subscribers"
                 // Wait a moment to ensure all data is committed
                 Sleep(2000);
 
+                // Suppress modal popups from generator and use a non-blocking notification
+                eInvoiceJSONGenerator.SetSuppressUserDialogs(true);
                 if eInvoiceJSONGenerator.GetSignedInvoiceAndSubmitToLHDN(SalesInvoiceHeader, LhdnResponse) then begin
                     // Success - log the successful submission
                     Clear(TelemetryDimensions);
@@ -78,6 +140,8 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV01', 'Automatic e-Invoice submission successful',
                         Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
+
+                    NotifyAutoSubmission('Invoice', SalesInvHdrNo, true, LhdnResponse);
                 end else begin
                     // Failure - log the error but don't stop the posting process
                     Clear(TelemetryDimensions);
@@ -86,6 +150,8 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV02', 'Automatic e-Invoice submission failed',
                         Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
+
+                    NotifyAutoSubmission('Invoice', SalesInvHdrNo, false, LhdnResponse);
                 end;
             end;
         end;
@@ -95,7 +161,7 @@ codeunit 50305 "eInv Posting Subscribers"
     var
         SalesCrMemoHeader: Record "Sales Cr.Memo Header";
         Customer: Record Customer;
-        eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceJSONGenerator: Codeunit 50302;
         TelemetryDimensions: Dictionary of [Text, Text];
         CustomerRequiresEInvoice: Boolean;
         LhdnResponse: Text;
@@ -131,6 +197,8 @@ codeunit 50305 "eInv Posting Subscribers"
                 // Wait a moment to ensure all data is committed
                 Sleep(2000);
 
+                // Suppress modal popups from generator and use a non-blocking notification
+                eInvoiceJSONGenerator.SetSuppressUserDialogs(true);
                 if eInvoiceJSONGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse) then begin
                     // Success - log the successful submission
                     Clear(TelemetryDimensions);
@@ -139,6 +207,8 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV08', 'Automatic e-Invoice credit memo submission successful',
                         Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
+
+                    NotifyAutoSubmission('Credit Memo', SalesCrMemoHdrNo, true, LhdnResponse);
                 end else begin
                     // Failure - log the error but don't stop the posting process
                     Clear(TelemetryDimensions);
@@ -147,6 +217,8 @@ codeunit 50305 "eInv Posting Subscribers"
                     Session.LogMessage('0000EIV09', 'Automatic e-Invoice credit memo submission failed',
                         Verbosity::Warning, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher,
                         TelemetryDimensions);
+
+                    NotifyAutoSubmission('Credit Memo', SalesCrMemoHdrNo, false, LhdnResponse);
                 end;
             end;
         end;

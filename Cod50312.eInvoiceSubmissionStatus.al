@@ -9,6 +9,14 @@ codeunit 50312 "eInvoice Submission Status"
     var
         eInvoiceHelper: Codeunit eInvoiceHelper;
 
+    local procedure IsJotexCompany(): Boolean
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        exit(CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD'));
+    end;
+
+
     /// <summary>
     /// OnRun trigger - handles background job execution for status refresh
     /// Called by Job Queue when background refresh is needed
@@ -43,6 +51,10 @@ codeunit 50312 "eInvoice Submission Status"
         DocumentCount: Integer;
         DateTimeReceived: Text;
     begin
+        if not IsJotexCompany() then begin
+            SubmissionDetails := 'Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.';
+            exit(false);
+        end;
         SubmissionDetails := '';
         CorrelationId := CreateGuid();
 
@@ -264,6 +276,10 @@ codeunit 50312 "eInvoice Submission Status"
         IsSuccess: Boolean;
         DocumentType: Text;
     begin
+        if not IsJotexCompany() then begin
+            SubmissionDetails := 'Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.';
+            exit(false);
+        end;
         SubmissionDetails := '';
         CorrelationId := CreateGuid();
         PageNo := 1;
@@ -768,6 +784,10 @@ codeunit 50312 "eInvoice Submission Status"
         DateTimeValidated: Text;
         DocumentStatusReason: Text;
     begin
+        if not IsJotexCompany() then begin
+            DocumentDetails := 'Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.';
+            exit(false);
+        end;
         DocumentDetails := '';
         CorrelationId := CreateGuid();
         PageNo := 1;
@@ -1432,6 +1452,8 @@ codeunit 50312 "eInvoice Submission Status"
         ProcessedCount: Integer;
         DocumentType: Text;
     begin
+        if not IsJotexCompany() then
+            exit;
         UpdatedCount := 0;
         ProcessedCount := 0;
 
@@ -1494,7 +1516,15 @@ codeunit 50312 "eInvoice Submission Status"
         LhdnStatus: Text;
         PipePos: Integer;
         ErrorLogEntry: Record "eInvoice Submission Log";
+        // Variables for DATE_RANGE parameter parsing
+        FromText: Text;
+        ToText: Text;
+        SecondPipe: Integer;
+        FromDate: Date;
+        ToDate: Date;
     begin
+        if not IsJotexCompany() then
+            exit;
         // Find the current job queue entry to get parameters
         JobQueueEntry.SetRange("Object ID to Run", Codeunit::"eInvoice Submission Status");
         JobQueueEntry.SetRange(Status, JobQueueEntry.Status::"In Process");
@@ -1540,6 +1570,19 @@ codeunit 50312 "eInvoice Submission Status"
                         end;
                     end;
                 end;
+            end else if ParameterString.StartsWith('DATE_RANGE|') then begin
+                // Date range background refresh
+                PipePos := ParameterString.IndexOf('|');
+                if PipePos > 0 then begin
+                    FromText := CopyStr(ParameterString, PipePos + 1);
+                    SecondPipe := FromText.IndexOf('|');
+                    if SecondPipe > 0 then begin
+                        ToText := CopyStr(FromText, SecondPipe + 1);
+                        FromText := CopyStr(FromText, 1, SecondPipe - 1);
+                        if Evaluate(FromDate, FromText) and Evaluate(ToDate, ToText) then
+                            ProcessDateRangeForBackground(FromDate, ToDate);
+                    end;
+                end;
             end else begin
                 // Bulk refresh attempt
                 if not TryBulkRefreshForBackground() then begin
@@ -1568,7 +1611,15 @@ codeunit 50312 "eInvoice Submission Status"
         LhdnStatus: Text;
         PipePos: Integer;
         DocumentType: Text;
+        // Variables for DATE_RANGE parameter parsing
+        FromText2: Text;
+        ToText2: Text;
+        SecondPipe2: Integer;
+        FromDate2: Date;
+        ToDate2: Date;
     begin
+        if not IsJotexCompany() then
+            exit;
         // Find the current job queue entry to get parameters
         JobQueueEntry.SetRange("Object ID to Run", Codeunit::"eInvoice Submission Status");
         JobQueueEntry.SetRange(Status, JobQueueEntry.Status::"In Process");
@@ -1614,6 +1665,19 @@ codeunit 50312 "eInvoice Submission Status"
             end else if ParameterString = 'BULK_REFRESH_ALL' then begin
                 // Bulk refresh for all submissions - called from enhanced page action
                 RefreshSubmissionStatusesBackground(); // Use the dedicated background procedure
+            end else if ParameterString.StartsWith('DATE_RANGE|') then begin
+                // Date range background refresh
+                PipePos := ParameterString.IndexOf('|');
+                if PipePos > 0 then begin
+                    FromText2 := CopyStr(ParameterString, PipePos + 1);
+                    SecondPipe2 := FromText2.IndexOf('|');
+                    if SecondPipe2 > 0 then begin
+                        ToText2 := CopyStr(FromText2, SecondPipe2 + 1);
+                        FromText2 := CopyStr(FromText2, 1, SecondPipe2 - 1);
+                        if Evaluate(FromDate2, FromText2) and Evaluate(ToDate2, ToText2) then
+                            ProcessDateRangeForBackground(FromDate2, ToDate2);
+                    end;
+                end;
             end else begin
                 // Default bulk refresh for all submitted entries
                 RefreshAllSubmissionLogStatusesSafe();
@@ -1621,6 +1685,78 @@ codeunit 50312 "eInvoice Submission Status"
         end else begin
             // Fallback to bulk refresh if no job queue entry found
             RefreshAllSubmissionLogStatusesSafe();
+        end;
+    end;
+
+    /// <summary>
+    /// Process a date range for background status refresh
+    /// Filters submission logs by Submission Date and refreshes their status
+    /// </summary>
+    local procedure ProcessDateRangeForBackground(FromDate: Date; ToDate: Date)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionDetails: Text;
+        LhdnStatus: Text;
+        DocumentType: Text;
+        FromDT: DateTime;
+        ToDT: DateTime;
+        TrimmedUid: Text;
+    begin
+        if (FromDate = 0D) or (ToDate = 0D) then
+            exit;
+
+        // Build inclusive DateTime range
+        FromDT := CreateDateTime(FromDate, 000000T);
+        ToDT := CreateDateTime(ToDate, 235959T);
+
+        SubmissionLog.SetFilter("Submission UID", '<>%1', '');
+        SubmissionLog.SetRange("Submission Date", FromDT, ToDT);
+
+        if SubmissionLog.FindSet() then begin
+            repeat
+                // Normalize and validate Submission UID before calling API
+                TrimmedUid := CleanQuotesFromText(SubmissionLog."Submission UID");
+                TrimmedUid := DelChr(TrimmedUid, '<>', ' '); // trim leading/trailing spaces
+
+                if not ValidateSubmissionUid(TrimmedUid) then begin
+                    SubmissionLog."Error Message" := CopyStr(
+                        StrSubstNo('Skipped: Invalid Submission UID format "%1" (trimmed from "%2").', TrimmedUid, SubmissionLog."Submission UID"),
+                        1, MaxStrLen(SubmissionLog."Error Message"));
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    SubmissionLog.Modify();
+                    Sleep(100);
+                    continue;
+                end;
+
+                if CheckSubmissionStatus(TrimmedUid, SubmissionDetails, DocumentType) then begin
+                    if SubmissionLog."Document UUID" <> '' then
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails, SubmissionLog."Document UUID")
+                    else
+                        LhdnStatus := ExtractDocumentStatusFromJson(SubmissionDetails);
+
+                    SubmissionLog.Status := LhdnStatus;
+                    SubmissionLog."Response Date" := CurrentDateTime;
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    if DocumentType <> '' then
+                        SubmissionLog."Document Type" := DocumentType;
+                    SubmissionLog.Modify();
+
+                    // Keep sales invoice header in sync
+                    SynchronizePostedSalesInvoiceStatus(SubmissionLog."Invoice No.", LhdnStatus);
+                end else begin
+                    // Enhance 404 guidance when refreshing by date range
+                    if SubmissionDetails.Contains('HTTP Error 404') then
+                        SubmissionDetails += '\\Hint: 404 usually means the Submission UID was not found in the selected environment.\' +
+                                             'Verify that your e-Invoice Setup Environment matches where this UID was created (Preprod vs Production).';
+
+                    SubmissionLog."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLog."Error Message"));
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    SubmissionLog.Modify();
+                end;
+
+                // Respect API rate limit
+                Sleep(300);
+            until SubmissionLog.Next() = 0;
         end;
     end;
 
@@ -1706,6 +1842,10 @@ codeunit 50312 "eInvoice Submission Status"
         SubmissionDetails: Text;
         LhdnStatus: Text;
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(false);
+        end;
         // Validate input
         if SubmissionLogRec."Submission UID" = '' then begin
             Message('No Submission UID found for this entry.');
@@ -1779,6 +1919,10 @@ codeunit 50312 "eInvoice Submission Status"
         LhdnStatus: Text;
         DocumentType: Text;
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(false);
+        end;
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
             Message('No Submission UID found for this entry. Cannot refresh status.');
@@ -1841,6 +1985,10 @@ codeunit 50312 "eInvoice Submission Status"
         DocumentType: Text;
         ProgressDialog: Dialog;
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(0);
+        end;
         UpdatedCount := 0;
         ProcessedCount := 0;
         ErrorCount := 0;
@@ -1920,6 +2068,10 @@ codeunit 50312 "eInvoice Submission Status"
     /// </summary>
     procedure RefreshSubmissionLogStatusSafe(var SubmissionLogRec: Record "eInvoice Submission Log"): Boolean
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(false);
+        end;
         exit(RefreshSubmissionLogStatusSafeInternal(SubmissionLogRec, true));
     end;
 
@@ -1937,6 +2089,9 @@ codeunit 50312 "eInvoice Submission Status"
         ApiUrl: Text;
         ResponseText: Text;
         LhdnStatus: Text;
+        CorrelationId: Text;
+        SanitizedUid: Text;
+        ErrorDetails: Text;
     begin
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
@@ -1961,28 +2116,46 @@ codeunit 50312 "eInvoice Submission Status"
             exit(false);
         end;
 
-        // Build API URL same as Posted Sales Invoice extension
-        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLogRec."Submission UID")
-        else
-            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SubmissionLogRec."Submission UID");
+        // Sanitize and validate Submission UID
+        SanitizedUid := CleanQuotesFromText(SubmissionLogRec."Submission UID");
+        SanitizedUid := DelChr(SanitizedUid, '<>', ' ');
+        if not ValidateSubmissionUid(SanitizedUid) then begin
+            SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Invalid Submission UID: "%1" (original: "%2").', SanitizedUid, SubmissionLogRec."Submission UID"),
+                                                        1, MaxStrLen(SubmissionLogRec."Error Message"));
+            SubmissionLogRec."Last Updated" := CurrentDateTime;
+            SubmissionLogRec.Modify();
+            if ShowMessages then
+                Message('Invalid Submission UID for this entry.');
+            exit(false);
+        end;
 
-        // Setup request (same as Posted Sales Invoice extension)
-        HttpRequestMessage.Method := 'GET';
+        // Build API URL same as other endpoints
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SanitizedUid)
+        else
+            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', SanitizedUid);
+
+        // Setup request with standard headers per LHDN guidance
+        CorrelationId := CreateGuid();
+        HttpRequestMessage.Method('GET');
         HttpRequestMessage.SetRequestUri(ApiUrl);
 
-        // Set headers (same as Posted Sales Invoice extension)
+        // Set headers
         HttpRequestMessage.GetHeaders(RequestHeaders);
         RequestHeaders.Clear();
         RequestHeaders.Add('Accept', 'application/json');
         RequestHeaders.Add('Accept-Language', 'en');
         RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+        RequestHeaders.Add('Content-Type', 'application/json; charset=utf-8');
+        RequestHeaders.Add('User-Agent', 'BusinessCentral-eInvoice/2.0');
+        RequestHeaders.Add('X-Correlation-ID', CorrelationId);
+        RequestHeaders.Add('X-Request-Source', 'BusinessCentral-SubmissionLog');
 
         // Send request (same method as Posted Sales Invoice extension)
         if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-            HttpResponseMessage.Content.ReadAs(ResponseText);
+            HttpResponseMessage.Content().ReadAs(ResponseText);
 
-            if HttpResponseMessage.IsSuccessStatusCode then begin
+            if HttpResponseMessage.IsSuccessStatusCode() then begin
                 // Extract status using Document UUID for precise matching (same logic as Posted Sales Invoice)
                 if SubmissionLogRec."Document UUID" <> '' then
                     LhdnStatus := ExtractDocumentStatusFromJson(ResponseText, SubmissionLogRec."Document UUID")
@@ -2010,14 +2183,23 @@ codeunit 50312 "eInvoice Submission Status"
                     exit(false);
                 end;
             end else begin
+                // Parse error response for better details when possible
+                if ParseErrorResponse(ResponseText, ErrorDetails) then
+                    ; // ErrorDetails populated
+                if ErrorDetails = '' then
+                    ErrorDetails := StrSubstNo('HTTP Error %1: %2', HttpResponseMessage.HttpStatusCode(), ResponseText);
+
+                // For 404, provide environment hint
+                if HttpResponseMessage.HttpStatusCode() = 404 then
+                    ErrorDetails += StrSubstNo('\\Hint: 404 usually means the Submission UID was not found in the selected environment.\' +
+                                               'Verify that the UID %1 exists in %2.', SanitizedUid, Format(eInvoiceSetup.Environment));
+
                 if ShowMessages then
                     Message('Failed to retrieve status from LHDN API (Status Code: %1). Check the Error Message field for details.',
                            HttpResponseMessage.HttpStatusCode());
 
-                SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('HTTP Error %1: %2',
-                                                                     HttpResponseMessage.HttpStatusCode,
-                                                                     ResponseText),
-                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
+                SubmissionLogRec."Error Message" := CopyStr(ErrorDetails,
+                                                            1, MaxStrLen(SubmissionLogRec."Error Message"));
                 SubmissionLogRec."Last Updated" := CurrentDateTime;
                 SubmissionLogRec.Modify();
                 exit(false);
@@ -2155,6 +2337,10 @@ codeunit 50312 "eInvoice Submission Status"
         ContextRestricted: Boolean;
         FirstError: Text;
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(false);
+        end;
         UpdatedCount := 0;
         ProcessedCount := 0;
         ErrorCount := 0;
@@ -2325,7 +2511,7 @@ codeunit 50312 "eInvoice Submission Status"
     /// </summary>
     local procedure FormatLhdnStatus(StatusValue: Text): Text
     begin
-        case StatusValue.ToLower() of
+        case LowerCase(StatusValue) of
             'valid':
                 exit('Valid');
             'invalid':
@@ -2383,6 +2569,10 @@ codeunit 50312 "eInvoice Submission Status"
         SalesInvoiceHeader: Record "Sales Invoice Header";
         UpdatedCount: Integer;
     begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(0);
+        end;
         UpdatedCount := 0;
 
         // Find all submission log entries with empty Document Type

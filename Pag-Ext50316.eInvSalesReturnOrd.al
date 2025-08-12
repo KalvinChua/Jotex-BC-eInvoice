@@ -84,6 +84,73 @@ pageextension 50316 eInvSalesReturnOrdHeader extends "Sales Return Order"
                     EInvHandler.CopyFieldsFromItemToSalesLines(Rec);
                 end;
             }
+            action(GenerateReturnJSON)
+            {
+                ApplicationArea = All;
+                Caption = 'Generate e-Invoice JSON';
+                Image = ExportFile;
+                ToolTip = 'Generate e-Invoice JSON for Sales Return Order (as Credit Note)';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    TempBlob: Codeunit "Temp Blob";
+                    FileName: Text;
+                    JsonText: Text;
+                    OutStream: OutStream;
+                    InStream: InStream;
+                    SalesHeader: Record "Sales Header";
+                    SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+                begin
+                    // Convert return order to a temporary credit memo JSON using the standard credit memo generator
+                    // by referencing the posted credit memo when available
+                    if SalesCrMemoHeader.Get(Rec."Last Posting No.") then begin
+                        JsonText := eInvoiceGenerator.GenerateCreditMemoEInvoiceJson(SalesCrMemoHeader, false);
+                    end else begin
+                        Error('No posted Credit Memo exists for this Return Order. Post the return first.');
+                    end;
+
+                    FileName := StrSubstNo('eInvoice_Return_%1_%2.json', Rec."No.",
+                        Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+                    TempBlob.CreateOutStream(OutStream);
+                    OutStream.WriteText(JsonText);
+                    TempBlob.CreateInStream(InStream);
+                    DownloadFromStream(InStream, 'Download e-Invoice JSON', '', 'JSON files (*.json)|*.json', FileName);
+                end;
+            }
+            action(SignAndSubmitReturn)
+            {
+                ApplicationArea = All;
+                Caption = 'Sign & Submit to LHDN';
+                Image = ElectronicDoc;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                ToolTip = 'Submission occurs automatically during posting. This action is disabled on Return Orders.';
+                Visible = false;
+                Enabled = false;
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    LhdnResponse: Text;
+                    SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+                    Success: Boolean;
+                begin
+                    if Rec."Last Posting No." = '' then
+                        Error('This return order has not been posted yet. Post it to create a Credit Memo, then submit.');
+
+                    if not SalesCrMemoHeader.Get(Rec."Last Posting No.") then
+                        Error('Posted Credit Memo %1 not found.', Rec."Last Posting No.");
+
+                    // Suppress popups from the generator for this flow
+                    eInvoiceGenerator.SetSuppressUserDialogs(true);
+                    Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(SalesCrMemoHeader, LhdnResponse);
+                    if not Success then
+                        Error('Submission failed: %1', LhdnResponse);
+                end;
+            }
         }
     }
 

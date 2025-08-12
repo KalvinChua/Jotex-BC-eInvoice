@@ -68,6 +68,59 @@ pageextension 50319 eInvSalesReturnOrdArch extends "Sales Return Order Archive"
                     ValidateEInvoiceCompleteness();
                 end;
             }
+            action(SignAndSubmitToLHDN)
+            {
+                ApplicationArea = All;
+                Caption = 'Sign & Submit to LHDN';
+                Image = ElectronicDoc;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                ToolTip = 'Submission occurs during posting. This action is disabled on archived Return Orders.';
+                Visible = false;
+                Enabled = false;
+
+                trigger OnAction()
+                var
+                    SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    LhdnResponse: Text;
+                    Success: Boolean;
+                begin
+                    Error('Submission is handled during posting.');
+                end;
+            }
+            action(GenerateEInvoiceJSON)
+            {
+                ApplicationArea = All;
+                Caption = 'Generate e-Invoice JSON';
+                Image = ExportFile;
+                ToolTip = 'Generate e-Invoice JSON using the linked posted Credit Memo for this archived Return Order.';
+                Visible = IsJotexCompany;
+
+                trigger OnAction()
+                var
+                    SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    TempBlob: Codeunit "Temp Blob";
+                    JsonText: Text;
+                    OutStream: OutStream;
+                    InStream: InStream;
+                    FileName: Text;
+                begin
+                    if not FindLinkedCreditMemo(SalesCrMemoHeader) then
+                        Error('No linked Posted Sales Credit Memo could be found for Return Order %1.', Rec."No.");
+
+                    JsonText := eInvoiceGenerator.GenerateCreditMemoEInvoiceJson(SalesCrMemoHeader, false);
+                    FileName := StrSubstNo('eInvoice_ReturnOrderArch_%1_%2.json', Rec."No.",
+                        Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+                    TempBlob.CreateOutStream(OutStream);
+                    OutStream.WriteText(JsonText);
+                    TempBlob.CreateInStream(InStream);
+                    DownloadFromStream(InStream, 'Download e-Invoice JSON', '', 'JSON files (*.json)|*.json', FileName);
+                end;
+            }
         }
     }
 
@@ -125,5 +178,15 @@ pageextension 50319 eInvSalesReturnOrdArch extends "Sales Return Order Archive"
             Error(MissingFieldsErr, MissingFields)
         else
             Message('All required e-Invoice fields are properly populated.');
+    end;
+
+    local procedure FindLinkedCreditMemo(var SalesCrMemoHeader: Record "Sales Cr.Memo Header"): Boolean
+    begin
+        SalesCrMemoHeader.Reset();
+        SalesCrMemoHeader.SetRange("Return Order No.", Rec."No.");
+        if SalesCrMemoHeader.FindLast() then
+            exit(true);
+
+        exit(false);
     end;
 }

@@ -100,32 +100,59 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Refresh Status';
                 Image = Refresh;
-                ToolTip = 'Refresh the status of the selected submission from LHDN using direct API call';
+                ToolTip = 'Refresh status for the current record or all selected records.';
 
                 trigger OnAction()
                 var
                     SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    SelectedSubmissionLog: Record "eInvoice Submission Log";
+                    SelectedCount: Integer;
+                    UpdatedCount: Integer;
+                    FailedCount: Integer;
                 begin
-                    // Validate selection
-                    if Rec."Submission UID" = '' then begin
-                        Message('Please select a record with a Submission UID to refresh.');
-                        exit;
-                    end;
+                    // If multiple entries are selected, process them in bulk
+                    CurrPage.SetSelectionFilter(SelectedSubmissionLog);
+                    SelectedCount := SelectedSubmissionLog.Count();
 
-                    // Use the same context-safe refresh method as the submission log card
-                    // This ensures consistent document-level status extraction
-                    if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
-                        // If direct method fails due to context restrictions, offer alternatives
-                        if Confirm('Context restrictions detected. Create background job for this entry?') then begin
-                            // Create background job for this specific entry
-                            if SubmissionStatusCU.CreateBackgroundStatusRefreshJob(Rec."Submission UID") then begin
-                                Message('Background job created. Check "Background Jobs" for progress.');
-                            end else begin
-                                Message('Failed to create background job.');
-                            end;
-                        end else begin
-                            // Show alternative options
-                            SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
+                    if SelectedCount > 1 then begin
+                        // Process only those with Submission UID
+                        SelectedSubmissionLog.SetFilter("Submission UID", '<>%1', '');
+                        if SelectedSubmissionLog.Count() = 0 then begin
+                            Message('None of the selected entries have Submission UIDs. Cannot refresh status.');
+                            exit;
+                        end;
+
+                        if not Confirm(StrSubstNo('Refresh status for %1 selected submissions?', SelectedSubmissionLog.Count())) then
+                            exit;
+
+                        UpdatedCount := 0;
+                        FailedCount := 0;
+                        if SelectedSubmissionLog.FindSet() then
+                            repeat
+                                if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SelectedSubmissionLog) then
+                                    UpdatedCount += 1
+                                else
+                                    FailedCount += 1;
+                            until SelectedSubmissionLog.Next() = 0;
+
+                        if FailedCount > 0 then
+                            if Confirm(StrSubstNo('%1 updated. %2 failed due to context. Create background jobs for failed entries?', UpdatedCount, FailedCount)) then
+                                CreateSelectedBackgroundJobs(SelectedSubmissionLog);
+                    end else begin
+                        // Single record flow
+                        if Rec."Submission UID" = '' then begin
+                            Message('Please select a record with a Submission UID to refresh.');
+                            exit;
+                        end;
+
+                        if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
+                            if Confirm('Context restrictions detected. Create background job for this entry?') then begin
+                                if SubmissionStatusCU.CreateBackgroundStatusRefreshJob(Rec."Submission UID") then
+                                    Message('Background job created. Check "Background Jobs" for progress.')
+                                else
+                                    Message('Failed to create background job.');
+                            end else
+                                SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
                         end;
                     end;
 
@@ -137,7 +164,9 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Refresh Selected Statuses';
                 Image = RefreshRegister;
-                ToolTip = 'Refresh the status for only the selected submissions using direct LHDN API calls';
+                ToolTip = 'Refresh the status for selected submissions (use "Refresh Status" instead).';
+                Visible = false;
+                Enabled = false;
 
                 trigger OnAction()
                 var
@@ -211,9 +240,10 @@ page 50316 "e-Invoice Submission Log"
                     ToDate: Date;
                     DateRangeText: Text;
                 begin
-                    // Get date range from user using date picker
-                    if not GetDateRangeFromUser(FromDate, ToDate) then
-                        exit;
+                    // Let user pick exact dates via dialog, fallback to helper if cancelled
+                    if not OpenDateRangeDialog(FromDate, ToDate) then
+                        if not GetDateRangeFromUser(FromDate, ToDate) then
+                            exit;
 
                     // Validate date range
                     if FromDate > ToDate then begin
@@ -231,8 +261,11 @@ page 50316 "e-Invoice Submission Log"
                         exit;
                     end;
 
-                    DateRangeText := StrSubstNo('from %1 to %2', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'));
-                    if not Confirm(StrSubstNo('Refresh status for %1 submissions %2?', TotalEntries, DateRangeText)) then
+                    DateRangeText := StrSubstNo('%1 to %2', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'));
+                    // Confirm (extra prompt for large batches)
+                    if not Confirm(StrSubstNo('Refresh status for %1 submissions (%2)?', TotalEntries, DateRangeText)) then
+                        exit;
+                    if (TotalEntries > 200) and not Confirm('This is a large batch and may take some time. Continue?') then
                         exit;
 
                     UpdatedCount := 0;
@@ -255,6 +288,8 @@ page 50316 "e-Invoice Submission Log"
                         end;
                     end;
 
+                    // Show a concise notification
+                    SendDateRangeSummaryNotification(FromDate, ToDate, TotalEntries, UpdatedCount, FailedCount);
                     CurrPage.Update(false);
                 end;
             }
@@ -613,12 +648,6 @@ page 50316 "e-Invoice Submission Log"
         if not GetDateRangeSimple(FromDate, ToDate) then
             exit(false);
 
-        // Debug: Show selected dates for troubleshooting
-        Message(StrSubstNo('Selected Date Range:\From Date: %1\To Date: %2\Current Date: %3',
-            Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'),
-            Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'),
-            Format(Today, 0, '<Day,2>/<Month,2>/<Year4>')));
-
         // Validate the date range
         if FromDate > ToDate then begin
             Message(StrSubstNo('From Date %1 cannot be later than To Date %2.', Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'), Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>')));
@@ -638,6 +667,23 @@ page 50316 "e-Invoice Submission Log"
         end;
 
         exit(true);
+    end;
+
+    local procedure OpenDateRangeDialog(var FromDate: Date; var ToDate: Date): Boolean
+    var
+        DateDlg: Page "eInv Date Range Picker";
+        F: Date;
+        T: Date;
+    begin
+        // Initialize with sensible defaults (last 7 days)
+        F := CalcDate('-7D', Today);
+        T := Today;
+        DateDlg.SetInitialDates(F, T);
+        if DateDlg.RunModal() = Action::OK then begin
+            DateDlg.GetDates(FromDate, ToDate);
+            exit(true);
+        end;
+        exit(false);
     end;
 
     /// <summary>
@@ -873,5 +919,22 @@ page 50316 "e-Invoice Submission Log"
             Message('Failed to create background job for date range refresh.');
             exit(false);
         end;
+    end;
+
+    local procedure SendDateRangeSummaryNotification(FromDate: Date; ToDate: Date; TotalEntries: Integer; UpdatedCount: Integer; FailedCount: Integer)
+    var
+        Notif: Notification;
+        Msg: Text;
+    begin
+        Msg := StrSubstNo('Date range %1 to %2 | Total: %3 | Updated: %4 | Failed: %5',
+            Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+            Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+            TotalEntries,
+            UpdatedCount,
+            FailedCount);
+
+        Notif.Scope := NotificationScope::LocalScope;
+        Notif.Message(Msg);
+        Notif.Send();
     end;
 }

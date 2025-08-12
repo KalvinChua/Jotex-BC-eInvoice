@@ -37,6 +37,9 @@ codeunit 50302 "eInvoice JSON Generator"
 {
     Permissions = tabledata "Sales Invoice Header" = M,
                   tabledata "Sales Cr.Memo Header" = M;
+
+    var
+        SuppressUserDialogs: Boolean;
     // ======================================================================================================
     // MAIN AZURE FUNCTION INTEGRATION PROCEDURES
     // ======================================================================================================
@@ -60,6 +63,15 @@ codeunit 50302 "eInvoice JSON Generator"
         if not Success then begin
             Error('Failed to communicate with Azure Function: %1', ResponseText);
         end;
+    end;
+
+    /// <summary>
+    /// Controls whether informational Message dialogs are shown to the user.
+    /// Use true to suppress success popups in UI flows (e.g., Return Order submission).
+    /// </summary>
+    procedure SetSuppressUserDialogs(NewValue: Boolean)
+    begin
+        SuppressUserDialogs := NewValue;
     end;
 
     /// <summary>

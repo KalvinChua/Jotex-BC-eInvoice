@@ -12,7 +12,8 @@ codeunit 50325 "eInv Sales Header Enforcer"
         case SalesHeader."Document Type" of
             SalesHeader."Document Type"::Invoice:
                 newValue := '01';
-            SalesHeader."Document Type"::"Credit Memo":
+            SalesHeader."Document Type"::"Credit Memo",
+            SalesHeader."Document Type"::"Return Order":
                 newValue := '02';
             else
                 exit(false);

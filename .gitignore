@@ -1,0 +1,4 @@
+# Ignore compiled AL package artifacts
+*.app
+
+
