@@ -2,9 +2,11 @@ codeunit 50312 "eInvoice Submission Status"
 {
     Permissions = tabledata "eInvoiceSetup" = R,
                   tabledata "eInvoice Submission Log" = RIMD,
-                  tabledata "Sales Invoice Header" = M,
-                  tabledata "Sales Cr.Memo Header" = M,
-                  tabledata "Company Information" = R;
+                  tabledata "Sales Invoice Header" = RIMD,
+                  tabledata "Sales Cr.Memo Header" = RIMD,
+                  tabledata "Company Information" = R,
+                  tabledata "Job Queue Entry" = RIMD,
+                  tabledata "Job Queue Log Entry" = RIMD;
 
     var
         eInvoiceHelper: Codeunit eInvoiceHelper;

@@ -1,8 +1,9 @@
 codeunit 50305 "eInv Posting Subscribers"
 {
-    Permissions = tabledata "Sales Invoice Header" = M,
-                  tabledata "Sales Cr.Memo Header" = M,
-                  tabledata "eInvoice Submission Log" = M;
+    Permissions = tabledata "Sales Invoice Header" = RIMD,
+                  tabledata "Sales Cr.Memo Header" = RIMD,
+                  tabledata "eInvoice Submission Log" = RIMD,
+                  tabledata "Company Information" = R;
 
     // Event to copy header fields after posting is complete AND auto-submit to LHDN
     [EventSubscriber(ObjectType::Codeunit, Codeunit::"Sales-Post", 'OnAfterPostSalesDoc', '', false, false)]

@@ -41,10 +41,15 @@ permissionset 50300 "eInvoice Full Access"
         // Core Business Central tables - CRITICAL for e-Invoice
         tabledata "Sales Invoice Header" = RIMD,
         tabledata "Sales Invoice Line" = RIMD,
+        tabledata "Sales Cr.Memo Header" = RIMD,
+        tabledata "Sales Cr.Memo Line" = RIMD,
         tabledata Customer = RIMD,
         tabledata Vendor = RIMD,
         tabledata Item = RIMD,
         tabledata "Company Information" = RIMD,
+        tabledata "Job Queue Entry" = RIMD,
+        tabledata "Job Queue Log Entry" = RIMD,
+        tabledata "Scheduled Task" = RIMD,
 
         // Pages
         page eInvoiceSetupCard = X,

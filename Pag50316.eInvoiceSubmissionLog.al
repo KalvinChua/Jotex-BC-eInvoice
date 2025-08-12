@@ -95,6 +95,7 @@ page 50316 "e-Invoice Submission Log"
     {
         area(processing)
         {
+
             action(RefreshStatus)
             {
                 ApplicationArea = All;
@@ -129,15 +130,14 @@ page 50316 "e-Invoice Submission Log"
                         FailedCount := 0;
                         if SelectedSubmissionLog.FindSet() then
                             repeat
-                                if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SelectedSubmissionLog) then
+                                if DirectRefreshSingle(SelectedSubmissionLog) then
                                     UpdatedCount += 1
                                 else
                                     FailedCount += 1;
                             until SelectedSubmissionLog.Next() = 0;
 
                         if FailedCount > 0 then
-                            if Confirm(StrSubstNo('%1 updated. %2 failed due to context. Create background jobs for failed entries?', UpdatedCount, FailedCount)) then
-                                CreateSelectedBackgroundJobs(SelectedSubmissionLog);
+                            Message('%1 updated. %2 failed (direct API).', UpdatedCount, FailedCount);
                     end else begin
                         // Single record flow
                         if Rec."Submission UID" = '' then begin
@@ -145,15 +145,8 @@ page 50316 "e-Invoice Submission Log"
                             exit;
                         end;
 
-                        if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
-                            if Confirm('Context restrictions detected. Create background job for this entry?') then begin
-                                if SubmissionStatusCU.CreateBackgroundStatusRefreshJob(Rec."Submission UID") then
-                                    Message('Background job created. Check "Background Jobs" for progress.')
-                                else
-                                    Message('Failed to create background job.');
-                            end else
-                                SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
-                        end;
+                        if not DirectRefreshSingle(Rec) then
+                            Message('Direct API refresh failed for Submission UID %1.', Rec."Submission UID");
                     end;
 
                     CurrPage.Update(false);
@@ -268,28 +261,29 @@ page 50316 "e-Invoice Submission Log"
                     if (TotalEntries > 200) and not Confirm('This is a large batch and may take some time. Continue?') then
                         exit;
 
+                    // Directly process entries in the date range (no background jobs)
                     UpdatedCount := 0;
                     FailedCount := 0;
 
-                    // Process each entry in the date range
+                    SubmissionLog.SetFilter("Submission UID", '<>%1', '');
+                    SubmissionLog.SetRange("Submission Date", CreateDateTime(FromDate, 0T), CreateDateTime(ToDate, 235959T));
+
                     if SubmissionLog.FindSet() then begin
                         repeat
-                            if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SubmissionLog) then
+                            if DirectRefreshSingle(SubmissionLog) then
                                 UpdatedCount += 1
                             else
                                 FailedCount += 1;
+                            // Light rate-limit buffer
+                            Sleep(300);
                         until SubmissionLog.Next() = 0;
                     end;
 
-                    // Handle failures with background job option (no success message)
-                    if FailedCount > 0 then begin
-                        if Confirm(StrSubstNo('Refreshed %1 submissions successfully, %2 failed due to context restrictions %3.\Create background jobs for the failed entries?', UpdatedCount, FailedCount, DateRangeText)) then begin
-                            CreateDateRangeBackgroundJob(FromDate, ToDate);
-                        end;
-                    end;
+                    Message('Direct refresh completed for date range %1 to %2. Updated: %3, Failed: %4.',
+                            Format(FromDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+                            Format(ToDate, 0, '<Day,2>/<Month,2>/<Year4>'),
+                            UpdatedCount, FailedCount);
 
-                    // Show a concise notification
-                    SendDateRangeSummaryNotification(FromDate, ToDate, TotalEntries, UpdatedCount, FailedCount);
                     CurrPage.Update(false);
                 end;
             }
@@ -936,5 +930,118 @@ page 50316 "e-Invoice Submission Log"
         Notif.Scope := NotificationScope::LocalScope;
         Notif.Message(Msg);
         Notif.Send();
+    end;
+
+    /// <summary>
+    /// Direct refresh using the same approach as Posted Sales Invoice page
+    /// </summary>
+    local procedure DirectRefreshSingle(var Entry: Record "eInvoice Submission Log"): Boolean
+    var
+        HttpClient: HttpClient;
+        HttpRequestMessage: HttpRequestMessage;
+        HttpResponseMessage: HttpResponseMessage;
+        RequestHeaders: HttpHeaders;
+        eInvoiceSetup: Record "eInvoiceSetup";
+        eInvoiceHelper: Codeunit eInvoiceHelper;
+        AccessToken: Text;
+        ApiUrl: Text;
+        ResponseText: Text;
+        StatusText: Text;
+        LhdnStatus: Text;
+    begin
+        if Entry."Submission UID" = '' then
+            exit(false);
+
+        if not eInvoiceSetup.Get('SETUP') then
+            exit(false);
+
+        eInvoiceHelper.InitializeHelper();
+        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+        if AccessToken = '' then
+            exit(false);
+
+        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Entry."Submission UID")
+        else
+            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Entry."Submission UID");
+
+        HttpRequestMessage.Method := 'GET';
+        HttpRequestMessage.SetRequestUri(ApiUrl);
+        HttpRequestMessage.GetHeaders(RequestHeaders);
+        RequestHeaders.Clear();
+        RequestHeaders.Add('Accept', 'application/json');
+        RequestHeaders.Add('Accept-Language', 'en');
+        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+            HttpResponseMessage.Content.ReadAs(ResponseText);
+            if HttpResponseMessage.IsSuccessStatusCode then begin
+                // Parse status like posted pages
+                LhdnStatus := ExtractStatusFromApiResponse(ResponseText, Entry."Document UUID");
+                Entry.Status := LhdnStatus;
+                Entry."Response Date" := CurrentDateTime;
+                Entry."Last Updated" := CurrentDateTime;
+                Entry."Error Message" := CopyStr('Status refreshed from LHDN via direct API (Submission Log).', 1, MaxStrLen(Entry."Error Message"));
+                Entry.Modify();
+                exit(true);
+            end;
+        end;
+        exit(false);
+    end;
+
+    local procedure ExtractStatusFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentJson: JsonObject;
+        OverallStatus: Text;
+        DocumentStatus: Text;
+        PickedUuid: Text;
+        i: Integer;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('Unknown');
+
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummaryArray := JsonToken.AsArray();
+            for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                DocumentSummaryArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        PickedUuid := JsonToken.AsValue().AsText();
+                    if (DocumentUuid <> '') and (PickedUuid = DocumentUuid) then
+                        if DocumentJson.Get('status', JsonToken) then begin
+                            DocumentStatus := JsonToken.AsValue().AsText();
+                            exit(NormalizeStatus(DocumentStatus));
+                        end;
+                end;
+            end;
+        end;
+
+        if JsonObject.Get('overallStatus', JsonToken) then
+            OverallStatus := JsonToken.AsValue().AsText();
+        exit(NormalizeStatus(OverallStatus));
+    end;
+
+    local procedure NormalizeStatus(StatusValue: Text): Text
+    begin
+        case LowerCase(StatusValue) of
+            'valid':
+                exit('Valid');
+            'invalid':
+                exit('Invalid');
+            'in progress':
+                exit('In Progress');
+            'partially valid':
+                exit('Partially Valid');
+            'cancelled':
+                exit('Cancelled');
+            'rejected':
+                exit('Rejected');
+            else
+                exit(StatusValue);
+        end;
     end;
 }
