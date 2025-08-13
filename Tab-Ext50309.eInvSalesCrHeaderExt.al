@@ -42,6 +42,16 @@ tableextension 50309 eInvSalesCrHeaderExt extends "Sales Cr.Memo Header"
             Caption = 'e-Invoice Validation Status';
             DataClassification = ToBeClassified;
         }
+        field(50311; "eInvoice QR URL"; Text[250])
+        {
+            Caption = 'e-Invoice QR URL';
+            DataClassification = CustomerContent;
+        }
+        field(50312; "eInvoice QR Image"; Media)
+        {
+            Caption = 'e-Invoice QR Image';
+            DataClassification = CustomerContent;
+        }
     }
     trigger OnInsert()
     begin

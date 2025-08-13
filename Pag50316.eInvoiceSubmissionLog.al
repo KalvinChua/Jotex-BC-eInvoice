@@ -39,6 +39,17 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the document UUID assigned by LHDN MyInvois.';
                 }
+                field("Long ID"; Rec."Long ID")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Long temporary ID returned by LHDN for valid documents.';
+                }
+                field("Validation Link"; Rec."Validation Link")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Public validation URL constructed as {envbaseurl}/uuid-of-document/share/longid.';
+                    ExtendedDatatype = URL;
+                }
                 field("Document Type Description"; Rec."Document Type Description")
                 {
                     ApplicationArea = All;
@@ -132,9 +143,10 @@ page 50316 "e-Invoice Submission Log"
                         FailedCount := 0;
                         if SelectedSubmissionLog.FindSet() then
                             repeat
-                                if DirectRefreshSingle(SelectedSubmissionLog) then
-                                    UpdatedCount += 1
-                                else
+                                if DirectRefreshSingle(SelectedSubmissionLog) then begin
+                                    PopulateValidationLink(SelectedSubmissionLog);
+                                    UpdatedCount += 1;
+                                end else
                                     FailedCount += 1;
                             until SelectedSubmissionLog.Next() = 0;
 
@@ -149,6 +161,7 @@ page 50316 "e-Invoice Submission Log"
 
                         if not DirectRefreshSingle(Rec) then
                             Message('Direct API refresh failed for Submission UID %1.', Rec."Submission UID");
+                        PopulateValidationLink(Rec);
                     end;
 
                     CurrPage.Update(false);
@@ -873,11 +886,109 @@ page 50316 "e-Invoice Submission Log"
                 Entry."Response Date" := CurrentDateTime;
                 Entry."Last Updated" := CurrentDateTime;
                 Entry."Error Message" := CopyStr('Status refreshed from LHDN via direct API (Submission Log).', 1, MaxStrLen(Entry."Error Message"));
+                // Populate UUID if missing
+                if Entry."Document UUID" = '' then
+                    Entry."Document UUID" := CopyStr(ExtractUuidFromApiResponse(ResponseText), 1, MaxStrLen(Entry."Document UUID"));
+                // Extract Long ID when available (Valid/Cancelled docs)
+                Entry."Long ID" := CopyStr(ExtractLongIdFromApiResponse(ResponseText, Entry."Document UUID"), 1, MaxStrLen(Entry."Long ID"));
                 Entry.Modify();
+                // Build and persist validation link and push to posted invoice
+                PopulateValidationLink(Entry);
                 exit(true);
             end;
         end;
         exit(false);
+    end;
+
+    local procedure PopulateValidationLink(var Entry: Record "eInvoice Submission Log")
+    var
+        Setup: Record "eInvoiceSetup";
+        ValidationUrl: Text;
+    begin
+        if not Setup.Get('SETUP') then
+            exit;
+
+        // Ensure Long ID is populated from last response when possible
+        if Entry."Long ID" = '' then
+            exit;
+
+        if Setup.Environment = Setup.Environment::Preprod then
+            ValidationUrl := StrSubstNo('%1/%2/share/%3', 'https://preprod.myinvois.hasil.gov.my', Entry."Document UUID", Entry."Long ID")
+        else
+            ValidationUrl := StrSubstNo('%1/%2/share/%3', 'https://myinvois.hasil.gov.my', Entry."Document UUID", Entry."Long ID");
+
+        Entry."Validation Link" := CopyStr(ValidationUrl, 1, MaxStrLen(Entry."Validation Link"));
+        Entry.Modify();
+
+        // Also update Posted Sales Invoice with QR URL when available
+        UpdatePostedInvoiceQrUrl(Entry."Invoice No.", ValidationUrl);
+    end;
+
+    local procedure UpdatePostedInvoiceQrUrl(InvoiceNo: Code[20]; Url: Text)
+    var
+        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+    begin
+        if (InvoiceNo = '') or (Url = '') then
+            exit;
+
+        // Use codeunit with tabledata permissions to avoid page permission issues
+        eInvoiceGenerator.UpdateInvoiceQrUrl(InvoiceNo, Url);
+    end;
+
+    local procedure ExtractLongIdFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummary: JsonArray;
+        Doc: JsonObject;
+        PickedUuid: Text;
+        LongId: Text;
+        i: Integer;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('');
+
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummary := JsonToken.AsArray();
+            for i := 0 to DocumentSummary.Count() - 1 do begin
+                DocumentSummary.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    Doc := JsonToken.AsObject();
+                    PickedUuid := '';
+                    if Doc.Get('uuid', JsonToken) then
+                        PickedUuid := JsonToken.AsValue().AsText();
+                    if (DocumentUuid = '') or (PickedUuid = DocumentUuid) then begin
+                        if Doc.Get('longId', JsonToken) then
+                            exit(JsonToken.AsValue().AsText());
+                    end;
+                end;
+            end;
+        end;
+        exit('');
+    end;
+
+    local procedure ExtractUuidFromApiResponse(ResponseText: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummary: JsonArray;
+        Doc: JsonObject;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('');
+
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummary := JsonToken.AsArray();
+            if DocumentSummary.Count() > 0 then begin
+                DocumentSummary.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    Doc := JsonToken.AsObject();
+                    if Doc.Get('uuid', JsonToken) then
+                        exit(JsonToken.AsValue().AsText());
+                end;
+            end;
+        end;
+        exit('');
     end;
 
     local procedure ExtractStatusFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text

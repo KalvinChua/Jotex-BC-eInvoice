@@ -168,6 +168,47 @@ codeunit 50302 "eInvoice JSON Generator"
     end;
 
     /// <summary>
+    /// Updates the eInvoice QR URL on the Posted Sales Invoice using modify permissions in this codeunit
+    /// </summary>
+    /// <param name="InvoiceNo">The posted invoice number</param>
+    /// <param name="Url">Validation URL to store</param>
+    /// <returns>True if updated</returns>
+    procedure UpdateInvoiceQrUrl(InvoiceNo: Code[20]; Url: Text): Boolean
+    var
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        if (InvoiceNo = '') or (Url = '') then
+            exit(false);
+
+        if SalesInvoiceHeader.Get(InvoiceNo) then begin
+            SalesInvoiceHeader."eInvoice QR URL" := CopyStr(Url, 1, MaxStrLen(SalesInvoiceHeader."eInvoice QR URL"));
+            exit(SalesInvoiceHeader.Modify());
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
+    /// Updates the eInvoice QR Image media field on the Posted Sales Invoice
+    /// </summary>
+    /// <param name="InvoiceNo">The posted invoice number</param>
+    /// <param name="InS">Image stream to import</param>
+    /// <param name="FileName">Image filename</param>
+    /// <returns>True if updated</returns>
+    procedure UpdateInvoiceQrImage(InvoiceNo: Code[20]; var InS: InStream; FileName: Text): Boolean
+    var
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+    begin
+        if (InvoiceNo = '') then
+            exit(false);
+
+        if SalesInvoiceHeader.Get(InvoiceNo) then begin
+            SalesInvoiceHeader."eInvoice QR Image".ImportStream(InS, FileName);
+            exit(SalesInvoiceHeader.Modify());
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
     /// Updates the eInvoice fields in the Posted Sales Credit Memo with LHDN response data
     /// This procedure has the necessary tabledata permissions to modify the Sales Cr.Memo Header
     /// </summary>
@@ -2908,6 +2949,164 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Update Sales Invoice Header with LHDN response data
         UpdateSalesInvoiceWithLhdnResponse(SalesInvoiceHeader, SubmissionUid, AcceptedArray, AcceptedCount);
+
+        // Background: try to fetch and store Validation URL (requires longId from Get Submission)
+        TryFetchAndStoreValidationLink(SalesInvoiceHeader);
+    end;
+
+    local procedure TryFetchAndStoreValidationLink(var SalesInvoiceHeader: Record "Sales Invoice Header")
+    var
+        RawResponse: Text;
+        LongId: Text;
+        ValidationUrl: Text;
+        Setup: Record "eInvoiceSetup";
+        Attempt: Integer;
+    begin
+        if (SalesInvoiceHeader."eInvoice Submission UID" = '') or (SalesInvoiceHeader."eInvoice UUID" = '') then
+            exit;
+        // Retry up to 3 times (2s, 3s, 5s) to allow LHDN to populate longId
+        for Attempt := 1 to 3 do begin
+            if GetSubmissionDetailsRaw(SalesInvoiceHeader."eInvoice Submission UID", RawResponse) then begin
+                LongId := ExtractLongIdFromApiResponse(RawResponse, SalesInvoiceHeader."eInvoice UUID");
+                if LongId <> '' then
+                    break;
+            end;
+            case Attempt of
+                1:
+                    Sleep(2000);
+                2:
+                    Sleep(3000);
+                else
+                    Sleep(5000);
+            end;
+        end;
+
+        if LongId = '' then
+            exit;
+
+        if not Setup.Get('SETUP') then
+            exit;
+
+        ValidationUrl := BuildValidationUrl(SalesInvoiceHeader."eInvoice UUID", LongId, Setup.Environment);
+        if ValidationUrl = '' then
+            exit;
+
+        if UpdateInvoiceQrUrl(SalesInvoiceHeader."No.", ValidationUrl) then
+            GenerateAndStoreQrImage(SalesInvoiceHeader."No.", ValidationUrl);
+    end;
+
+    local procedure GetSubmissionDetailsRaw(SubmissionUid: Text; var RawResponse: Text): Boolean
+    var
+        HttpClient: HttpClient;
+        RequestMessage: HttpRequestMessage;
+        ResponseMessage: HttpResponseMessage;
+        Setup: Record "eInvoiceSetup";
+        AccessToken: Text;
+        Headers: HttpHeaders;
+        Url: Text;
+    begin
+        RawResponse := '';
+        if SubmissionUid = '' then
+            exit(false);
+
+        if not Setup.Get('SETUP') then
+            exit(false);
+
+        AccessToken := GetLhdnAccessTokenFromHelper(Setup);
+        if AccessToken = '' then
+            exit(false);
+
+        if Setup.Environment = Setup.Environment::Preprod then
+            Url := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=100', SubmissionUid)
+        else
+            Url := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1?pageNo=1&pageSize=100', SubmissionUid);
+
+        RequestMessage.Method('GET');
+        RequestMessage.SetRequestUri(Url);
+        RequestMessage.GetHeaders(Headers);
+        Headers.Add('Authorization', 'Bearer ' + AccessToken);
+        Headers.Add('Accept', 'application/json');
+
+        if not HttpClient.Send(RequestMessage, ResponseMessage) then
+            exit(false);
+
+        ResponseMessage.Content.ReadAs(RawResponse);
+        exit(ResponseMessage.IsSuccessStatusCode);
+    end;
+
+    local procedure ExtractLongIdFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummary: JsonArray;
+        Doc: JsonObject;
+        PickedUuid: Text;
+        i: Integer;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('');
+
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummary := JsonToken.AsArray();
+            for i := 0 to DocumentSummary.Count() - 1 do begin
+                DocumentSummary.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    Doc := JsonToken.AsObject();
+                    PickedUuid := '';
+                    if Doc.Get('uuid', JsonToken) then
+                        PickedUuid := JsonToken.AsValue().AsText();
+                    if (DocumentUuid = '') or (PickedUuid = DocumentUuid) then begin
+                        if Doc.Get('longId', JsonToken) then
+                            exit(JsonToken.AsValue().AsText());
+                    end;
+                end;
+            end;
+        end;
+        exit('');
+    end;
+
+    local procedure BuildValidationUrl(DocumentUuid: Text; LongId: Text; Environment: Option Preprod,Production): Text
+    var
+        BaseUrl: Text;
+    begin
+        if (DocumentUuid = '') or (LongId = '') then
+            exit('');
+
+        if Environment = Environment::Preprod then
+            BaseUrl := 'https://preprod.myinvois.hasil.gov.my'
+        else
+            BaseUrl := 'https://myinvois.hasil.gov.my';
+
+        exit(StrSubstNo('%1/%2/share/%3', BaseUrl, DocumentUuid, LongId));
+    end;
+
+    /// <summary>
+    /// Generates a QR image from the validation URL and stores it on the posted invoice
+    /// </summary>
+    /// <param name="InvoiceNo">Posted invoice number</param>
+    /// <param name="ValidationUrl">Public validation URL</param>
+    local procedure GenerateAndStoreQrImage(InvoiceNo: Code[20]; ValidationUrl: Text)
+    var
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        InS: InStream;
+        QrServiceUrl: Text;
+    begin
+        if (InvoiceNo = '') or (ValidationUrl = '') then
+            exit;
+
+        // Prime LHDN validation endpoint (optional)
+        HttpClient.Get(ValidationUrl, Response);
+
+        // Generate QR image using service
+        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', ValidationUrl);
+        if not HttpClient.Get(QrServiceUrl, Response) then
+            exit;
+        if not Response.IsSuccessStatusCode then
+            exit;
+
+        Response.Content.ReadAs(InS);
+        UpdateInvoiceQrImage(InvoiceNo, InS, 'eInvoiceQR.png');
     end;
 
     local procedure FormatLhdnSuccessMessage(SubmissionUid: Text; StatusCode: Integer; AcceptedCount: Integer; DocumentDetails: Text; CorrelationId: Text; RateLimitInfo: Text): Text
@@ -5090,6 +5289,9 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Update Sales Credit Memo Header with LHDN response data
         UpdateCreditMemoWithLhdnResponse(SalesCrMemoHeader, SubmissionUid, AcceptedArray, AcceptedCount);
+
+        // Background: fetch Validation URL and store QR image for credit memo as well
+        TryFetchAndStoreCreditMemoValidationLink(SalesCrMemoHeader);
     end;
 
     /// <summary>
@@ -5125,6 +5327,98 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Log the submission to the submission log table
         LogCreditMemoSubmissionToTable(SalesCrMemoHeader, SubmissionUid, Uuid, 'Submitted', '', SalesCrMemoHeader."eInvoice Document Type");
+    end;
+
+    local procedure TryFetchAndStoreCreditMemoValidationLink(var SalesCrMemoHeader: Record "Sales Cr.Memo Header")
+    var
+        RawResponse: Text;
+        LongId: Text;
+        ValidationUrl: Text;
+        Setup: Record "eInvoiceSetup";
+        Attempt: Integer;
+    begin
+        if (SalesCrMemoHeader."eInvoice Submission UID" = '') or (SalesCrMemoHeader."eInvoice UUID" = '') then
+            exit;
+        // Retry up to 3 times to allow LHDN to populate longId
+        for Attempt := 1 to 3 do begin
+            if GetSubmissionDetailsRaw(SalesCrMemoHeader."eInvoice Submission UID", RawResponse) then begin
+                LongId := ExtractLongIdFromApiResponse(RawResponse, SalesCrMemoHeader."eInvoice UUID");
+                if LongId <> '' then
+                    break;
+            end;
+            case Attempt of
+                1:
+                    Sleep(2000);
+                2:
+                    Sleep(3000);
+                else
+                    Sleep(5000);
+            end;
+        end;
+
+        if LongId = '' then
+            exit;
+
+        if not Setup.Get('SETUP') then
+            exit;
+
+        ValidationUrl := BuildValidationUrl(SalesCrMemoHeader."eInvoice UUID", LongId, Setup.Environment);
+        if ValidationUrl = '' then
+            exit;
+
+        UpdateCreditMemoQrUrl(SalesCrMemoHeader."No.", ValidationUrl);
+        GenerateAndStoreCreditMemoQrImage(SalesCrMemoHeader."No.", ValidationUrl);
+    end;
+
+    procedure UpdateCreditMemoQrUrl(CreditMemoNo: Code[20]; Url: Text): Boolean
+    var
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+    begin
+        if (CreditMemoNo = '') or (Url = '') then
+            exit(false);
+
+        if SalesCrMemoHeader.Get(CreditMemoNo) then begin
+            SalesCrMemoHeader."eInvoice QR URL" := CopyStr(Url, 1, MaxStrLen(SalesCrMemoHeader."eInvoice QR URL"));
+            exit(SalesCrMemoHeader.Modify());
+        end;
+        exit(false);
+    end;
+
+    procedure UpdateCreditMemoQrImage(CreditMemoNo: Code[20]; var InS: InStream; FileName: Text): Boolean
+    var
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+    begin
+        if (CreditMemoNo = '') then
+            exit(false);
+
+        if SalesCrMemoHeader.Get(CreditMemoNo) then begin
+            SalesCrMemoHeader."eInvoice QR Image".ImportStream(InS, FileName);
+            exit(SalesCrMemoHeader.Modify());
+        end;
+        exit(false);
+    end;
+
+    local procedure GenerateAndStoreCreditMemoQrImage(CreditMemoNo: Code[20]; ValidationUrl: Text)
+    var
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        InS: InStream;
+        QrServiceUrl: Text;
+    begin
+        if (CreditMemoNo = '') or (ValidationUrl = '') then
+            exit;
+
+        // Prime validation endpoint (optional)
+        HttpClient.Get(ValidationUrl, Response);
+
+        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', ValidationUrl);
+        if not HttpClient.Get(QrServiceUrl, Response) then
+            exit;
+        if not Response.IsSuccessStatusCode then
+            exit;
+
+        Response.Content.ReadAs(InS);
+        UpdateCreditMemoQrImage(CreditMemoNo, InS, 'eInvoiceQR.png');
     end;
 
     /// <summary>

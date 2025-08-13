@@ -4,8 +4,9 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     {
         addafter("Invoice Details")
         {
-            group("e-Invoice")
+            group(EInvoiceInfo)
             {
+                Caption = 'e-Invoice';
                 Visible = IsJotexCompany;
                 field("eInvoice Document Type"; Rec."eInvoice Document Type")
                 {
@@ -71,479 +72,513 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Visible = IsJotexCompany;
                     Editable = false; // Read-only - only updated from LHDN API
                 }
+                field("eInvoice QR URL"; Rec."eInvoice QR URL")
+                {
+                    ApplicationArea = All;
+                    Caption = 'Validation URL';
+                    ToolTip = 'Public validation URL generated as {envbaseurl}/uuid-of-document/share/longid.';
+                    Visible = IsJotexCompany;
+                    ExtendedDatatype = URL;
+                    Editable = false;
+                }
+                field("eInvoice QR Image"; Rec."eInvoice QR Image")
+                {
+                    ApplicationArea = All;
+                    ShowCaption = false;
+                    ToolTip = 'Displays the e-Invoice QR as an image when available.';
+                    Visible = IsJotexCompany;
+                    Editable = false;
+                }
             }
         }
-
-
+        addlast(FactBoxes)
+        {
+            part(eInvQrFactBox; "eInvoice QR FactBox")
+            {
+                ApplicationArea = All;
+                Visible = IsJotexCompany;
+                SubPageLink = "No." = FIELD("No.");
+            }
+        }
     }
 
     actions
     {
         addlast(Processing)
         {
-            action(GenerateEInvoiceJSON)
+            group(EInvoiceActions)
             {
-                ApplicationArea = All;
-                Caption = 'Generate e-Invoice JSON';
-                Image = ExportFile;
-                ToolTip = 'Generate e-Invoice in JSON format';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                    TempBlob: Codeunit "Temp Blob";
-                    FileName: Text;
-                    JsonText: Text;
-                    OutStream: OutStream;
-                    InStream: InStream;
-                begin
-                    JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
-
-                    // Create download file
-                    FileName := StrSubstNo('eInvoice_%1_%2.json',
-                        Rec."No.",
-                        Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
-
-                    // Create the file content
-                    TempBlob.CreateOutStream(OutStream);
-                    OutStream.WriteText(JsonText);
-
-                    // Prepare for download
-                    TempBlob.CreateInStream(InStream);
-                    DownloadFromStream(InStream, 'Download e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
-                end;
-            }
-
-            action(SignAndSubmitToLHDN)
-            {
-                ApplicationArea = All;
-                Caption = 'Sign & Submit to LHDN';
+                Caption = 'e-Invoice';
                 Image = ElectronicDoc;
-                Promoted = true;
-                PromotedCategory = Process;
-                PromotedIsBig = true;
-                ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
+                ToolTip = 'e-Invoice actions for LHDN MyInvois';
                 Visible = IsJotexCompany;
 
-                trigger OnAction()
-                var
-                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                    LhdnResponse: Text;
-                    Success: Boolean;
-                begin
-                    // Suppress generator popups and show a non-blocking notification instead
-                    eInvoiceGenerator.SetSuppressUserDialogs(true);
-                    Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
-                    if Success then
-                        SendSubmissionNotification(true, Rec."No.", LhdnResponse)
-                    else
-                        SendSubmissionNotification(false, Rec."No.", LhdnResponse);
-                end;
-            }
+                action(OpenValidationLink)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Open Validation Link';
+                    Image = Web;
+                    ToolTip = 'Open the public validation link in your browser.';
+                    Visible = IsJotexCompany;
+                    Enabled = eInvHasQrUrl;
 
-            action(CheckStatusDirect)
-            {
-                ApplicationArea = All;
-                Caption = 'Check Status (Direct API)';
-                Image = Refresh;
-                ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    HttpClient: HttpClient;
-                    HttpRequestMessage: HttpRequestMessage;
-                    HttpResponseMessage: HttpResponseMessage;
-                    RequestHeaders: HttpHeaders;
-                    AccessToken: Text;
-                    eInvoiceSetup: Record "eInvoiceSetup";
-                    eInvoiceHelper: Codeunit eInvoiceHelper;
-                    ApiUrl: Text;
-                    ResponseText: Text;
-                begin
-                    if Rec."eInvoice Submission UID" = '' then begin
-                        Message('No submission UID found for this invoice.' + '\\' + 'Please submit the invoice to LHDN first.');
-                        exit;
+                    trigger OnAction()
+                    begin
+                        if Rec."eInvoice QR URL" <> '' then
+                            Hyperlink(Rec."eInvoice QR URL");
                     end;
+                }
+                action(GenerateQrImage)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Generate QR Image';
+                    Image = Picture;
+                    ToolTip = 'Generate and store the QR image from the validation URL.';
+                    Visible = IsJotexCompany;
+                    Enabled = eInvHasQrUrl;
 
-                    // Get setup for environment determination
-                    if not eInvoiceSetup.Get('SETUP') then begin
-                        Message('eInvoice Setup not found');
-                        exit;
-                    end;
-
-                    // Get access token using the helper method
-                    eInvoiceHelper.InitializeHelper();
-                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
-                    if AccessToken = '' then begin
-                        Message('Failed to get access token');
-                        exit;
-                    end;
-
-                    // Build API URL same as in the codeunit
-                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
-                    else
-                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
-
-                    // Setup request (same as Document Types API)
-                    HttpRequestMessage.Method := 'GET';
-                    HttpRequestMessage.SetRequestUri(ApiUrl);
-
-                    // Set headers (same as Document Types API)
-                    HttpRequestMessage.GetHeaders(RequestHeaders);
-                    RequestHeaders.Clear();
-                    RequestHeaders.Add('Accept', 'application/json');
-                    RequestHeaders.Add('Accept-Language', 'en');
-                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
-
-                    // Send request (same method as Document Types API)
-                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-                        HttpResponseMessage.Content.ReadAs(ResponseText);
-
-                        if HttpResponseMessage.IsSuccessStatusCode then begin
-                            // Parse the JSON response to extract the status
-                            if UpdateInvoiceStatusFromResponse(ResponseText) then begin
-                                // Try to update the posted invoice field using the codeunit with proper permissions
-                                TryUpdateStatusViaCodeunit(ExtractStatusFromApiResponse(ResponseText));
-
-                                // Update cancel button state after status refresh
-                                CanCancelEInvoice := IsCancellationAllowed();
-
-                                SendStatusNotification(true, Rec."No.", ResponseText, Rec."eInvoice UUID");
-                            end else begin
-                                SendStatusNotification(false, Rec."No.", 'Unable to parse LHDN response', '');
-                            end;
-                        end else begin
-                            SendStatusNotification(false, Rec."No.", StrSubstNo('HTTP %1', HttpResponseMessage.HttpStatusCode), '');
+                    trigger OnAction()
+                    var
+                        HttpClient: HttpClient;
+                        Response: HttpResponseMessage;
+                        QrServiceUrl: Text;
+                        InS: InStream;
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    begin
+                        if Rec."eInvoice QR URL" = '' then begin
+                            Message('No validation URL found.');
+                            exit;
                         end;
-                    end else begin
-                        SendStatusNotification(false, Rec."No.", 'Failed to connect to LHDN API', '');
-                    end;
-                end;
-            }
 
-            action(ViewSubmissionLog)
-            {
-                ApplicationArea = All;
-                Caption = 'View Submission Log';
-                Image = Log;
-                ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    SubmissionLog: Record "eInvoice Submission Log";
-                    SubmissionLogPage: Page "e-Invoice Submission Log";
-                begin
-                    // Filter to show only entries for this invoice
-                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                    if Rec."eInvoice Submission UID" <> '' then
-                        SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
-
-                    SubmissionLogPage.SetTableView(SubmissionLog);
-                    SubmissionLogPage.RunModal();
-                end;
-            }
-
-            action(DiagnoseCancellationStatus)
-            {
-                ApplicationArea = All;
-                Caption = 'Diagnose Cancellation Status';
-                Image = TestFile;
-                ToolTip = 'Check why cancellation status is not updating locally after LHDN cancellation';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    SubmissionLog: Record "eInvoice Submission Log";
-                    CompanyInfo: Record "Company Information";
-                    CancellationHelper: Codeunit "eInvoice Cancellation Helper";
-                    DiagnosticMsg: Text;
-                    RecordCount: Integer;
-                    ValidCount: Integer;
-                    CancelledCount: Integer;
-                begin
-                    DiagnosticMsg := StrSubstNo('Cancellation Status Diagnosis for Invoice: %1\\', Rec."No.");
-
-                    // Check company validation
-                    if not CompanyInfo.Get() then
-                        DiagnosticMsg += 'ERROR: Company Info: Cannot retrieve company information\\'
-                    else if CompanyInfo.Name <> 'JOTEX SDN BHD' then
-                        DiagnosticMsg += StrSubstNo('ERROR: Company Name: "%1" (Expected: "JOTEX SDN BHD")\\', CompanyInfo.Name)
-                    else
-                        DiagnosticMsg += 'OK: Company Validation: JOTEX SDN BHD\\';
-
-                    // Check submission log records
-                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                    RecordCount := SubmissionLog.Count();
-                    DiagnosticMsg += StrSubstNo('INFO: Total Submission Records: %1\\', RecordCount);
-
-                    if RecordCount = 0 then begin
-                        DiagnosticMsg += 'ERROR: No submission log records found for this invoice\\';
-                    end else begin
-                        // Count by status
-                        SubmissionLog.SetRange(Status, 'Valid');
-                        ValidCount := SubmissionLog.Count();
-
-                        SubmissionLog.SetRange(Status, 'Cancelled');
-                        CancelledCount := SubmissionLog.Count();
-
-                        DiagnosticMsg += StrSubstNo('   - Valid Status: %1 records\\', ValidCount);
-                        DiagnosticMsg += StrSubstNo('   - Cancelled Status: %2 records\\', CancelledCount);
-
-                        // Show latest record details
-                        SubmissionLog.SetRange(Status);
-                        if SubmissionLog.FindLast() then begin
-                            DiagnosticMsg += StrSubstNo('LATEST: Latest Record Status: "%1"\\', SubmissionLog.Status);
-                            DiagnosticMsg += StrSubstNo('   Entry No: %1\\', SubmissionLog."Entry No.");
-                            if SubmissionLog."Cancellation Reason" <> '' then
-                                DiagnosticMsg += StrSubstNo('   Cancellation Reason: %1\\', SubmissionLog."Cancellation Reason");
-                            if SubmissionLog."Cancellation Date" <> 0DT then
-                                DiagnosticMsg += StrSubstNo('   Cancellation Date: %1\\', SubmissionLog."Cancellation Date");
+                        // First, call the LHDN validation URL to obtain/prime the response
+                        if not HttpClient.Get(Rec."eInvoice QR URL", Response) then begin
+                            Message('Failed to reach the validation URL.');
+                            exit;
                         end;
+
+                        if not Response.IsSuccessStatusCode then begin
+                            Message('Validation URL returned %1 %2', Response.HttpStatusCode, Response.ReasonPhrase);
+                            exit;
+                        end;
+
+                        // Use a QR generation service to render the QR image from the validation URL
+                        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', Rec."eInvoice QR URL");
+
+                        if not HttpClient.Get(QrServiceUrl, Response) then begin
+                            Message('Failed to connect to QR service.');
+                            exit;
+                        end;
+
+                        if not Response.IsSuccessStatusCode then begin
+                            Message('QR service error: %1 %2', Response.HttpStatusCode, Response.ReasonPhrase);
+                            exit;
+                        end;
+
+                        Response.Content().ReadAs(InS);
+                        if Codeunit::"eInvoice JSON Generator" <> 0 then begin
+                            if Codeunit.Run(Codeunit::"eInvoice JSON Generator") then; // ensure codeunit is loaded
+                        end;
+                        if eInvoiceGenerator.UpdateInvoiceQrImage(Rec."No.", InS, 'eInvoiceQR.png') then
+                            CurrPage.Update(false)
+                        else
+                            Message('Failed to store QR image.');
                     end;
+                }
+                action(GenerateEInvoiceJSON)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Generate e-Invoice JSON';
+                    Image = ExportFile;
+                    ToolTip = 'Generate e-Invoice in JSON format';
+                    Visible = IsJotexCompany;
 
-                    // Test update capability
-                    DiagnosticMsg += '\\TEST: Testing Update Capability...\\';
-                    if CancellationHelper.UpdateCancellationStatusByInvoice(Rec."No.", 'Test diagnostic - no actual change') then
-                        DiagnosticMsg += 'OK: Helper can update records successfully'
-                    else
-                        DiagnosticMsg += 'ERROR: Helper cannot update records - check permissions or data integrity';
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        TempBlob: Codeunit "Temp Blob";
+                        FileName: Text;
+                        JsonText: Text;
+                        OutStream: OutStream;
+                        InStream: InStream;
+                    begin
+                        JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
 
-                    // Add recommendation for status sync
-                    DiagnosticMsg += '\\\\RECOMMENDATION: Status Sync Recommendation:\\';
-                    DiagnosticMsg += 'Use "Check Status (Direct API)" to sync with LHDN\\';
-                    DiagnosticMsg += 'This will check document-level status for cancellation\\\\';
+                        // Create download file
+                        FileName := StrSubstNo('eInvoice_%1_%2.json',
+                            Rec."No.",
+                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
 
-                    // Show current invoice UUID for debugging
-                    DiagnosticMsg += StrSubstNo('DEBUG: Invoice UUID: "%1"\\', Rec."eInvoice UUID");
-                    DiagnosticMsg += StrSubstNo('DEBUG: Submission UID: "%1"', Rec."eInvoice Submission UID");
-                    Message(DiagnosticMsg);
-                end;
-            }
+                        // Create the file content
+                        TempBlob.CreateOutStream(OutStream);
+                        OutStream.WriteText(JsonText);
 
-            action(TestLhdnStatusParsing)
-            {
-                ApplicationArea = All;
-                Caption = 'Test LHDN Status Parsing';
-                Image = TestDatabase;
-                ToolTip = 'Test how LHDN API response is being parsed for status detection';
-                Visible = IsJotexCompany;
-
-                trigger OnAction()
-                var
-                    HttpClient: HttpClient;
-                    HttpRequestMessage: HttpRequestMessage;
-                    HttpResponseMessage: HttpResponseMessage;
-                    RequestHeaders: HttpHeaders;
-                    AccessToken: Text;
-                    eInvoiceSetup: Record "eInvoiceSetup";
-                    eInvoiceHelper: Codeunit eInvoiceHelper;
-                    ApiUrl: Text;
-                    ResponseText: Text;
-                    JsonObject: JsonObject;
-                    JsonToken: JsonToken;
-                    DocumentSummaryArray: JsonArray;
-                    DocumentJson: JsonObject;
-                    DiagnosticMsg: Text;
-                    OverallStatus: Text;
-                    DocumentStatus: Text;
-                    DocumentUuid: Text;
-                    i: Integer;
-                begin
-                    if Rec."eInvoice Submission UID" = '' then begin
-                        Message('No submission UID found for this invoice.');
-                        exit;
+                        // Prepare for download
+                        TempBlob.CreateInStream(InStream);
+                        DownloadFromStream(InStream, 'Download e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
                     end;
+                }
 
-                    // Get setup and access token
-                    if not eInvoiceSetup.Get('SETUP') then begin
-                        Message('eInvoice Setup not found');
-                        exit;
+                action(SignAndSubmitToLHDN)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Sign & Submit to LHDN';
+                    Image = ElectronicDoc;
+                    ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        LhdnResponse: Text;
+                        Success: Boolean;
+                    begin
+                        // Suppress generator popups and show a non-blocking notification instead
+                        eInvoiceGenerator.SetSuppressUserDialogs(true);
+                        Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
+                        if Success then
+                            SendSubmissionNotification(true, Rec."No.", LhdnResponse)
+                        else
+                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
                     end;
+                }
 
-                    eInvoiceHelper.InitializeHelper();
-                    AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
-                    if AccessToken = '' then begin
-                        Message('Failed to get access token');
-                        exit;
-                    end;
+                action(CheckStatusDirect)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Refresh Status';
+                    Image = Refresh;
+                    ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
+                    Visible = IsJotexCompany;
 
-                    // Build API URL
-                    if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
-                        ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
-                    else
-                        ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
+                    trigger OnAction()
+                    var
+                        HttpClient: HttpClient;
+                        HttpRequestMessage: HttpRequestMessage;
+                        HttpResponseMessage: HttpResponseMessage;
+                        RequestHeaders: HttpHeaders;
+                        AccessToken: Text;
+                        eInvoiceSetup: Record "eInvoiceSetup";
+                        eInvoiceHelper: Codeunit eInvoiceHelper;
+                        ApiUrl: Text;
+                        ResponseText: Text;
+                        LongId: Text;
+                        ValidationUrl: Text;
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    begin
+                        if Rec."eInvoice Submission UID" = '' then begin
+                            Message('No submission UID found for this invoice.' + '\\' + 'Please submit the invoice to LHDN first.');
+                            exit;
+                        end;
 
-                    // Make API call
-                    HttpRequestMessage.Method := 'GET';
-                    HttpRequestMessage.SetRequestUri(ApiUrl);
-                    HttpRequestMessage.GetHeaders(RequestHeaders);
-                    RequestHeaders.Clear();
-                    RequestHeaders.Add('Accept', 'application/json');
-                    RequestHeaders.Add('Accept-Language', 'en');
-                    RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+                        // Get setup for environment determination
+                        if not eInvoiceSetup.Get('SETUP') then begin
+                            Message('eInvoice Setup not found');
+                            exit;
+                        end;
 
-                    if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
-                        HttpResponseMessage.Content.ReadAs(ResponseText);
+                        // Get access token using the helper method
+                        eInvoiceHelper.InitializeHelper();
+                        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+                        if AccessToken = '' then begin
+                            Message('Failed to get access token');
+                            exit;
+                        end;
 
-                        if HttpResponseMessage.IsSuccessStatusCode then begin
-                            DiagnosticMsg := StrSubstNo('LHDN API Status Parsing Test for Invoice: %1\\\\', Rec."No.");
+                        // Build API URL same as in the codeunit
+                        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
+                        else
+                            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
 
-                            // Parse the JSON response
-                            if JsonObject.ReadFrom(ResponseText) then begin
-                                // Check submission-level status
-                                if JsonObject.Get('overallStatus', JsonToken) then begin
-                                    OverallStatus := JsonToken.AsValue().AsText();
-                                    DiagnosticMsg += StrSubstNo('INFO: Submission Level Status (overallStatus): "%1"\\', OverallStatus);
-                                end else begin
-                                    DiagnosticMsg += 'ERROR: No overallStatus field found\\';
-                                end;
+                        // Setup request (same as Document Types API)
+                        HttpRequestMessage.Method := 'GET';
+                        HttpRequestMessage.SetRequestUri(ApiUrl);
 
-                                // Check document-level status
-                                if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
-                                    DocumentSummaryArray := JsonToken.AsArray();
-                                    DiagnosticMsg += StrSubstNo('LATEST: Document Summary Array Count: %1\\\\', DocumentSummaryArray.Count());
+                        // Set headers (same as Document Types API)
+                        HttpRequestMessage.GetHeaders(RequestHeaders);
+                        RequestHeaders.Clear();
+                        RequestHeaders.Add('Accept', 'application/json');
+                        RequestHeaders.Add('Accept-Language', 'en');
+                        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
 
-                                    // Show details for each document
-                                    for i := 0 to DocumentSummaryArray.Count() - 1 do begin
-                                        DocumentSummaryArray.Get(i, JsonToken);
-                                        if JsonToken.IsObject() then begin
-                                            DocumentJson := JsonToken.AsObject();
+                        // Send request (same method as Document Types API)
+                        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+                            HttpResponseMessage.Content.ReadAs(ResponseText);
 
-                                            // Get document details
-                                            DocumentUuid := '';
-                                            DocumentStatus := '';
+                            if HttpResponseMessage.IsSuccessStatusCode then begin
+                                // Parse the JSON response to extract the status
+                                if UpdateInvoiceStatusFromResponse(ResponseText) then begin
+                                    // Try to update the posted invoice field using the codeunit with proper permissions
+                                    TryUpdateStatusViaCodeunit(ExtractStatusFromApiResponse(ResponseText));
 
-                                            if DocumentJson.Get('uuid', JsonToken) then
-                                                DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
-                                            if DocumentJson.Get('status', JsonToken) then
-                                                DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                    // Update cancel button state after status refresh
+                                    CanCancelEInvoice := IsCancellationAllowed();
 
-                                            DiagnosticMsg += StrSubstNo('Document %1:\\', i + 1);
-                                            DiagnosticMsg += StrSubstNo('   UUID: "%1"\\', DocumentUuid);
-                                            DiagnosticMsg += StrSubstNo('   Status: "%1"\\', DocumentStatus);
-
-                                            // Check if this matches our invoice
-                                            if DocumentUuid = Rec."eInvoice UUID" then
-                                                DiagnosticMsg += '   OK: This matches our invoice UUID\\';
-
-                                            DiagnosticMsg += '\\';
-                                        end;
+                                    // Update validation URL and QR availability when longId is available
+                                    LongId := ExtractLongIdFromApiResponse(ResponseText, Rec."eInvoice UUID");
+                                    if LongId <> '' then begin
+                                        ValidationUrl := BuildValidationUrl(Rec."eInvoice UUID", LongId, eInvoiceSetup.Environment);
+                                        if eInvoiceGenerator.UpdateInvoiceQrUrl(Rec."No.", ValidationUrl) then
+                                            CurrPage.Update(false);
                                     end;
 
-                                    DiagnosticMsg += StrSubstNo('DEBUG: Our Invoice UUID: "%1"\\', Rec."eInvoice UUID");
-                                    DiagnosticMsg += '\\Conclusion: ';
-
-                                    // Test the actual parsing logic
-                                    if (DocumentUuid = Rec."eInvoice UUID") and (DocumentStatus <> '') then
-                                        DiagnosticMsg += StrSubstNo('Document-level status "%1" should be used', DocumentStatus)
-                                    else
-                                        DiagnosticMsg += StrSubstNo('Fallback to submission-level status "%1"', OverallStatus);
-
+                                    SendStatusNotification(true, Rec."No.", ResponseText, Rec."eInvoice UUID");
                                 end else begin
-                                    DiagnosticMsg += 'ERROR: No documentSummary array found';
+                                    SendStatusNotification(false, Rec."No.", 'Unable to parse LHDN response', '');
                                 end;
                             end else begin
-                                DiagnosticMsg += 'ERROR: Failed to parse JSON response';
+                                SendStatusNotification(false, Rec."No.", StrSubstNo('HTTP %1', HttpResponseMessage.HttpStatusCode), '');
+                            end;
+                        end else begin
+                            SendStatusNotification(false, Rec."No.", 'Failed to connect to LHDN API', '');
+                        end;
+                    end;
+                }
+
+                action(ViewSubmissionLog)
+                {
+                    ApplicationArea = All;
+                    Caption = 'View Submission Log';
+                    Image = Log;
+                    ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        SubmissionLog: Record "eInvoice Submission Log";
+                        SubmissionLogPage: Page "e-Invoice Submission Log";
+                    begin
+                        // Filter to show only entries for this invoice
+                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                        if Rec."eInvoice Submission UID" <> '' then
+                            SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
+
+                        SubmissionLogPage.SetTableView(SubmissionLog);
+                        SubmissionLogPage.RunModal();
+                    end;
+                }
+
+                // DiagnoseCancellationStatus action removed per requirement
+
+                action(TestLhdnStatusParsing)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Test LHDN Status Parsing';
+                    Image = TestDatabase;
+                    ToolTip = 'Test how LHDN API response is being parsed for status detection';
+                    Visible = false;
+
+                    trigger OnAction()
+                    var
+                        HttpClient: HttpClient;
+                        HttpRequestMessage: HttpRequestMessage;
+                        HttpResponseMessage: HttpResponseMessage;
+                        RequestHeaders: HttpHeaders;
+                        AccessToken: Text;
+                        eInvoiceSetup: Record "eInvoiceSetup";
+                        eInvoiceHelper: Codeunit eInvoiceHelper;
+                        ApiUrl: Text;
+                        ResponseText: Text;
+                        JsonObject: JsonObject;
+                        JsonToken: JsonToken;
+                        DocumentSummaryArray: JsonArray;
+                        DocumentJson: JsonObject;
+                        DiagnosticMsg: Text;
+                        OverallStatus: Text;
+                        DocumentStatus: Text;
+                        DocumentUuid: Text;
+                        i: Integer;
+                    begin
+                        if Rec."eInvoice Submission UID" = '' then begin
+                            Message('No submission UID found for this invoice.');
+                            exit;
+                        end;
+
+                        // Get setup and access token
+                        if not eInvoiceSetup.Get('SETUP') then begin
+                            Message('eInvoice Setup not found');
+                            exit;
+                        end;
+
+                        eInvoiceHelper.InitializeHelper();
+                        AccessToken := eInvoiceHelper.GetAccessTokenFromSetup(eInvoiceSetup);
+                        if AccessToken = '' then begin
+                            Message('Failed to get access token');
+                            exit;
+                        end;
+
+                        // Build API URL
+                        if eInvoiceSetup.Environment = eInvoiceSetup.Environment::Preprod then
+                            ApiUrl := StrSubstNo('https://preprod-api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID")
+                        else
+                            ApiUrl := StrSubstNo('https://api.myinvois.hasil.gov.my/api/v1.0/documentsubmissions/%1', Rec."eInvoice Submission UID");
+
+                        // Make API call
+                        HttpRequestMessage.Method := 'GET';
+                        HttpRequestMessage.SetRequestUri(ApiUrl);
+                        HttpRequestMessage.GetHeaders(RequestHeaders);
+                        RequestHeaders.Clear();
+                        RequestHeaders.Add('Accept', 'application/json');
+                        RequestHeaders.Add('Accept-Language', 'en');
+                        RequestHeaders.Add('Authorization', 'Bearer ' + AccessToken);
+
+                        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+                            HttpResponseMessage.Content.ReadAs(ResponseText);
+
+                            if HttpResponseMessage.IsSuccessStatusCode then begin
+                                DiagnosticMsg := StrSubstNo('LHDN API Status Parsing Test for Invoice: %1\\\\', Rec."No.");
+
+                                // Parse the JSON response
+                                if JsonObject.ReadFrom(ResponseText) then begin
+                                    // Check submission-level status
+                                    if JsonObject.Get('overallStatus', JsonToken) then begin
+                                        OverallStatus := JsonToken.AsValue().AsText();
+                                        DiagnosticMsg += StrSubstNo('INFO: Submission Level Status (overallStatus): "%1"\\', OverallStatus);
+                                    end else begin
+                                        DiagnosticMsg += 'ERROR: No overallStatus field found\\';
+                                    end;
+
+                                    // Check document-level status
+                                    if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+                                        DocumentSummaryArray := JsonToken.AsArray();
+                                        DiagnosticMsg += StrSubstNo('LATEST: Document Summary Array Count: %1\\\\', DocumentSummaryArray.Count());
+
+                                        // Show details for each document
+                                        for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+                                            DocumentSummaryArray.Get(i, JsonToken);
+                                            if JsonToken.IsObject() then begin
+                                                DocumentJson := JsonToken.AsObject();
+
+                                                // Get document details
+                                                DocumentUuid := '';
+                                                DocumentStatus := '';
+
+                                                if DocumentJson.Get('uuid', JsonToken) then
+                                                    DocumentUuid := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                                                if DocumentJson.Get('status', JsonToken) then
+                                                    DocumentStatus := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                                                DiagnosticMsg += StrSubstNo('Document %1:\\', i + 1);
+                                                DiagnosticMsg += StrSubstNo('   UUID: "%1"\\', DocumentUuid);
+                                                DiagnosticMsg += StrSubstNo('   Status: "%1"\\', DocumentStatus);
+
+                                                // Check if this matches our invoice
+                                                if DocumentUuid = Rec."eInvoice UUID" then
+                                                    DiagnosticMsg += '   OK: This matches our invoice UUID\\';
+
+                                                DiagnosticMsg += '\\';
+                                            end;
+                                        end;
+
+                                        DiagnosticMsg += StrSubstNo('DEBUG: Our Invoice UUID: "%1"\\', Rec."eInvoice UUID");
+                                        DiagnosticMsg += '\\Conclusion: ';
+
+                                        // Test the actual parsing logic
+                                        if (DocumentUuid = Rec."eInvoice UUID") and (DocumentStatus <> '') then
+                                            DiagnosticMsg += StrSubstNo('Document-level status "%1" should be used', DocumentStatus)
+                                        else
+                                            DiagnosticMsg += StrSubstNo('Fallback to submission-level status "%1"', OverallStatus);
+
+                                    end else begin
+                                        DiagnosticMsg += 'ERROR: No documentSummary array found';
+                                    end;
+                                end else begin
+                                    DiagnosticMsg += 'ERROR: Failed to parse JSON response';
+                                end;
+
+                                Message(DiagnosticMsg);
+                            end else begin
+                                Message('Failed to retrieve status from LHDN API (Status Code: %1)', HttpResponseMessage.HttpStatusCode);
+                            end;
+                        end else begin
+                            Message('Failed to connect to LHDN API.');
+                        end;
+                    end;
+                }
+
+                action(CancelEInvoice)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Cancel e-Invoice';
+                    Image = Cancel;
+                    ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
+                    Visible = IsJotexCompany;
+                    Enabled = CanCancelEInvoice;
+
+                    trigger OnAction()
+                    var
+                        eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
+                        CancellationReason: Text;
+                        SubmissionLog: Record "eInvoice Submission Log";
+                        ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
+                        ReasonPrompt: Label 'Please enter the reason for cancellation:';
+                    begin
+                        // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
+                        if not IsCancellationAllowed() then begin
+                            // Provide specific message based on current status
+                            if Rec."eInvoice Validation Status" = 'Cancelled' then begin
+                                Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
+                                exit;
                             end;
 
-                            Message(DiagnosticMsg);
-                        end else begin
-                            Message('Failed to retrieve status from LHDN API (Status Code: %1)', HttpResponseMessage.HttpStatusCode);
-                        end;
-                    end else begin
-                        Message('Failed to connect to LHDN API.');
-                    end;
-                end;
-            }
+                            SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                            if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
+                                Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
+                                        SubmissionLog."Cancellation Reason",
+                                        Format(SubmissionLog."Cancellation Date"));
+                                exit;
+                            end;
 
-            action(CancelEInvoice)
-            {
-                ApplicationArea = All;
-                Caption = 'Cancel e-Invoice';
-                Image = Cancel;
-                Promoted = true;
-                PromotedCategory = Process;
-                ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
-                Visible = IsJotexCompany;
-                Enabled = CanCancelEInvoice;
+                            if Rec."eInvoice Submission UID" = '' then begin
+                                Message('This invoice has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
+                                exit;
+                            end;
 
-                trigger OnAction()
-                var
-                    eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
-                    CancellationReason: Text;
-                    SubmissionLog: Record "eInvoice Submission Log";
-                    ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
-                    ReasonPrompt: Label 'Please enter the reason for cancellation:';
-                begin
-                    // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
-                    if not IsCancellationAllowed() then begin
-                        // Provide specific message based on current status
-                        if Rec."eInvoice Validation Status" = 'Cancelled' then begin
-                            Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
+                            Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
+                                    Rec."eInvoice Validation Status");
                             exit;
                         end;
 
+                        // Verify that the invoice has been submitted and is valid
                         SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                        if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
-                            Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
-                                    SubmissionLog."Cancellation Reason",
-                                    Format(SubmissionLog."Cancellation Date"));
+                        SubmissionLog.SetRange(Status, 'Valid');
+                        if not SubmissionLog.FindLast() then begin
+                            Message('This invoice has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
                             exit;
                         end;
 
-                        if Rec."eInvoice Submission UID" = '' then begin
-                            Message('This invoice has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
+                        // Confirm cancellation
+                        if not Confirm(ConfirmMsg, false, Rec."No.") then
                             exit;
-                        end;
 
-                        Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
-                                Rec."eInvoice Validation Status");
-                        exit;
-                    end;
+                        // Get cancellation reason
+                        CancellationReason := SelectCancellationReason();
+                        if CancellationReason = '' then
+                            exit;
 
-                    // Verify that the invoice has been submitted and is valid
-                    SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                    SubmissionLog.SetRange(Status, 'Valid');
-                    if not SubmissionLog.FindLast() then begin
-                        Message('This invoice has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
-                        exit;
-                    end;
-
-                    // Confirm cancellation
-                    if not Confirm(ConfirmMsg, false, Rec."No.") then
-                        exit;
-
-                    // Get cancellation reason
-                    CancellationReason := SelectCancellationReason();
-                    if CancellationReason = '' then
-                        exit;
-
-                    // Proceed with cancellation
-                    ClearLastError();
-                    if eInvPostingSubscribers.CancelEInvoiceDocument(Rec, CancellationReason) then begin
-                        // Refresh the page to show updated status and disable cancel button
-                        CanCancelEInvoice := IsCancellationAllowed();
-                        CurrPage.Update(false);
-                    end else begin
-                        // Try alternative method with transaction isolation
+                        // Proceed with cancellation
                         ClearLastError();
-                        if eInvPostingSubscribers.CancelEInvoiceDocumentWithIsolation(Rec, CancellationReason) then begin
-                            Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                        if eInvPostingSubscribers.CancelEInvoiceDocument(Rec, CancellationReason) then begin
+                            // Refresh the page to show updated status and disable cancel button
                             CanCancelEInvoice := IsCancellationAllowed();
                             CurrPage.Update(false);
                         end else begin
-                            // Show any error that occurred
-                            if GetLastErrorText() <> '' then
-                                Message('Cancellation failed with error:\%1', GetLastErrorText())
-                            else
-                                Message('Cancellation operation failed. Please check the submission log for details.');
+                            // Try alternative method with transaction isolation
+                            ClearLastError();
+                            if eInvPostingSubscribers.CancelEInvoiceDocumentWithIsolation(Rec, CancellationReason) then begin
+                                Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                                CanCancelEInvoice := IsCancellationAllowed();
+                                CurrPage.Update(false);
+                            end else begin
+                                // Show any error that occurred
+                                if GetLastErrorText() <> '' then
+                                    Message('Cancellation failed with error:\%1', GetLastErrorText())
+                                else
+                                    Message('Cancellation operation failed. Please check the submission log for details.');
+                            end;
                         end;
                     end;
-                end;
+                }
             }
         }
     }
@@ -551,6 +586,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     var
         IsJotexCompany: Boolean;
         CanCancelEInvoice: Boolean;
+        eInvHasQrUrl: Boolean;
 
     trigger OnOpenPage()
     var
@@ -558,11 +594,60 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     begin
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
         CanCancelEInvoice := IsCancellationAllowed();
+        eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
     end;
 
     trigger OnAfterGetCurrRecord()
     begin
         CanCancelEInvoice := IsCancellationAllowed();
+        eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
+    end;
+
+    local procedure ExtractLongIdFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummary: JsonArray;
+        Doc: JsonObject;
+        PickedUuid: Text;
+        LongId: Text;
+        i: Integer;
+    begin
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit('');
+
+        if JsonObject.Get('documentSummary', JsonToken) and JsonToken.IsArray() then begin
+            DocumentSummary := JsonToken.AsArray();
+            for i := 0 to DocumentSummary.Count() - 1 do begin
+                DocumentSummary.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    Doc := JsonToken.AsObject();
+                    PickedUuid := '';
+                    if Doc.Get('uuid', JsonToken) then
+                        PickedUuid := JsonToken.AsValue().AsText();
+                    if (DocumentUuid = '') or (PickedUuid = DocumentUuid) then begin
+                        if Doc.Get('longId', JsonToken) then
+                            exit(JsonToken.AsValue().AsText());
+                    end;
+                end;
+            end;
+        end;
+        exit('');
+    end;
+
+    local procedure BuildValidationUrl(DocumentUuid: Text; LongId: Text; Environment: Option Preprod,Production): Text
+    var
+        BaseUrl: Text;
+    begin
+        if (DocumentUuid = '') or (LongId = '') then
+            exit('');
+
+        if Environment = Environment::Preprod then
+            BaseUrl := 'https://preprod.myinvois.hasil.gov.my'
+        else
+            BaseUrl := 'https://myinvois.hasil.gov.my';
+
+        exit(StrSubstNo('%1/%2/share/%3', BaseUrl, DocumentUuid, LongId));
     end;
 
     /// <summary>

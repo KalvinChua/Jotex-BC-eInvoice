@@ -8,19 +8,26 @@ tableextension 50305 eInvSalesHeader extends "Sales Header"
             TableRelation = eInvoiceTypes.Code;
             DataClassification = ToBeClassified;
         }
-        field(50301; "eInvoice Payment Mode"; Code[20])
+        field(50307; "eInvoice Payment Mode"; Code[20])
         {
             Caption = 'e-Invoice Payment Mode';
             TableRelation = "Payment Modes".Code;
             DataClassification = ToBeClassified;
         }
-        field(50302; "eInvoice Currency Code"; Code[20])
+        field(50311; "eInvoice QR URL (Copy)"; Text[250])
+        {
+            Caption = 'e-Invoice QR URL (Copy Buffer)';
+            DataClassification = CustomerContent;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Used to avoid copy errors when creating corrective documents. Not shown on pages.';
+        }
+        field(50308; "eInvoice Currency Code"; Code[20])
         {
             Caption = 'e-Invoice Currency Code';
             TableRelation = "Currency Codes".Code;
             DataClassification = ToBeClassified;
         }
-        field(50303; "eInvoice Version Code"; Code[20])
+        field(50309; "eInvoice Version Code"; Code[20])
         {
             Caption = 'e-Invoice Version Code';
             TableRelation = "eInvoice Version".Code;

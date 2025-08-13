@@ -158,6 +158,18 @@ codeunit 50305 "eInv Posting Subscribers"
         end;
     end;
 
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Copy Document Mgt.", 'OnBeforeCopySalesHeaderFromPostedInvoice', '', false, false)]
+    local procedure PreventQrUrlCopy(var ToSalesHeader: Record "Sales Header")
+    begin
+        // Clear any potential URL text mapped into our Code[20] fields during copy
+        if StrLen(ToSalesHeader."eInvoice Payment Mode") > MaxStrLen(ToSalesHeader."eInvoice Payment Mode") then
+            Clear(ToSalesHeader."eInvoice Payment Mode");
+        if StrLen(ToSalesHeader."eInvoice Currency Code") > MaxStrLen(ToSalesHeader."eInvoice Currency Code") then
+            Clear(ToSalesHeader."eInvoice Currency Code");
+        if StrLen(ToSalesHeader."eInvoice Version Code") > MaxStrLen(ToSalesHeader."eInvoice Version Code") then
+            ToSalesHeader."eInvoice Version Code" := '1.1';
+    end;
+
     local procedure ProcessPostedCreditMemo(SalesHeader: Record "Sales Header"; SalesCrMemoHdrNo: Code[20])
     var
         SalesCrMemoHeader: Record "Sales Cr.Memo Header";

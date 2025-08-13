@@ -126,6 +126,16 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Response Preview';
             DataClassification = CustomerContent;
         }
+        field(25; "Long ID"; Text[200])
+        {
+            Caption = 'Long ID';
+            DataClassification = CustomerContent;
+        }
+        field(26; "Validation Link"; Text[250])
+        {
+            Caption = 'Validation Link';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys

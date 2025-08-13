@@ -745,6 +745,25 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
+    /// Build validation link using env base URL, UUID and Long ID per SDK guidance
+    /// Docs: https://sdk.myinvois.hasil.gov.my/einvoicingapi/07-get-document/
+    /// </summary>
+    local procedure BuildValidationLink(DocumentUuid: Text; LongId: Text; Environment: Option Preprod,Production): Text
+    var
+        BaseUrl: Text;
+    begin
+        if (DocumentUuid = '') or (LongId = '') then
+            exit('');
+
+        if Environment = Environment::Preprod then
+            BaseUrl := 'https://preprod.myinvois.hasil.gov.my'
+        else
+            BaseUrl := 'https://myinvois.hasil.gov.my';
+
+        exit(StrSubstNo('%1/%2/share/%3', BaseUrl, DocumentUuid, LongId));
+    end;
+
+    /// <summary>
     /// Get submission UID from LHDN API
     /// Simplified method to get just the submission UID from the API
     /// </summary>
