@@ -112,6 +112,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
                 Visible = IsJotexCompany;
+                ShowAs = SplitButton;
 
                 action(OpenValidationLink)
                 {
@@ -121,6 +122,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Open the public validation link in your browser.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     begin
@@ -136,6 +139,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Generate and store the QR image from the validation URL.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -191,6 +196,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = ExportFile;
                     ToolTip = 'Generate e-Invoice in JSON format';
                     Visible = IsJotexCompany;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -225,6 +232,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = ElectronicDoc;
                     ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
                     Visible = IsJotexCompany;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -249,6 +258,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = Refresh;
                     ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
                     Visible = IsJotexCompany;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -342,6 +353,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = Log;
                     ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
                     Visible = IsJotexCompany;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
@@ -504,10 +517,12 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                     Visible = IsJotexCompany;
                     Enabled = CanCancelEInvoice;
+                    Promoted = true;
+                    PromotedCategory = Process;
 
                     trigger OnAction()
                     var
-                        eInvPostingSubscribers: Codeunit "eInv Posting Subscribers";
+                        eInvoiceCancellationHelper: Codeunit "eInvoice Cancellation Helper";
                         CancellationReason: Text;
                         SubmissionLog: Record "eInvoice Submission Log";
                         ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
@@ -556,16 +571,16 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                         if CancellationReason = '' then
                             exit;
 
-                        // Proceed with cancellation
+                        // Proceed with cancellation using unified helper (supports invoices and credit memos)
                         ClearLastError();
-                        if eInvPostingSubscribers.CancelEInvoiceDocument(Rec, CancellationReason) then begin
+                        if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then begin
                             // Refresh the page to show updated status and disable cancel button
                             CanCancelEInvoice := IsCancellationAllowed();
                             CurrPage.Update(false);
                         end else begin
                             // Try alternative method with transaction isolation
                             ClearLastError();
-                            if eInvPostingSubscribers.CancelEInvoiceDocumentWithIsolation(Rec, CancellationReason) then begin
+                            if eInvoiceCancellationHelper.CancelDocumentWithIsolation(Rec."No.", CancellationReason) then begin
                                 Message('Cancellation completed using alternative method. Please refresh the submission log.');
                                 CanCancelEInvoice := IsCancellationAllowed();
                                 CurrPage.Update(false);
