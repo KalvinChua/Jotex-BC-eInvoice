@@ -299,108 +299,54 @@ page 50316 "e-Invoice Submission Log"
 
                 trigger OnAction()
                 var
-                    TempBlob: Codeunit "Temp Blob";
-                    OutStream: OutStream;
-                    InStream: InStream;
+                    ExcelBuf: Record "Excel Buffer" temporary;
                     FileName: Text;
-                    CsvContent: Text;
                 begin
-                    // Generate CSV content
-                    CsvContent := 'Entry No.,Invoice No.,Customer Name,Submission UID,Document UUID,Status,Submission Date,Response Date,Posting Date,Environment,Error Message' + '\\';
+                    // Header row
+                    ExcelBuf.Reset();
+                    ExcelBuf.DeleteAll();
+                    ExcelBuf.NewRow();
+                    ExcelBuf.AddColumn('Entry No.', false, '', true, false, false, '', ExcelBuf."Cell Type"::Number);
+                    ExcelBuf.AddColumn('Invoice No.', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Customer Name', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Submission UID', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Document UUID', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Status', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Submission Date', false, '', true, false, false, '', ExcelBuf."Cell Type"::Date);
+                    ExcelBuf.AddColumn('Response Date', false, '', true, false, false, '', ExcelBuf."Cell Type"::Date);
+                    ExcelBuf.AddColumn('Posting Date', false, '', true, false, false, '', ExcelBuf."Cell Type"::Date);
+                    ExcelBuf.AddColumn('Environment', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Error Message', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
 
+                    // Data rows
                     if Rec.FindSet() then begin
                         repeat
-                            CsvContent += StrSubstNo('%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11' + '\\',
-                                Rec."Entry No.",
-                                Rec."Invoice No.",
-                                Rec."Customer Name",
-                                Rec."Submission UID",
-                                Rec."Document UUID",
-                                Rec.Status,
-                                Format(Rec."Submission Date"),
-                                Format(Rec."Response Date"),
-                                Format(Rec."Posting Date"),
-                                Rec.Environment,
-                                Rec."Error Message");
+                            ExcelBuf.NewRow();
+                            ExcelBuf.AddColumn(Rec."Entry No.", false, '', false, false, false, '', ExcelBuf."Cell Type"::Number);
+                            ExcelBuf.AddColumn(Rec."Invoice No.", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(Rec."Customer Name", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(Rec."Submission UID", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(Rec."Document UUID", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(Rec.Status, false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(DT2Date(Rec."Submission Date"), false, '', false, false, false, '', ExcelBuf."Cell Type"::Date);
+                            ExcelBuf.AddColumn(DT2Date(Rec."Response Date"), false, '', false, false, false, '', ExcelBuf."Cell Type"::Date);
+                            ExcelBuf.AddColumn(Rec."Posting Date", false, '', false, false, false, '', ExcelBuf."Cell Type"::Date);
+                            ExcelBuf.AddColumn(Format(Rec.Environment), false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(CopyStr(Rec."Error Message", 1, 250), false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
                         until Rec.Next() = 0;
                     end;
 
-                    // Create and download file
-                    FileName := StrSubstNo('eInvoice_Submission_Log_%1.csv',
+                    // Build workbook and open
+                    FileName := StrSubstNo('eInvoice_Submission_Log_%1.xlsx',
                         Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
-
-                    TempBlob.CreateOutStream(OutStream);
-                    OutStream.WriteText(CsvContent);
-                    TempBlob.CreateInStream(InStream);
-                    DownloadFromStream(InStream, 'Download Submission Log', '', 'CSV files (*.csv)|*.csv', FileName);
+                    ExcelBuf.CreateNewBook('e-Invoice Submission Log');
+                    ExcelBuf.WriteSheet('Submission Log', CompanyName, UserId);
+                    ExcelBuf.CloseBook();
+                    ExcelBuf.SetFriendlyFilename(FileName);
+                    ExcelBuf.OpenExcel();
                 end;
             }
 
-            action(ViewResponseJson)
-            {
-                ApplicationArea = All;
-                Caption = 'View Response JSON';
-                Image = ViewDetails;
-                ToolTip = 'Download the raw response JSON for this entry.';
-
-                trigger OnAction()
-                var
-                    TempBlob: Codeunit "Temp Blob";
-                    InS: InStream;
-                    OutS: OutStream;
-                    FileName: Text;
-                begin
-                    if not Rec."Raw Payload Stored" then begin
-                        Message('No stored response payload for this entry.');
-                        exit;
-                    end;
-
-                    Clear(TempBlob);
-                    TempBlob.CreateOutStream(OutS);
-                    Rec.CalcFields("Response Payload");
-                    Rec."Response Payload".CreateInStream(InS);
-                    CopyStream(OutS, InS);
-                    TempBlob.CreateInStream(InS);
-
-                    FileName := StrSubstNo('Response_%1.json', Rec."Submission UID");
-                    DownloadFromStream(InS, 'Download Response', '', 'JSON files (*.json)|*.json', FileName);
-                end;
-            }
-
-            action(FetchResponseForSelected)
-            {
-                ApplicationArea = All;
-                Caption = 'Fetch Response for Selected';
-                Image = RefreshRegister;
-                ToolTip = 'Fetch and store response payloads from LHDN for the selected entries (uses Submission UID).';
-
-                trigger OnAction()
-                var
-                    Sel: Record "eInvoice Submission Log";
-                    Total: Integer;
-                    OkCount: Integer;
-                    FailCount: Integer;
-                begin
-                    CurrPage.SetSelectionFilter(Sel);
-                    Total := Sel.Count();
-                    if Total = 0 then begin
-                        Message('Please select one or more entries.');
-                        exit;
-                    end;
-
-                    // Placeholder: Implement fetch routine in a codeunit and call here when available
-                    if Sel.FindSet() then
-                        repeat
-                            if Sel."Raw Payload Stored" then
-                                OkCount += 1
-                            else
-                                FailCount += 1;
-                        until Sel.Next() = 0;
-
-                    Message('Fetch complete. Stored: %1  Failed: %2', OkCount, FailCount);
-                    CurrPage.Update(false);
-                end;
-            }
 
             action(OpenPostedInvoice)
             {
@@ -447,150 +393,9 @@ page 50316 "e-Invoice Submission Log"
                 end;
             }
 
-            action(CheckBackgroundJobs)
-            {
-                ApplicationArea = All;
-                Caption = 'Check Background Jobs';
-                Image = JobListSetup;
-                ToolTip = 'Check the status of background refresh jobs';
 
-                trigger OnAction()
-                var
-                    JobQueueEntry: Record "Job Queue Entry";
-                    JobStatus: Text;
-                    ActiveJobs: Integer;
-                    CompletedJobs: Integer;
-                    ErrorJobs: Integer;
-                begin
-                    ActiveJobs := 0;
-                    CompletedJobs := 0;
-                    ErrorJobs := 0;
 
-                    // Count eInvoice related jobs
-                    JobQueueEntry.SetRange("Object ID to Run", Codeunit::"eInvoice Submission Status");
-                    if JobQueueEntry.FindSet() then begin
-                        repeat
-                            case JobQueueEntry.Status of
-                                JobQueueEntry.Status::Ready,
-                                JobQueueEntry.Status::"In Process":
-                                    ActiveJobs += 1;
-                                JobQueueEntry.Status::Finished:
-                                    CompletedJobs += 1;
-                                JobQueueEntry.Status::Error:
-                                    ErrorJobs += 1;
-                            end;
-                        until JobQueueEntry.Next() = 0;
-                    end;
 
-                    JobStatus := StrSubstNo('Background Jobs: Active: %1, Completed: %2, Errors: %3',
-                                          ActiveJobs, CompletedJobs, ErrorJobs);
-
-                    Message(JobStatus);
-                end;
-            }
-
-            action(PopulatePostingDates)
-            {
-                ApplicationArea = All;
-                Caption = 'Populate Posting Dates';
-                Image = UpdateDescription;
-                ToolTip = 'Populate posting dates for existing submission log entries that don''t have posting dates';
-
-                trigger OnAction()
-                var
-                    PostingDatePopulator: Codeunit "eInvoice Post Date Populator";
-                begin
-                    if Confirm('This will populate posting dates for existing submission log entries that don''t have posting dates. Continue?') then begin
-                        PostingDatePopulator.PopulatePostingDatesForExistingEntries();
-                        CurrPage.Update(false);
-                    end;
-                end;
-            }
-
-            action(ShowSubmissionLogStatus)
-            {
-                ApplicationArea = All;
-                Caption = 'Show Log Status';
-                Image = Statistics;
-                ToolTip = 'Show current status of submission log entries';
-
-                trigger OnAction()
-                var
-                    PostingDatePopulator: Codeunit "eInvoice Post Date Populator";
-                begin
-                    PostingDatePopulator.ShowSubmissionLogStatus();
-                end;
-            }
-
-            action(UpdateDocumentTypes)
-            {
-                ApplicationArea = All;
-                Caption = 'Update Document Types';
-                Image = UpdateDescription;
-                ToolTip = 'Update document types for existing submission log entries that have empty document types';
-
-                trigger OnAction()
-                var
-                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
-                    UpdatedCount: Integer;
-                begin
-                    if Confirm('This will update document types for existing submission log entries that have empty document types. Continue?') then begin
-                        UpdatedCount := SubmissionStatusCU.UpdateExistingDocumentTypes();
-                        CurrPage.Update(false);
-                    end;
-                end;
-            }
-
-            action(UpdateCustomerNames)
-            {
-                ApplicationArea = All;
-                Caption = 'Update Customer Names';
-                Image = UpdateDescription;
-                ToolTip = 'Update customer names for existing submission log entries that have empty customer names';
-
-                trigger OnAction()
-                var
-                    CustomerNameUpgrade: Codeunit "eInvoice Customer Name Upgrade";
-                    SubmissionLog: Record "eInvoice Submission Log";
-                    Customer: Record Customer;
-                    SalesInvoiceHeader: Record "Sales Invoice Header";
-                    CustomerName: Text;
-                    UpdatedCount: Integer;
-                begin
-                    if Confirm('This will update customer names for existing submission log entries that have empty customer names. Continue?') then begin
-                        UpdatedCount := 0;
-
-                        // Find all submission log entries with empty customer names
-                        SubmissionLog.SetRange("Customer Name", '');
-                        if SubmissionLog.FindSet() then begin
-                            repeat
-                                CustomerName := '';
-
-                                // Try to get customer name from the invoice
-                                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
-                                    if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
-                                        CustomerName := Customer.Name;
-                                end;
-
-                                // Update the record if we found a customer name
-                                if CustomerName <> '' then begin
-                                    SubmissionLog."Customer Name" := CustomerName;
-                                    SubmissionLog.Modify();
-                                    UpdatedCount += 1;
-                                end;
-                            until SubmissionLog.Next() = 0;
-                        end;
-
-                        // Show results to user
-                        if UpdatedCount > 0 then
-                            Message('Successfully updated Customer Name for %1 existing submission log entries.', UpdatedCount)
-                        else
-                            Message('No submission log entries with empty Customer Name were found.');
-
-                        CurrPage.Update(false);
-                    end;
-                end;
-            }
         }
     }
 
@@ -618,6 +423,17 @@ page 50316 "e-Invoice Submission Log"
                 CleanText := CopyStr(CleanText, 1, StrLen(CleanText) - 1);
 
         exit(CleanText);
+    end;
+
+    local procedure EscapeCsv(Value: Text): Text
+    var
+        Result: Text;
+    begin
+        Result := Value;
+        // Double any quotes
+        Result := StrSubstNo('%1', Result);
+        Result := ConvertStr(Result, '"', '"');
+        exit(Result);
     end;
 
     /// <summary>
