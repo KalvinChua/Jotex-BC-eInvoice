@@ -4,6 +4,74 @@ pageextension 50321 "Posted Sales Invoices Ext" extends "Posted Sales Invoices"
     {
         addlast(processing)
         {
+            action(SignAndSubmitSelectedToLHDN)
+            {
+                Caption = 'Sign & Submit to LHDN';
+                ApplicationArea = All;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                Image = ElectronicDoc;
+                ToolTip = 'Digitally sign via Azure Function and submit selected posted invoices to LHDN.';
+
+                trigger OnAction()
+                var
+                    SelectedInvoices: Record "Sales Invoice Header";
+                    InvoiceHeader: Record "Sales Invoice Header";
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                    LhdnResponse: Text;
+                    SuccessCount: Integer;
+                    FailCount: Integer;
+                    Window: Dialog;
+                    ProgressLbl: Label 'Submitting #1###### of #2######';
+                    Counter: Integer;
+                    Total: Integer;
+                    TempSelected: Record "Sales Invoice Header" temporary;
+                begin
+                    CurrPage.SetSelectionFilter(SelectedInvoices);
+                    if SelectedInvoices.IsEmpty() then
+                        SelectedInvoices.CopyFilters(Rec);
+
+                    // Snapshot selected document numbers into a temporary record to survive commits
+                    if SelectedInvoices.FindSet() then
+                        repeat
+                            TempSelected.Init();
+                            TempSelected."No." := SelectedInvoices."No.";
+                            TempSelected.Insert();
+                        until SelectedInvoices.Next() = 0;
+
+                    Total := TempSelected.Count;
+                    if Total = 0 then
+                        exit;
+
+                    Window.Open(ProgressLbl);
+                    Window.Update(2, Total);
+
+                    eInvoiceGenerator.SetSuppressUserDialogs(true);
+
+                    if TempSelected.FindSet() then
+                        repeat
+                            Counter += 1;
+                            Window.Update(1, Counter);
+
+                            if InvoiceHeader.Get(TempSelected."No.") then begin
+                                if eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(InvoiceHeader, LhdnResponse) then begin
+                                    SuccessCount += 1;
+                                    SendInlineNotification(true, InvoiceHeader."No.", LhdnResponse);
+                                end else begin
+                                    FailCount += 1;
+                                    SendInlineNotification(false, InvoiceHeader."No.", LhdnResponse);
+                                end;
+                            end else begin
+                                FailCount += 1;
+                            end;
+                        until TempSelected.Next() = 0;
+
+                    Window.Close();
+                    Message('LHDN submission completed. Success: %1  Failed: %2', SuccessCount, FailCount);
+                end;
+            }
+
             action(ExportToExcel)
             {
                 Caption = 'Export to Excel';
@@ -21,6 +89,69 @@ pageextension 50321 "Posted Sales Invoices Ext" extends "Posted Sales Invoices"
             }
         }
     }
+
+    local procedure SendInlineNotification(Success: Boolean; DocNo: Code[20]; LhdnResponse: Text)
+    var
+        Notif: Notification;
+        Msg: Text;
+    begin
+        if Success then
+            Msg := StrSubstNo('LHDN submission successful for Invoice %1. %2', DocNo, FormatLhdnResponseInline(LhdnResponse))
+        else
+            Msg := StrSubstNo('LHDN submission failed for Invoice %1. Response: %2', DocNo, CopyStr(LhdnResponse, 1, 250));
+
+        Notif.Scope := NotificationScope::LocalScope;
+        Notif.Message(Msg);
+        Notif.Send();
+    end;
+
+    local procedure FormatLhdnResponseInline(RawResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        AcceptedArray: JsonArray;
+        SubmissionUid: Text;
+        AcceptedCount: Integer;
+        DocumentJson: JsonObject;
+        InvoiceCodeNumber: Text;
+        Uuid: Text;
+        Summary: Text;
+    begin
+        if not ResponseJson.ReadFrom(RawResponse) then
+            exit(StrSubstNo('Raw Response: %1', CopyStr(RawResponse, 1, 200)));
+
+        if ResponseJson.Get('submissionUid', JsonToken) then
+            SubmissionUid := CleanQuotesFromText(JsonToken.AsValue().AsText());
+
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            AcceptedArray := JsonToken.AsArray();
+            AcceptedCount := AcceptedArray.Count();
+            if AcceptedCount > 0 then begin
+                AcceptedArray.Get(0, JsonToken);
+                if JsonToken.IsObject() then begin
+                    DocumentJson := JsonToken.AsObject();
+                    if DocumentJson.Get('invoiceCodeNumber', JsonToken) then
+                        InvoiceCodeNumber := CleanQuotesFromText(JsonToken.AsValue().AsText());
+                    if DocumentJson.Get('uuid', JsonToken) then
+                        Uuid := CleanQuotesFromText(JsonToken.AsValue().AsText());
+                end;
+            end;
+        end;
+
+        Summary := StrSubstNo('Submission ID: %1 | Accepted Documents: %2', SubmissionUid, Format(AcceptedCount));
+        if InvoiceCodeNumber <> '' then
+            Summary += StrSubstNo(' | Invoice: %1', InvoiceCodeNumber);
+        if Uuid <> '' then
+            Summary += StrSubstNo(' | UUID: %1', Uuid);
+
+        exit(Summary);
+    end;
+
+    local procedure CleanQuotesFromText(Value: Text): Text
+    begin
+        Value := DelChr(Value, '<>', '"');
+        exit(Value);
+    end;
 
     local procedure ExportPostedSalesInvoices(var SalesInvoiceHeader: Record "Sales Invoice Header")
     var
