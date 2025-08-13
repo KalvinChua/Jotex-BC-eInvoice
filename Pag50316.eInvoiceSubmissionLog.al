@@ -49,6 +49,7 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the submission status (Submitted, Accepted, Rejected, etc.).';
                 }
+
                 field("Submission Date"; Rec."Submission Date")
                 {
                     ApplicationArea = All;
@@ -90,6 +91,7 @@ page 50316 "e-Invoice Submission Log"
             }
         }
     }
+
 
     actions
     {
@@ -331,6 +333,88 @@ page 50316 "e-Invoice Submission Log"
                     OutStream.WriteText(CsvContent);
                     TempBlob.CreateInStream(InStream);
                     DownloadFromStream(InStream, 'Download Submission Log', '', 'CSV files (*.csv)|*.csv', FileName);
+                end;
+            }
+
+            action(ViewResponseJson)
+            {
+                ApplicationArea = All;
+                Caption = 'View Response JSON';
+                Image = ViewDetails;
+                ToolTip = 'Download the raw response JSON for this entry.';
+
+                trigger OnAction()
+                var
+                    TempBlob: Codeunit "Temp Blob";
+                    InS: InStream;
+                    OutS: OutStream;
+                    FileName: Text;
+                begin
+                    if not Rec."Raw Payload Stored" then begin
+                        Message('No stored response payload for this entry.');
+                        exit;
+                    end;
+
+                    Clear(TempBlob);
+                    TempBlob.CreateOutStream(OutS);
+                    Rec.CalcFields("Response Payload");
+                    Rec."Response Payload".CreateInStream(InS);
+                    CopyStream(OutS, InS);
+                    TempBlob.CreateInStream(InS);
+
+                    FileName := StrSubstNo('Response_%1.json', Rec."Submission UID");
+                    DownloadFromStream(InS, 'Download Response', '', 'JSON files (*.json)|*.json', FileName);
+                end;
+            }
+
+            action(FetchResponseForSelected)
+            {
+                ApplicationArea = All;
+                Caption = 'Fetch Response for Selected';
+                Image = RefreshRegister;
+                ToolTip = 'Fetch and store response payloads from LHDN for the selected entries (uses Submission UID).';
+
+                trigger OnAction()
+                var
+                    Sel: Record "eInvoice Submission Log";
+                    Total: Integer;
+                    OkCount: Integer;
+                    FailCount: Integer;
+                begin
+                    CurrPage.SetSelectionFilter(Sel);
+                    Total := Sel.Count();
+                    if Total = 0 then begin
+                        Message('Please select one or more entries.');
+                        exit;
+                    end;
+
+                    // Placeholder: Implement fetch routine in a codeunit and call here when available
+                    if Sel.FindSet() then
+                        repeat
+                            if Sel."Raw Payload Stored" then
+                                OkCount += 1
+                            else
+                                FailCount += 1;
+                        until Sel.Next() = 0;
+
+                    Message('Fetch complete. Stored: %1  Failed: %2', OkCount, FailCount);
+                    CurrPage.Update(false);
+                end;
+            }
+
+            action(OpenPostedInvoice)
+            {
+                ApplicationArea = All;
+                Caption = 'Open Posted Invoice';
+                Image = Navigate;
+                ToolTip = 'Open the related posted sales invoice.';
+
+                trigger OnAction()
+                var
+                    SIH: Record "Sales Invoice Header";
+                begin
+                    if SIH.Get(Rec."Invoice No.") then
+                        Page.Run(Page::"Posted Sales Invoice", SIH);
                 end;
             }
 

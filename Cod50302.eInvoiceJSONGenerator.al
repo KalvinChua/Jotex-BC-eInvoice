@@ -4515,6 +4515,8 @@ codeunit 50302 "eInvoice JSON Generator"
         eInvoiceSetup: Record "eInvoiceSetup";
         Customer: Record Customer;
         CustomerName: Text;
+        StartTime: DateTime;
+        EndTime: DateTime;
     begin
         // Get customer name
         CustomerName := '';
@@ -4537,6 +4539,13 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog."Error Message" := ErrorMessage;
         SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
         SubmissionLog."Document Type" := DocumentType;
+        // Removed Submission Type field from log
+        // Optionally populate correlation ID and response summary if available in context
+        // SubmissionLog."Correlation ID" := <set from Azure request if tracked>;
+        // SubmissionLog."Accepted Count" := <parsed value>;
+        // SubmissionLog."Rejected Count" := <parsed value>;
+        // SubmissionLog."Invoice Code Number" := <parsed value>;
+        // SubmissionLog."Elapsed (ms)" := 0;
 
         // Set environment based on setup
         if eInvoiceSetup.Get('SETUP') then

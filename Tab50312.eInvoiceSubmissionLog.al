@@ -105,6 +105,27 @@ table 50312 "eInvoice Submission Log"
             FieldClass = FlowField;
             CalcFormula = Lookup(eInvoiceTypes.Description WHERE(Code = FIELD("Document Type")));
         }
+
+        field(21; "Request Payload"; Blob)
+        {
+            Caption = 'Request Payload';
+            DataClassification = CustomerContent;
+        }
+        field(22; "Response Payload"; Blob)
+        {
+            Caption = 'Response Payload';
+            DataClassification = CustomerContent;
+        }
+        field(23; "Raw Payload Stored"; Boolean)
+        {
+            Caption = 'Raw Payload Stored';
+            DataClassification = CustomerContent;
+        }
+        field(24; "Response Preview"; Text[250])
+        {
+            Caption = 'Response Preview';
+            DataClassification = CustomerContent;
+        }
     }
 
     keys
