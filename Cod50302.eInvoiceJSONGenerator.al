@@ -1730,14 +1730,17 @@ codeunit 50302 "eInvoice JSON Generator"
 
     /// <summary>
     /// Adds amount field with currency code attribute - includes validation for negative amounts
+    /// Note: Negative values are allowed for LineExtensionAmount at line level to support discount/adjustment lines.
+    ///       We still prevent negative TaxAmount and PayableAmount for compliance.
     /// </summary>
     local procedure AddAmountField(var ParentObject: JsonObject; FieldName: Text; Amount: Decimal; CurrencyCode: Text)
     var
         ValueArray: JsonArray;
         ValueObject: JsonObject;
     begin
-        // Validate amount is not negative for invoice amounts
-        if (FieldName in ['LineExtensionAmount', 'TaxAmount', 'PayableAmount']) and (Amount < 0) then
+        // Validate amount is not negative for critical totals
+        // Allow negative LineExtensionAmount at line level (discount lines), but still block negative TaxAmount and PayableAmount
+        if (FieldName in ['TaxAmount', 'PayableAmount']) and (Amount < 0) then
             Error('Amount field %1 cannot be negative: %2', FieldName, Amount);
 
         ValueObject.Add('_', Amount);
