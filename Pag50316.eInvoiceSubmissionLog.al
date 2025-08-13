@@ -425,16 +425,7 @@ page 50316 "e-Invoice Submission Log"
         exit(CleanText);
     end;
 
-    local procedure EscapeCsv(Value: Text): Text
-    var
-        Result: Text;
-    begin
-        Result := Value;
-        // Double any quotes
-        Result := StrSubstNo('%1', Result);
-        Result := ConvertStr(Result, '"', '"');
-        exit(Result);
-    end;
+
 
     /// <summary>
     /// Create a background job for status refresh to avoid context restrictions
