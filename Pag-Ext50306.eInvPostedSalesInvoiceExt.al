@@ -104,11 +104,11 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
     actions
     {
-        addafter(IncomingDocument)
+        addlast(Processing)
         {
             group(EInvoiceActions)
             {
-                Caption = 'e-Invoice';
+                Caption = 'LHDN - MyInvois';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
                 Visible = IsJotexCompany;

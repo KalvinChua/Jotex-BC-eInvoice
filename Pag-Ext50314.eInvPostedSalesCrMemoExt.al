@@ -101,11 +101,11 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
     actions
     {
-        addafter(IncomingDocument)
+        addlast(Processing)
         {
             group(eInvActions)
             {
-                Caption = 'e-Invoice';
+                Caption = 'LHDN - MyInvois';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
                 // Show as a normal group (not SplitButton) to render like base groups
