@@ -14,9 +14,12 @@ page 50327 "eInvoice QR CM FactBox"
                 ApplicationArea = All;
                 ShowCaption = false;
                 ToolTip = 'Displays the e-Invoice QR image when available.';
+                Editable = false;
             }
         }
     }
+
+    // No CALCFIELDS needed for Media field; remove to avoid FlowField error
 }
 
 

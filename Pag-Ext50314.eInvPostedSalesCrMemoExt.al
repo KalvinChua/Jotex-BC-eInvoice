@@ -101,13 +101,14 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
 
     actions
     {
-        addlast(Processing)
+        addafter(IncomingDocument)
         {
             group(eInvActions)
             {
                 Caption = 'e-Invoice';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
+                // Show as a normal group (not SplitButton) to render like base groups
 
                 action(OpenValidationLink)
                 {
@@ -117,8 +118,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ToolTip = 'Open the public validation link in your browser.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
 
                     trigger OnAction()
                     begin
@@ -134,8 +134,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ToolTip = 'Generate and store the QR image from the validation URL.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
 
                     trigger OnAction()
                     var
@@ -143,7 +142,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         Response: HttpResponseMessage;
                         QrServiceUrl: Text;
                         InS: InStream;
-                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        eInvoiceQrManager: Codeunit "eInvoice QR Manager";
                     begin
                         if Rec."eInvoice QR URL" = '' then begin
                             Message('No validation URL found.');
@@ -165,7 +164,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         end;
 
                         Response.Content.ReadAs(InS);
-                        if eInvoiceGenerator.UpdateCreditMemoQrImage(Rec."No.", InS, 'eInvoiceQR.png') then
+                        if eInvoiceQrManager.UpdateCreditMemoQrImage(Rec."No.", InS, 'eInvoiceQR.png') then
                             CurrPage.Update(false)
                         else
                             Message('Failed to store QR image.');
@@ -178,8 +177,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Image = ExportFile;
                     ToolTip = 'Generate e-Invoice in JSON format for credit memo';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
 
                     trigger OnAction()
                     var
@@ -209,8 +207,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ApplicationArea = All;
                     Caption = 'Sign & Submit to LHDN';
                     Image = ElectronicDoc;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
                     ToolTip = 'Sign the credit memo via Azure Function and submit directly to LHDN MyInvois API';
                     Visible = IsJotexCompany;
 
@@ -236,8 +233,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ApplicationArea = All;
                     Caption = 'Cancel e-Invoice';
                     Image = Cancel;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
                     ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                     Visible = IsJotexCompany;
                     Enabled = CanCancelEInvoice;
@@ -323,8 +319,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Image = Refresh;
                     ToolTip = 'Refresh the e-Invoice status from LHDN system using direct API call (same method as posted sales invoice)';
                     Visible = IsJotexCompany and (Rec."eInvoice Submission UID" <> '');
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
 
                     trigger OnAction()
                     var
@@ -340,6 +335,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         LongId: Text;
                         ValidationUrl: Text;
                         eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        eInvoiceQrManager: Codeunit "eInvoice QR Manager";
                     begin
                         if not IsJotexCompany then
                             exit;
@@ -395,7 +391,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                                     if LongId <> '' then begin
                                         ValidationUrl := BuildValidationUrl(Rec."eInvoice UUID", LongId, eInvoiceSetup.Environment);
                                         if ValidationUrl <> '' then begin
-                                            if eInvoiceGenerator.UpdateCreditMemoQrUrl(Rec."No.", ValidationUrl) then
+                                            if eInvoiceQrManager.UpdateCreditMemoQrUrl(Rec."No.", ValidationUrl) then
                                                 CurrPage.Update(false);
                                         end;
                                     end;
@@ -423,8 +419,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Image = Log;
                     ToolTip = 'Show all submission log entries for this credit memo';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    Promoted = false;
 
                     trigger OnAction()
                     var
@@ -467,10 +462,33 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         Message(LogInfo);
                     end;
                 }
+                action(ViewSubmissionLog)
+                {
+                    ApplicationArea = All;
+                    Caption = 'View Submission Log';
+                    Image = Log;
+                    ToolTip = 'View submission log entries for this credit memo';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        SubmissionLog: Record "eInvoice Submission Log";
+                        SubmissionLogPage: Page "e-Invoice Submission Log";
+                    begin
+                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                        if Rec."eInvoice Submission UID" <> '' then
+                            SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
+
+                        SubmissionLogPage.SetTableView(SubmissionLog);
+                        SubmissionLogPage.RunModal();
+                    end;
+                }
             }
         }
 
     }
+
+    // e-Invoice category group moved to promoted categories to avoid processing-area actionref errors
 
     var
         IsJotexCompany: Boolean;

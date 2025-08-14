@@ -104,7 +104,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
     actions
     {
-        addlast(Processing)
+        addafter(IncomingDocument)
         {
             group(EInvoiceActions)
             {
@@ -112,7 +112,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
                 Visible = IsJotexCompany;
-                ShowAs = SplitButton;
+                // Show as a normal group so it drops under Actions > Other like base page
 
                 action(OpenValidationLink)
                 {
@@ -122,8 +122,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Open the public validation link in your browser.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     begin
@@ -139,8 +138,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Generate and store the QR image from the validation URL.';
                     Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -196,8 +194,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = ExportFile;
                     ToolTip = 'Generate e-Invoice in JSON format';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -232,8 +229,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = ElectronicDoc;
                     ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -258,8 +254,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = Refresh;
                     ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -353,8 +348,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = Log;
                     ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
                     Visible = IsJotexCompany;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -517,8 +511,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                     Visible = IsJotexCompany;
                     Enabled = CanCancelEInvoice;
-                    Promoted = true;
-                    PromotedCategory = Process;
+                    // Not promoted to keep actions under e-Invoice group only
 
                     trigger OnAction()
                     var
@@ -596,6 +589,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 }
             }
         }
+
     }
 
     var
