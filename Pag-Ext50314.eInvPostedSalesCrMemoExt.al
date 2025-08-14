@@ -116,9 +116,9 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Caption = 'Open Validation Link';
                     Image = Web;
                     ToolTip = 'Open the public validation link in your browser.';
-                    Visible = IsJotexCompany;
+
                     Enabled = eInvHasQrUrl;
-                    Promoted = false;
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     begin
@@ -132,9 +132,9 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Caption = 'Generate QR Image';
                     Image = Picture;
                     ToolTip = 'Generate and store the QR image from the validation URL.';
-                    Visible = IsJotexCompany;
+
                     Enabled = eInvHasQrUrl;
-                    Promoted = false;
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -176,8 +176,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Caption = 'Generate e-Invoice JSON';
                     Image = ExportFile;
                     ToolTip = 'Generate e-Invoice in JSON format for credit memo';
-                    Visible = IsJotexCompany;
-                    Promoted = false;
+
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -207,9 +207,9 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ApplicationArea = All;
                     Caption = 'Sign & Submit to LHDN';
                     Image = ElectronicDoc;
-                    Promoted = false;
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
                     ToolTip = 'Sign the credit memo via Azure Function and submit directly to LHDN MyInvois API';
-                    Visible = IsJotexCompany;
+
 
                     trigger OnAction()
                     var
@@ -233,7 +233,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     ApplicationArea = All;
                     Caption = 'Cancel e-Invoice';
                     Image = Cancel;
-                    Promoted = false;
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
                     ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                     Visible = IsJotexCompany;
                     Enabled = CanCancelEInvoice;
@@ -318,8 +318,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Caption = 'Refresh Status';
                     Image = Refresh;
                     ToolTip = 'Refresh the e-Invoice status from LHDN system using direct API call (same method as posted sales invoice)';
-                    Visible = IsJotexCompany and (Rec."eInvoice Submission UID" <> '');
-                    Promoted = false;
+
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -419,7 +419,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Image = Log;
                     ToolTip = 'Show all submission log entries for this credit memo';
                     Visible = IsJotexCompany;
-                    Promoted = false;
+                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -486,6 +486,37 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             }
         }
 
+        // Add a top-level tab using Promoted actions area
+        addlast(Promoted)
+        {
+            group("Category_LHDN - MyInvois")
+            {
+                Caption = 'LHDN - MyInvois';
+                ShowAs = SplitButton;
+
+                actionref(SignAndSubmitToLHDN_Promoted; SignAndSubmitToLHDN)
+                {
+                }
+                actionref(RefreshStatus_Promoted; RefreshStatus)
+                {
+                }
+                actionref(GenerateQrImage_Promoted; GenerateQrImage)
+                {
+                }
+                actionref(OpenValidationLink_Promoted; OpenValidationLink)
+                {
+                }
+                actionref(GenerateEInvoiceJSON_Promoted; GenerateEInvoiceJSON)
+                {
+                }
+                actionref(ViewSubmissionLog_Promoted; ViewSubmissionLog)
+                {
+                }
+                actionref(CancelEInvoice_Promoted; CancelEInvoice)
+                {
+                }
+            }
+        }
     }
 
     // e-Invoice category group moved to promoted categories to avoid processing-area actionref errors
@@ -737,7 +768,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
     /// <returns>Custom reason text or empty string if cancelled</returns>
     local procedure GetCustomCancellationReason(): Text[500]
     var
-        CustomReasonPage: Page "Custom Cancellation Reason";
+        CustomReasonPage: Page 50317;
         CustomReason: Text[500];
     begin
         // Open the custom reason input page

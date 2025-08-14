@@ -111,7 +111,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 Caption = 'LHDN - MyInvois';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
-                Visible = IsJotexCompany;
+                Visible = true;
                 // Show as a normal group so it drops under Actions > Other like base page
 
                 action(OpenValidationLink)
@@ -120,7 +120,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Open Validation Link';
                     Image = Web;
                     ToolTip = 'Open the public validation link in your browser.';
-                    Visible = IsJotexCompany;
+
                     Enabled = eInvHasQrUrl;
                     // No Promoted properties when using actionref categories
 
@@ -136,7 +136,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Generate QR Image';
                     Image = Picture;
                     ToolTip = 'Generate and store the QR image from the validation URL.';
-                    Visible = IsJotexCompany;
+
                     Enabled = eInvHasQrUrl;
                     // No Promoted properties when using actionref categories
 
@@ -193,7 +193,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Generate e-Invoice JSON';
                     Image = ExportFile;
                     ToolTip = 'Generate e-Invoice in JSON format';
-                    Visible = IsJotexCompany;
+
                     // No Promoted properties when using actionref categories
 
                     trigger OnAction()
@@ -228,7 +228,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Sign & Submit to LHDN';
                     Image = ElectronicDoc;
                     ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
-                    Visible = IsJotexCompany;
+                    Visible = false;
                     // No Promoted properties when using actionref categories
 
                     trigger OnAction()
@@ -253,7 +253,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Refresh Status';
                     Image = Refresh;
                     ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
-                    Visible = IsJotexCompany;
+
                     // No Promoted properties when using actionref categories
 
                     trigger OnAction()
@@ -586,6 +586,38 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                             end;
                         end;
                     end;
+                }
+            }
+        }
+
+        // Add a top-level tab using Promoted actions area
+        addafter("Category_Incoming Document")
+        {
+            group("Category_LHDN - MyInvois")
+            {
+                Caption = 'LHDN - MyInvois';
+                ShowAs = Standard;
+
+                actionref(SignAndSubmitToLHDN_Promoted; SignAndSubmitToLHDN)
+                {
+                }
+                actionref(CheckStatusDirect_Promoted; CheckStatusDirect)
+                {
+                }
+                actionref(GenerateQrImage_Promoted; GenerateQrImage)
+                {
+                }
+                actionref(OpenValidationLink_Promoted; OpenValidationLink)
+                {
+                }
+                actionref(GenerateEInvoiceJSON_Promoted; GenerateEInvoiceJSON)
+                {
+                }
+                actionref(ViewSubmissionLog_Promoted; ViewSubmissionLog)
+                {
+                }
+                actionref(CancelEInvoice_Promoted; CancelEInvoice)
+                {
                 }
             }
         }
