@@ -17,6 +17,8 @@ table 50301 "eInvoice TIN Log"
         field(5; "TIN Status"; Text[30]) { }
         field(6; "TIN Name (API)"; Text[100]) { }
         field(7; "Response Time"; DateTime) { }
+        field(8; "ID Type"; Text[10]) { }
+        field(9; "ID Value"; Text[150]) { }
     }
 
     keys
