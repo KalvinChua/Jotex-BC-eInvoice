@@ -6,7 +6,7 @@ page 50316 "e-Invoice Submission Log"
     UsageCategory = Lists;
     ApplicationArea = All;
     CardPageId = "e-Invoice Submission Log Card";
-    Editable = false; // Make list page read-only to prevent data corruption
+    Editable = true; // Allow editing and deletion with restrictions
 
     layout
     {
@@ -227,6 +227,33 @@ page 50316 "e-Invoice Submission Log"
                     end;
 
                     CurrPage.Update(false);
+                end;
+            }
+
+            action(DeleteEntry)
+            {
+                ApplicationArea = All;
+                Caption = 'Delete Entry';
+                Image = Delete;
+                ToolTip = 'Delete this entry (only allowed if Submission UID is empty).';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    SubmissionLog: Record "eInvoice Submission Log";
+                begin
+                    if (Rec."Submission UID" <> '') or (Rec."Document UUID" <> '') then begin
+                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID AND Document UUID can be deleted.\Submission UID: %1\Document UUID: %2',
+                              Rec."Submission UID", Rec."Document UUID");
+                    end;
+
+                    if Confirm(StrSubstNo('Are you sure you want to delete entry %1 for invoice %2?\This entry has no Submission UID or Document UUID.', Rec."Entry No.", Rec."Invoice No.")) then begin
+                        SubmissionLog := Rec;
+                        if SubmissionLog.Delete() then
+                            Message('Entry %1 has been deleted successfully.', SubmissionLog."Entry No.")
+                        else
+                            Error('Failed to delete entry %1.', SubmissionLog."Entry No.");
+                    end;
                 end;
             }
 

@@ -5,7 +5,7 @@ page 50315 "e-Invoice Submission Log Card"
     Caption = 'e-Invoice Submission Log Entry';
     UsageCategory = None;
     ApplicationArea = All;
-    Editable = false; // Make entire page read-only to prevent data corruption
+    Editable = true; // Allow editing with restrictions
 
     layout
     {
