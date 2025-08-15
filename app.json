@@ -5,11 +5,10 @@
   "version": "1.0.0.44",
   "brief": "e-Invoice integration with MyInvois Malaysia",
   "description": "Full integration with MyInvois API for e-Invoicing compliance",
-  "privacyStatement": "",
-  "EULA": "",
-  "help": "",
-  "url": "",
-  "logo": "",
+  "privacyStatement": "https://www.kmax.com.my/privacy",
+  "EULA": "https://www.kmax.com.my/eula",
+  "help": "https://www.kmax.com.my/help",
+  "url": "https://www.kmax.com.my",
   "dependencies": [
     {
       "id": "e41c95d1-d093-45cf-a32e-7e3c52721a20",
@@ -35,5 +34,6 @@
   "runtime": "15.0",
   "features": [
     "NoImplicitWith"
-  ]
+  ],
+  "applicationInsightsConnectionString": "InstrumentationKey=your-key-here;IngestionEndpoint=https://your-endpoint.com"
 }

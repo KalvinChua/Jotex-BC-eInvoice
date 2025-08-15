@@ -137,6 +137,7 @@ page 50315 "e-Invoice Submission Log Card"
                 Caption = 'Refresh Status';
                 Image = Refresh;
                 ToolTip = 'Refresh the status of this submission using the LHDN Get Submission API';
+                Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var

@@ -9,6 +9,7 @@ pageextension 50323 eInvPostedReturnReceiptExt extends "Posted Return Receipt"
                 ApplicationArea = All;
                 Caption = 'Sign & Submit to LHDN';
                 Image = ElectronicDoc;
+                Visible = IsJotexCompany;
                 Promoted = true;
                 PromotedCategory = Process;
                 PromotedIsBig = true;
@@ -37,6 +38,7 @@ pageextension 50323 eInvPostedReturnReceiptExt extends "Posted Return Receipt"
                 ApplicationArea = All;
                 Caption = 'Generate e-Invoice JSON';
                 Image = ExportFile;
+                Visible = IsJotexCompany;
                 ToolTip = 'Generate e-Invoice JSON using the linked posted Credit Memo for this Return Receipt.';
 
                 trigger OnAction()
@@ -74,6 +76,16 @@ pageextension 50323 eInvPostedReturnReceiptExt extends "Posted Return Receipt"
             exit(true);
 
         exit(false);
+    end;
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
     end;
 }
 

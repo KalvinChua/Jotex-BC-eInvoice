@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file datatype="xml" source-language="en-US" target-language="en-US" original="MyInvoisLHDN">
+    <header>
+      <tool tool-id="AL Tool" tool-name="AL" tool-version="1.0.0.0" />
+    </header>
+    <body>
+      <!-- e-Invoice Setup -->
+      <trans-unit id="eInvoiceSetup">
+        <source>e-Invoice Setup</source>
+        <target state="translated">e-Invoice Setup</target>
+      </trans-unit>
+      
+      <!-- TIN Validation -->
+      <trans-unit id="TINValidationLog">
+        <source>TIN Validation Log</source>
+        <target state="translated">TIN Validation Log</target>
+      </trans-unit>
+      
+      <!-- e-Invoice Types -->
+      <trans-unit id="eInvoiceTypes">
+        <source>e-Invoice Types</source>
+        <target state="translated">e-Invoice Types</target>
+      </trans-unit>
+      
+      <!-- Currency Codes -->
+      <trans-unit id="CurrencyCodes">
+        <source>Currency Codes</source>
+        <target state="translated">Currency Codes</target>
+      </trans-unit>
+      
+      <!-- MSIC Codes -->
+      <trans-unit id="MSICCodes">
+        <source>MSIC Codes</source>
+        <target state="translated">MSIC Codes</target>
+      </trans-unit>
+      
+      <!-- State Codes -->
+      <trans-unit id="StateCodes">
+        <source>State Codes</source>
+        <target state="translated">State Codes</target>
+      </trans-unit>
+      
+      <!-- Country Codes -->
+      <trans-unit id="CountryCodes">
+        <source>Country Codes</source>
+        <target state="translated">Country Codes</target>
+      </trans-unit>
+      
+      <!-- Payment Modes -->
+      <trans-unit id="PaymentModes">
+        <source>Payment Modes</source>
+        <target state="translated">Payment Modes</target>
+      </trans-unit>
+      
+      <!-- e-Invoice Classification -->
+      <trans-unit id="eInvoiceClassification">
+        <source>e-Invoice Classification</source>
+        <target state="translated">e-Invoice Classification</target>
+      </trans-unit>
+      
+      <!-- e-Invoice Tax Types -->
+      <trans-unit id="eInvoiceTaxTypes">
+        <source>e-Invoice Tax Types</source>
+        <target state="translated">e-Invoice Tax Types</target>
+      </trans-unit>
+      
+      <!-- e-Invoice UOM -->
+      <trans-unit id="eInvoiceUOM">
+        <source>e-Invoice UOM</source>
+        <target state="translated">e-Invoice UOM</target>
+      </trans-unit>
+      
+      <!-- e-Invoice Version -->
+      <trans-unit id="eInvoiceVersion">
+        <source>e-Invoice Version</source>
+        <target state="translated">e-Invoice Version</target>
+      </trans-unit>
+      
+      <!-- e-Invoice Submission Log -->
+      <trans-unit id="eInvoiceSubmissionLog">
+        <source>e-Invoice Submission Log</source>
+        <target state="translated">e-Invoice Submission Log</target>
+      </trans-unit>
+      
+      <!-- Custom Cancellation Reason -->
+      <trans-unit id="CustomCancellationReason">
+        <source>Custom Cancellation Reason</source>
+        <target state="translated">Custom Cancellation Reason</target>
+      </trans-unit>
+      
+      <!-- Date Range Picker -->
+      <trans-unit id="DateRangePicker">
+        <source>Date Range Picker</source>
+        <target state="translated">Date Range Picker</target>
+      </trans-unit>
+      
+      <!-- e-Invoice QR FactBox -->
+      <trans-unit id="eInvoiceQRFactBox">
+        <source>e-Invoice QR FactBox</source>
+        <target state="translated">e-Invoice QR FactBox</target>
+      </trans-unit>
+      
+      <!-- e-Invoice QR Cr.Memo FactBox -->
+      <trans-unit id="eInvoiceQRCrMemoFactBox">
+        <source>e-Invoice QR Cr.Memo FactBox</source>
+        <target state="translated">e-Invoice QR Cr.Memo FactBox</target>
+      </trans-unit>
+      
+      <!-- Export Posted Sales Batch eInv -->
+      <trans-unit id="ExportPostedSalesBatcheInv">
+        <source>Export Posted Sales Batch eInv</source>
+        <target state="translated">Export Posted Sales Batch eInv</target>
+      </trans-unit>
+      
+      <!-- Export Credit Memo Batch eInv -->
+      <trans-unit id="ExportCreditMemoBatcheInv">
+        <source>Export Credit Memo Batch eInv</source>
+        <target state="translated">Export Credit Memo Batch eInv</target>
+      </trans-unit>
+      
+      <!-- TIN Validation Status Enum -->
+      <trans-unit id="TINValidationStatusEnum">
+        <source>TIN Validation Status Enum</source>
+        <target state="translated">TIN Validation Status Enum</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

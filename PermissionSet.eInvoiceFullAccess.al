@@ -51,6 +51,12 @@ permissionset 50300 "eInvoice Full Access"
         tabledata "Job Queue Log Entry" = RIMD,
         tabledata "Scheduled Task" = RIMD,
 
+        // Additional required permissions for complete functionality
+        tabledata "Sales Header" = RIMD,
+        tabledata "Sales Line" = RIMD,
+        tabledata "Sales Header Archive" = RIMD,
+        tabledata "Sales Line Archive" = RIMD,
+
         // Pages
         page eInvoiceSetupCard = X,
         page "TIN Validation Log" = X,
@@ -68,6 +74,9 @@ permissionset 50300 "eInvoice Full Access"
         page "e-Invoice Submission Log Card" = X,
         page "e-Invoice Submission Log" = X,
         page "Custom Cancellation Reason" = X,
+        page "eInv Date Range Picker" = X,
+        page "eInvoice QR FactBox" = X,
+        page "eInvoice QR CM FactBox" = X,
 
         // Codeunits
         codeunit eInvoiceHelper = X,
@@ -81,5 +90,16 @@ permissionset 50300 "eInvoice Full Access"
         codeunit "eInvoice Azure Function Client" = X,
         codeunit "eInvoice UBL Document Builder" = X,
         codeunit "eInvoice Submission Status" = X,
-        codeunit "eInvoice Cancellation Helper" = X;
+        codeunit "eInvoice Cancellation Helper" = X,
+        codeunit "eInv Sales Order Posting Sub" = X,
+        codeunit "eInvoice QR Manager" = X,
+        codeunit "eInvoice Data Upgrade" = X,
+        codeunit "eInvoice Post Date Populator" = X,
+        codeunit "eInvoice Customer Bulk Update" = X,
+        codeunit "eInvoice Customer Name Upgrade" = X,
+        codeunit "eInv Sales Header Enforcer" = X,
+
+        // Reports
+        report "LHDN e-Invoice Export" = X,
+        report "Export Credit Memo Batch eInv" = X;
 }

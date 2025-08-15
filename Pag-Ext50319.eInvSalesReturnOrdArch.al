@@ -77,7 +77,7 @@ pageextension 50319 eInvSalesReturnOrdArch extends "Sales Return Order Archive"
                 PromotedCategory = Process;
                 PromotedIsBig = true;
                 ToolTip = 'Submission occurs during posting. This action is disabled on archived Return Orders.';
-                Visible = false;
+                Visible = IsJotexCompany;
                 Enabled = false;
 
                 trigger OnAction()

@@ -111,8 +111,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                 Caption = 'LHDN - MyInvois';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
-                Visible = true;
-                // Show as a normal group so it drops under Actions > Other like base page
+                Visible = true; // Show this group so actions are visible
 
                 action(OpenValidationLink)
                 {
@@ -120,9 +119,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Open Validation Link';
                     Image = Web;
                     ToolTip = 'Open the public validation link in your browser.';
-
+                    Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     begin
@@ -136,9 +134,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Generate QR Image';
                     Image = Picture;
                     ToolTip = 'Generate and store the QR image from the validation URL.';
-
+                    Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -187,65 +184,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                             Message('Failed to store QR image.');
                     end;
                 }
-                action(GenerateEInvoiceJSON)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Generate e-Invoice JSON';
-                    Image = ExportFile;
-                    ToolTip = 'Generate e-Invoice in JSON format';
 
-                    // No Promoted properties when using actionref categories
 
-                    trigger OnAction()
-                    var
-                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                        TempBlob: Codeunit "Temp Blob";
-                        FileName: Text;
-                        JsonText: Text;
-                        OutStream: OutStream;
-                        InStream: InStream;
-                    begin
-                        JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
-
-                        // Create download file
-                        FileName := StrSubstNo('eInvoice_%1_%2.json',
-                            Rec."No.",
-                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
-
-                        // Create the file content
-                        TempBlob.CreateOutStream(OutStream);
-                        OutStream.WriteText(JsonText);
-
-                        // Prepare for download
-                        TempBlob.CreateInStream(InStream);
-                        DownloadFromStream(InStream, 'Download e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
-                    end;
-                }
-
-                action(SignAndSubmitToLHDN)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Sign & Submit to LHDN';
-                    Image = ElectronicDoc;
-                    ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
-                    Visible = false;
-                    // No Promoted properties when using actionref categories
-
-                    trigger OnAction()
-                    var
-                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                        LhdnResponse: Text;
-                        Success: Boolean;
-                    begin
-                        // Suppress generator popups and show a non-blocking notification instead
-                        eInvoiceGenerator.SetSuppressUserDialogs(true);
-                        Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
-                        if Success then
-                            SendSubmissionNotification(true, Rec."No.", LhdnResponse)
-                        else
-                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
-                    end;
-                }
 
                 action(CheckStatusDirect)
                 {
@@ -253,8 +193,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Caption = 'Refresh Status';
                     Image = Refresh;
                     ToolTip = 'Test direct API call to LHDN submission status (same method as Get Document Types)';
-
-                    // No Promoted properties when using actionref categories
+                    Visible = IsJotexCompany;
 
                     trigger OnAction()
                     var
@@ -341,6 +280,64 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     end;
                 }
 
+                action(SignAndSubmitToLHDN)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Sign & Submit to LHDN';
+                    Image = ElectronicDoc;
+                    ToolTip = 'Sign the invoice via Azure Function and submit directly to LHDN MyInvois API';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        LhdnResponse: Text;
+                        Success: Boolean;
+                    begin
+                        // Suppress generator popups and show a non-blocking notification instead
+                        eInvoiceGenerator.SetSuppressUserDialogs(true);
+                        Success := eInvoiceGenerator.GetSignedInvoiceAndSubmitToLHDN(Rec, LhdnResponse);
+                        if Success then
+                            SendSubmissionNotification(true, Rec."No.", LhdnResponse)
+                        else
+                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
+                    end;
+                }
+
+                action(GenerateEInvoiceJSON)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Generate e-Invoice JSON';
+                    Image = ExportFile;
+                    ToolTip = 'Generate e-Invoice in JSON format';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        TempBlob: Codeunit "Temp Blob";
+                        FileName: Text;
+                        JsonText: Text;
+                        OutStream: OutStream;
+                        InStream: InStream;
+                    begin
+                        JsonText := eInvoiceGenerator.GenerateEInvoiceJson(Rec, false);
+
+                        // Create download file
+                        FileName := StrSubstNo('eInvoice_%1_%2.json',
+                            Rec."No.",
+                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+                        // Create the file content
+                        TempBlob.CreateOutStream(OutStream);
+                        OutStream.WriteText(JsonText);
+
+                        // Prepare for download
+                        TempBlob.CreateInStream(InStream);
+                        DownloadFromStream(InStream, 'Download e-Invoice', '', 'JSON files (*.json)|*.json', FileName);
+                    end;
+                }
+
                 action(ViewSubmissionLog)
                 {
                     ApplicationArea = All;
@@ -348,7 +345,6 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Image = Log;
                     ToolTip = 'View submission log entries for this invoice (alternative status tracking)';
                     Visible = IsJotexCompany;
-                    // No Promoted properties when using actionref categories
 
                     trigger OnAction()
                     var
@@ -511,7 +507,6 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
                     Visible = IsJotexCompany;
                     Enabled = CanCancelEInvoice;
-                    // Not promoted to keep actions under e-Invoice group only
 
                     trigger OnAction()
                     var
@@ -590,37 +585,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             }
         }
 
-        // Add a top-level tab using Promoted actions area
-        addafter("Category_Incoming Document")
-        {
-            group("Category_LHDN - MyInvois")
-            {
-                Caption = 'LHDN - MyInvois';
-                ShowAs = Standard;
 
-                actionref(SignAndSubmitToLHDN_Promoted; SignAndSubmitToLHDN)
-                {
-                }
-                actionref(CheckStatusDirect_Promoted; CheckStatusDirect)
-                {
-                }
-                actionref(GenerateQrImage_Promoted; GenerateQrImage)
-                {
-                }
-                actionref(OpenValidationLink_Promoted; OpenValidationLink)
-                {
-                }
-                actionref(GenerateEInvoiceJSON_Promoted; GenerateEInvoiceJSON)
-                {
-                }
-                actionref(ViewSubmissionLog_Promoted; ViewSubmissionLog)
-                {
-                }
-                actionref(CancelEInvoice_Promoted; CancelEInvoice)
-                {
-                }
-            }
-        }
 
     }
 

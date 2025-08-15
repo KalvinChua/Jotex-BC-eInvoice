@@ -103,38 +103,21 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
     {
         addlast(Processing)
         {
-            group(eInvActions)
+            group(EInvoiceActions)
             {
                 Caption = 'LHDN - MyInvois';
                 Image = ElectronicDoc;
                 ToolTip = 'e-Invoice actions for LHDN MyInvois';
-                // Show as a normal group (not SplitButton) to render like base groups
+                Visible = true; // Show this group so actions are visible
 
-                action(OpenValidationLink)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Open Validation Link';
-                    Image = Web;
-                    ToolTip = 'Open the public validation link in your browser.';
-
-                    Enabled = eInvHasQrUrl;
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
-
-                    trigger OnAction()
-                    begin
-                        if Rec."eInvoice QR URL" <> '' then
-                            Hyperlink(Rec."eInvoice QR URL");
-                    end;
-                }
                 action(GenerateQrImage)
                 {
                     ApplicationArea = All;
                     Caption = 'Generate QR Image';
                     Image = Picture;
                     ToolTip = 'Generate and store the QR image from the validation URL.';
-
+                    Visible = IsJotexCompany;
                     Enabled = eInvHasQrUrl;
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -170,156 +153,28 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                             Message('Failed to store QR image.');
                     end;
                 }
-                action(GenerateEInvoiceJSON)
+                action(OpenValidationLink)
                 {
                     ApplicationArea = All;
-                    Caption = 'Generate e-Invoice JSON';
-                    Image = ExportFile;
-                    ToolTip = 'Generate e-Invoice in JSON format for credit memo';
-
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
-
-                    trigger OnAction()
-                    var
-                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                        TempBlob: Codeunit "Temp Blob";
-                        FileName: Text;
-                        JsonText: Text;
-                        OutStream: OutStream;
-                        InStream: InStream;
-                    begin
-                        JsonText := eInvoiceGenerator.GenerateCreditMemoEInvoiceJson(Rec, false);
-
-                        // Create download file
-                        FileName := StrSubstNo('eInvoice_CreditMemo_%1_%2.json',
-                            Rec."No.",
-                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
-
-                        TempBlob.CreateOutStream(OutStream);
-                        OutStream.WriteText(JsonText);
-                        TempBlob.CreateInStream(InStream);
-                        DownloadFromStream(InStream, 'Download e-Invoice JSON', '', 'JSON files (*.json)|*.json', FileName);
-                    end;
-                }
-
-                action(SignAndSubmitToLHDN)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Sign & Submit to LHDN';
-                    Image = ElectronicDoc;
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
-                    ToolTip = 'Sign the credit memo via Azure Function and submit directly to LHDN MyInvois API';
-
-
-                    trigger OnAction()
-                    var
-                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
-                        LhdnResponse: Text;
-                        Success: Boolean;
-                    begin
-                        // Suppress generator popups; only show an error on failure
-                        eInvoiceGenerator.SetSuppressUserDialogs(true);
-                        Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
-                        if Success then begin
-                            SendSubmissionNotification(true, Rec."No.", LhdnResponse);
-                        end else begin
-                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
-                        end;
-                    end;
-                }
-
-                action(CancelEInvoice)
-                {
-                    ApplicationArea = All;
-                    Caption = 'Cancel e-Invoice';
-                    Image = Cancel;
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
-                    ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
+                    Caption = 'Open Validation Link';
+                    Image = Web;
+                    ToolTip = 'Open the public validation link in your browser.';
                     Visible = IsJotexCompany;
-                    Enabled = CanCancelEInvoice;
+                    Enabled = eInvHasQrUrl;
 
                     trigger OnAction()
-                    var
-                        eInvoiceCancellationHelper: Codeunit "eInvoice Cancellation Helper";
-                        CancellationReason: Text;
-                        SubmissionLog: Record "eInvoice Submission Log";
-                        ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
                     begin
-                        // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
-                        if not IsCancellationAllowed() then begin
-                            // Provide specific message based on current status
-                            if Rec."eInvoice Validation Status" = 'Cancelled' then begin
-                                Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
-                                exit;
-                            end;
-
-                            SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                            if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
-                                Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
-                                        SubmissionLog."Cancellation Reason",
-                                        Format(SubmissionLog."Cancellation Date"));
-                                exit;
-                            end;
-
-                            if Rec."eInvoice Submission UID" = '' then begin
-                                Message('This credit memo has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
-                                exit;
-                            end;
-
-                            Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
-                                    Rec."eInvoice Validation Status");
-                            exit;
-                        end;
-
-                        // Verify that the credit memo has been submitted and is valid
-                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
-                        SubmissionLog.SetRange(Status, 'Valid');
-                        if not SubmissionLog.FindLast() then begin
-                            Message('This credit memo has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
-                            exit;
-                        end;
-
-                        // Confirm cancellation
-                        if not Confirm(ConfirmMsg, false, Rec."No.") then
-                            exit;
-
-                        // Get cancellation reason
-                        CancellationReason := SelectCancellationReason();
-                        if CancellationReason = '' then
-                            exit;
-
-                        // Proceed with cancellation (same pattern as posted sales invoice)
-                        ClearLastError();
-                        if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then begin
-                            // Refresh the page to show updated status and disable cancel button
-                            CanCancelEInvoice := IsCancellationAllowed();
-                            CurrPage.Update(false);
-                        end else begin
-                            // Try alternative method with enhanced error handling
-                            ClearLastError();
-                            if eInvoiceCancellationHelper.CancelDocumentWithIsolation(Rec."No.", CancellationReason) then begin
-                                Message('Cancellation completed using alternative method. Please refresh the submission log.');
-                                CanCancelEInvoice := IsCancellationAllowed();
-                                CurrPage.Update(false);
-                            end else begin
-                                // Show any error that occurred
-                                if GetLastErrorText() <> '' then
-                                    Message('Cancellation failed with error:\%1', GetLastErrorText())
-                                else
-                                    Message('Cancellation operation failed. Please check the submission log for details.');
-                            end;
-                        end;
+                        if Rec."eInvoice QR URL" <> '' then
+                            Hyperlink(Rec."eInvoice QR URL");
                     end;
                 }
-
                 action(RefreshStatus)
                 {
                     ApplicationArea = All;
                     Caption = 'Refresh Status';
                     Image = Refresh;
                     ToolTip = 'Refresh the e-Invoice status from LHDN system using direct API call (same method as posted sales invoice)';
-
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
+                    Visible = IsJotexCompany;
 
                     trigger OnAction()
                     var
@@ -411,6 +266,147 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         end;
                     end;
                 }
+                action(SignAndSubmitToLHDN)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Sign & Submit to LHDN';
+                    Image = ElectronicDoc;
+                    Visible = IsJotexCompany;
+                    ToolTip = 'Sign the credit memo via Azure Function and submit directly to LHDN MyInvois API';
+
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        LhdnResponse: Text;
+                        Success: Boolean;
+                    begin
+                        // Suppress generator popups; only show an error on failure
+                        eInvoiceGenerator.SetSuppressUserDialogs(true);
+                        Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
+                        if Success then begin
+                            SendSubmissionNotification(true, Rec."No.", LhdnResponse);
+                        end else begin
+                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
+                        end;
+                    end;
+                }
+                action(GenerateEInvoiceJSON)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Generate e-Invoice JSON';
+                    Image = ExportFile;
+                    ToolTip = 'Generate e-Invoice in JSON format for credit memo';
+                    Visible = IsJotexCompany;
+
+                    trigger OnAction()
+                    var
+                        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                        TempBlob: Codeunit "Temp Blob";
+                        FileName: Text;
+                        JsonText: Text;
+                        OutStream: OutStream;
+                        InStream: InStream;
+                    begin
+                        JsonText := eInvoiceGenerator.GenerateCreditMemoEInvoiceJson(Rec, false);
+
+                        // Create download file
+                        FileName := StrSubstNo('eInvoice_CreditMemo_%1_%2.json',
+                            Rec."No.",
+                            Format(CurrentDateTime, 0, '<Year4><Month,2><Day,2><Hours24,2><Minutes,2><Seconds,2>'));
+
+                        TempBlob.CreateOutStream(OutStream);
+                        OutStream.WriteText(JsonText);
+                        TempBlob.CreateInStream(InStream);
+                        DownloadFromStream(InStream, 'Download e-Invoice JSON', '', 'JSON files (*.json)|*.json', FileName);
+                    end;
+                }
+
+
+
+                action(CancelEInvoice)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Cancel e-Invoice';
+                    Image = Cancel;
+                    ToolTip = 'Cancel this e-Invoice in the LHDN MyInvois system';
+                    Visible = IsJotexCompany;
+                    Enabled = CanCancelEInvoice;
+
+                    trigger OnAction()
+                    var
+                        eInvoiceCancellationHelper: Codeunit "eInvoice Cancellation Helper";
+                        CancellationReason: Text;
+                        SubmissionLog: Record "eInvoice Submission Log";
+                        ConfirmMsg: Label 'Are you sure you want to cancel e-Invoice %1 in the LHDN system?\This action cannot be undone.';
+                    begin
+                        // Check if cancellation is allowed (should be disabled by Enabled property, but double-check)
+                        if not IsCancellationAllowed() then begin
+                            // Provide specific message based on current status
+                            if Rec."eInvoice Validation Status" = 'Cancelled' then begin
+                                Message('This e-Invoice has already been cancelled.\You cannot cancel an e-Invoice that is already cancelled.');
+                                exit;
+                            end;
+
+                            SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                            if SubmissionLog.FindLast() and (SubmissionLog.Status = 'Cancelled') then begin
+                                Message('This e-Invoice has already been cancelled.\Reason: %1\Cancelled on: %2',
+                                        SubmissionLog."Cancellation Reason",
+                                        Format(SubmissionLog."Cancellation Date"));
+                                exit;
+                            end;
+
+                            if Rec."eInvoice Submission UID" = '' then begin
+                                Message('This credit memo has not been submitted to LHDN.\Only submitted e-Invoices can be cancelled.');
+                                exit;
+                            end;
+
+                            Message('This e-Invoice cannot be cancelled.\Only valid/accepted e-Invoices can be cancelled in the LHDN system.\Current status: %1',
+                                    Rec."eInvoice Validation Status");
+                            exit;
+                        end;
+
+                        // Verify that the credit memo has been submitted and is valid
+                        SubmissionLog.SetRange("Invoice No.", Rec."No.");
+                        SubmissionLog.SetRange(Status, 'Valid');
+                        if not SubmissionLog.FindLast() then begin
+                            Message('This credit memo has not been submitted to LHDN or is not in a valid state.\Only valid/accepted e-Invoices can be cancelled.');
+                            exit;
+                        end;
+
+                        // Confirm cancellation
+                        if not Confirm(ConfirmMsg, false, Rec."No.") then
+                            exit;
+
+                        // Get cancellation reason
+                        CancellationReason := SelectCancellationReason();
+                        if CancellationReason = '' then
+                            exit;
+
+                        // Proceed with cancellation (same pattern as posted sales invoice)
+                        ClearLastError();
+                        if eInvoiceCancellationHelper.CancelDocument(Rec."No.", CancellationReason) then begin
+                            // Refresh the page to show updated status and disable cancel button
+                            CanCancelEInvoice := IsCancellationAllowed();
+                            CurrPage.Update(false);
+                        end else begin
+                            // Try alternative method with enhanced error handling
+                            ClearLastError();
+                            if eInvoiceCancellationHelper.CancelDocumentWithIsolation(Rec."No.", CancellationReason) then begin
+                                Message('Cancellation completed using alternative method. Please refresh the submission log.');
+                                CanCancelEInvoice := IsCancellationAllowed();
+                                CurrPage.Update(false);
+                            end else begin
+                                // Show any error that occurred
+                                if GetLastErrorText() <> '' then
+                                    Message('Cancellation failed with error:\%1', GetLastErrorText())
+                                else
+                                    Message('Cancellation operation failed. Please check the submission log for details.');
+                            end;
+                        end;
+                    end;
+                }
+
+
 
                 action(ShowSubmissionLogEntries)
                 {
@@ -419,7 +415,6 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                     Image = Log;
                     ToolTip = 'Show all submission log entries for this credit memo';
                     Visible = IsJotexCompany;
-                    // Promoted properties not allowed when using actionref categories or NoPromotedActionProperties feature
 
                     trigger OnAction()
                     var
@@ -486,37 +481,7 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             }
         }
 
-        // Add a top-level tab using Promoted actions area
-        addlast(Promoted)
-        {
-            group("Category_LHDN - MyInvois")
-            {
-                Caption = 'LHDN - MyInvois';
-                ShowAs = SplitButton;
 
-                actionref(SignAndSubmitToLHDN_Promoted; SignAndSubmitToLHDN)
-                {
-                }
-                actionref(RefreshStatus_Promoted; RefreshStatus)
-                {
-                }
-                actionref(GenerateQrImage_Promoted; GenerateQrImage)
-                {
-                }
-                actionref(OpenValidationLink_Promoted; OpenValidationLink)
-                {
-                }
-                actionref(GenerateEInvoiceJSON_Promoted; GenerateEInvoiceJSON)
-                {
-                }
-                actionref(ViewSubmissionLog_Promoted; ViewSubmissionLog)
-                {
-                }
-                actionref(CancelEInvoice_Promoted; CancelEInvoice)
-                {
-                }
-            }
-        }
     }
 
     // e-Invoice category group moved to promoted categories to avoid processing-area actionref errors

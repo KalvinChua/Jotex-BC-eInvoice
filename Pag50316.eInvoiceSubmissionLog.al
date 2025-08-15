@@ -115,6 +115,7 @@ page 50316 "e-Invoice Submission Log"
                 Caption = 'Refresh Status';
                 Image = Refresh;
                 ToolTip = 'Refresh status for the current record or all selected records.';
+                Visible = IsJotexCompany;
 
                 trigger OnAction()
                 var
@@ -1072,5 +1073,15 @@ page 50316 "e-Invoice Submission Log"
             else
                 exit(StatusValue);
         end;
+    end;
+
+    var
+        IsJotexCompany: Boolean;
+
+    trigger OnOpenPage()
+    var
+        CompanyInfo: Record "Company Information";
+    begin
+        IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
     end;
 }
