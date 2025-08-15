@@ -263,8 +263,12 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                                     LongId := ExtractLongIdFromApiResponse(ResponseText, Rec."eInvoice UUID");
                                     if LongId <> '' then begin
                                         ValidationUrl := BuildValidationUrl(Rec."eInvoice UUID", LongId, eInvoiceSetup.Environment);
-                                        if eInvoiceGenerator.UpdateInvoiceQrUrl(Rec."No.", ValidationUrl) then
+                                        if eInvoiceGenerator.UpdateInvoiceQrUrl(Rec."No.", ValidationUrl) then begin
                                             CurrPage.Update(false);
+
+                                            // Automatically generate QR image after updating the URL
+                                            AutoGenerateQrImage(Rec."No.", ValidationUrl);
+                                        end;
                                     end;
 
                                     SendStatusNotification(true, Rec."No.", ResponseText, Rec."eInvoice UUID");
@@ -1313,6 +1317,48 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             SubmissionLog."Error Message" := CopyStr(StrSubstNo('Status synchronized from Posted Sales Invoice: %1', NewStatus),
                                                     1, MaxStrLen(SubmissionLog."Error Message"));
             SubmissionLog.Modify();
+        end;
+    end;
+
+    /// <summary>
+    /// Automatically generates QR image for the invoice using the validation URL
+    /// This is called after the QR URL is updated during status refresh
+    /// </summary>
+    /// <param name="InvoiceNo">The invoice number to generate QR for</param>
+    /// <param name="ValidationUrl">The validation URL to convert to QR</param>
+    local procedure AutoGenerateQrImage(InvoiceNo: Code[20]; ValidationUrl: Text)
+    var
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        QrServiceUrl: Text;
+        InS: InStream;
+        eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+        Success: Boolean;
+    begin
+        if (InvoiceNo = '') or (ValidationUrl = '') then
+            exit;
+
+        // Use a QR generation service to render the QR image from the validation URL
+        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', ValidationUrl);
+
+        if not HttpClient.Get(QrServiceUrl, Response) then begin
+            // Silently fail - this is an automatic process
+            exit;
+        end;
+
+        if not Response.IsSuccessStatusCode then begin
+            // Silently fail - this is an automatic process
+            exit;
+        end;
+
+        Response.Content().ReadAs(InS);
+
+        // Generate and store the QR image
+        Success := eInvoiceGenerator.UpdateInvoiceQrImage(InvoiceNo, InS, 'eInvoiceQR.png');
+
+        if Success then begin
+            // Update the page to show the new QR image
+            CurrPage.Update(false);
         end;
     end;
 }

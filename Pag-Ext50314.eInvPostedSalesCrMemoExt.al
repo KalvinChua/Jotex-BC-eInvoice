@@ -246,8 +246,12 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                                     if LongId <> '' then begin
                                         ValidationUrl := BuildValidationUrl(Rec."eInvoice UUID", LongId, eInvoiceSetup.Environment);
                                         if ValidationUrl <> '' then begin
-                                            if eInvoiceQrManager.UpdateCreditMemoQrUrl(Rec."No.", ValidationUrl) then
+                                            if eInvoiceQrManager.UpdateCreditMemoQrUrl(Rec."No.", ValidationUrl) then begin
                                                 CurrPage.Update(false);
+
+                                                // Automatically generate QR image after updating the URL
+                                                AutoGenerateCreditMemoQrImage(Rec."No.", ValidationUrl);
+                                            end;
                                         end;
                                     end;
 
@@ -1187,6 +1191,48 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                 exit('Partially Valid');
             else
                 exit(OverallStatus); // Use as-is if unknown
+        end;
+    end;
+
+    /// <summary>
+    /// Automatically generates QR image for the credit memo using the validation URL
+    /// This is called after the QR URL is updated during status refresh
+    /// </summary>
+    /// <param name="CreditMemoNo">The credit memo number to generate QR for</param>
+    /// <param name="ValidationUrl">The validation URL to convert to QR</param>
+    local procedure AutoGenerateCreditMemoQrImage(CreditMemoNo: Code[20]; ValidationUrl: Text)
+    var
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        QrServiceUrl: Text;
+        InS: InStream;
+        eInvoiceQrManager: Codeunit "eInvoice QR Manager";
+        Success: Boolean;
+    begin
+        if (CreditMemoNo = '') or (ValidationUrl = '') then
+            exit;
+
+        // Use a QR generation service to render the QR image from the validation URL
+        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', ValidationUrl);
+
+        if not HttpClient.Get(QrServiceUrl, Response) then begin
+            // Silently fail - this is an automatic process
+            exit;
+        end;
+
+        if not Response.IsSuccessStatusCode then begin
+            // Silently fail - this is an automatic process
+            exit;
+        end;
+
+        Response.Content().ReadAs(InS);
+
+        // Generate and store the QR image using the QR Manager
+        Success := eInvoiceQrManager.UpdateCreditMemoQrImage(CreditMemoNo, InS, 'eInvoiceQR.png');
+
+        if Success then begin
+            // Update the page to show the new QR image
+            CurrPage.Update(false);
         end;
     end;
 }
