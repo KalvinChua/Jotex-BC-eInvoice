@@ -2088,12 +2088,25 @@ codeunit 50312 "eInvoice Submission Status"
     /// Enhanced to use the same direct HttpClient approach as Posted Sales Invoice
     /// </summary>
     procedure RefreshSubmissionLogStatusSafe(var SubmissionLogRec: Record "eInvoice Submission Log"): Boolean
+    var
+        ContextRestricted: Boolean;
     begin
         if not IsJotexCompany() then begin
             Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
             exit(false);
         end;
-        exit(RefreshSubmissionLogStatusSafeInternal(SubmissionLogRec, true));
+
+        // Try the direct method first with context restriction detection
+        if TryRefreshSubmissionLogStatusInternal(SubmissionLogRec, true, ContextRestricted) then
+            exit(true);
+
+        // If context restricted, use alternative method
+        if ContextRestricted then begin
+            RefreshSubmissionLogStatusAlternative(SubmissionLogRec);
+            exit(false);
+        end;
+
+        exit(false);
     end;
 
     /// <summary>
@@ -2173,7 +2186,8 @@ codeunit 50312 "eInvoice Submission Status"
         RequestHeaders.Add('X-Request-Source', 'BusinessCentral-SubmissionLog');
 
         // Send request (same method as Posted Sales Invoice extension)
-        if HttpClient.Send(HttpRequestMessage, HttpResponseMessage) then begin
+        // Wrap in try-catch to handle context restrictions gracefully
+        if TryHttpClientSend(HttpClient, HttpRequestMessage, HttpResponseMessage) then begin
             HttpResponseMessage.Content().ReadAs(ResponseText);
 
             if HttpResponseMessage.IsSuccessStatusCode() then begin
@@ -2226,20 +2240,88 @@ codeunit 50312 "eInvoice Submission Status"
                 exit(false);
             end;
         end else begin
-            // Failed to connect to LHDN API
-            if ShowMessages then
-                Message('Failed to connect to LHDN API via direct HttpClient call.\\\\' +
-                       'Error: %1\\\\' +
-                       'This may be due to:\\' +
-                       '- Network connectivity issues\\' +
-                       '- Context restrictions\\' +
-                       '- LHDN API temporary unavailability',
-                       GetLastErrorText());
+            // Failed to connect to LHDN API - check if it's due to context restrictions
+            if GetLastErrorText().Contains('cannot be performed in this context') then begin
+                if ShowMessages then
+                    Message('Context Restriction - HTTP operations not allowed in this context.\\\\' +
+                           'The system cannot perform HTTP operations in this UI context.\\\\' +
+                           'Use the alternative refresh method or schedule a background job.');
 
-            SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Direct API call failed: %1', GetLastErrorText()),
-                                                       1, MaxStrLen(SubmissionLogRec."Error Message"));
-            SubmissionLogRec."Last Updated" := CurrentDateTime;
-            SubmissionLogRec.Modify();
+                SubmissionLogRec."Error Message" := CopyStr('Context restriction: HTTP operations not allowed in this UI context.',
+                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
+                SubmissionLogRec."Last Updated" := CurrentDateTime;
+                SubmissionLogRec.Modify();
+                exit(false);
+            end else begin
+                // Other HTTP failures
+                if ShowMessages then
+                    Message('Failed to connect to LHDN API via direct HttpClient call.\\\\' +
+                           'Error: %1\\\\' +
+                           'This may be due to:\\' +
+                           '- Network connectivity issues\\' +
+                           '- LHDN API temporary unavailability',
+                           GetLastErrorText());
+
+                SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Direct API call failed: %1', GetLastErrorText()),
+                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
+                SubmissionLogRec."Last Updated" := CurrentDateTime;
+                SubmissionLogRec.Modify();
+                exit(false);
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// Try to refresh submission log status with context restriction detection
+    /// Returns true if successful, false if failed (with ContextRestricted flag set if due to context)
+    /// </summary>
+    [TryFunction]
+    local procedure TryRefreshSubmissionLogStatusInternal(var SubmissionLogRec: Record "eInvoice Submission Log"; ShowMessages: Boolean; var ContextRestricted: Boolean)
+    begin
+        ContextRestricted := false;
+
+        // Try to perform the HTTP operation
+        if not RefreshSubmissionLogStatusSafeInternal(SubmissionLogRec, ShowMessages) then begin
+            // Check if the failure was due to context restrictions
+            if GetLastErrorText().Contains('cannot be performed in this context') or
+               GetLastErrorText().Contains('Context restriction') then begin
+                ContextRestricted := true;
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// Safe HTTP client send with context restriction detection
+    /// Returns true if successful, false if failed due to context restrictions
+    /// </summary>
+    [TryFunction]
+    local procedure TryHttpClientSend(var HttpClient: HttpClient; var HttpRequestMessage: HttpRequestMessage; var HttpResponseMessage: HttpResponseMessage)
+    begin
+        HttpClient.Send(HttpRequestMessage, HttpResponseMessage);
+    end;
+
+    /// <summary>
+    /// Alternative refresh method that can be called from different contexts
+    /// This method attempts to refresh the status using a different approach
+    /// </summary>
+    procedure RefreshSubmissionLogStatusFromDifferentContext(var SubmissionLogRec: Record "eInvoice Submission Log"): Boolean
+    var
+        BackgroundJobCreated: Boolean;
+    begin
+        if not IsJotexCompany() then begin
+            Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
+            exit(false);
+        end;
+
+        // Try to create a background job for this submission
+        BackgroundJobCreated := CreateBackgroundStatusRefreshJob(SubmissionLogRec."Submission UID");
+
+        if BackgroundJobCreated then begin
+            Message('Background job created successfully for submission %1. The status will be refreshed automatically within the next few minutes.',
+                    SubmissionLogRec."Submission UID");
+            exit(true);
+        end else begin
+            Message('Failed to create background job. Please try again or contact system administrator.');
             exit(false);
         end;
     end;
@@ -2311,7 +2393,8 @@ codeunit 50312 "eInvoice Submission Status"
                                   '4. Contact system administrator\\\\' +
                                   'Manual API Testing:\\' +
                                   'URL: %5\\' +
-                                  'Use tools like Postman or browser to test manually.',
+                                  'Use tools like Postman or browser to test manually.\\\\' +
+                                  'Would you like to schedule a background job to refresh this status?',
                                   SubmissionLogRec."Submission UID",
                                   SubmissionLogRec.Status,
                                   LastUpdateInfo,
@@ -2323,6 +2406,15 @@ codeunit 50312 "eInvoice Submission Status"
                                                    1, MaxStrLen(SubmissionLogRec."Error Message"));
         SubmissionLogRec."Last Updated" := CurrentDateTime;
         SubmissionLogRec.Modify();
+
+        // Offer to create a background job
+        if Confirm('Would you like to schedule a background job to refresh this status?') then begin
+            if CreateBackgroundStatusRefreshJob(SubmissionLogRec."Submission UID") then begin
+                Message('Background job scheduled successfully. The status will be refreshed automatically within the next few minutes.');
+            end else begin
+                Message('Failed to schedule background job. Please contact system administrator.');
+            end;
+        end;
 
         Message(StatusMessage);
     end;
@@ -2681,6 +2773,25 @@ codeunit 50312 "eInvoice Submission Status"
         end;
 
         exit(DeletableCount);
+    end;
+
+    /// <summary>
+    /// Check if the current context allows HTTP operations
+    /// Returns true if HTTP operations are allowed, false if restricted
+    /// </summary>
+    procedure IsHttpContextAllowed(): Boolean
+    var
+        TestHttpClient: HttpClient;
+        TestHttpRequestMessage: HttpRequestMessage;
+        TestHttpResponseMessage: HttpResponseMessage;
+        TestUrl: Text;
+    begin
+        // Try a simple HTTP operation to test context
+        TestUrl := 'https://httpbin.org/get';
+        TestHttpRequestMessage.Method('GET');
+        TestHttpRequestMessage.SetRequestUri(TestUrl);
+
+        exit(TryHttpClientSend(TestHttpClient, TestHttpRequestMessage, TestHttpResponseMessage));
     end;
 
 }

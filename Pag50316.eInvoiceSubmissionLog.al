@@ -216,10 +216,21 @@ page 50316 "e-Invoice Submission Log"
                     // Process each selected record
                     if SelectedSubmissionLog.FindSet() then begin
                         repeat
-                            if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SelectedSubmissionLog) then
-                                UpdatedCount += 1
-                            else
+                            // Check if HTTP context is allowed for each record
+                            if SubmissionStatusCU.IsHttpContextAllowed() then begin
+                                if SubmissionStatusCU.RefreshSubmissionLogStatusSafe(SelectedSubmissionLog) then
+                                    UpdatedCount += 1
+                                else
+                                    FailedCount += 1;
+                            end else begin
+                                // Context restricted - mark as failed and offer background job
                                 FailedCount += 1;
+                                // Update error message to indicate context restriction
+                                SelectedSubmissionLog."Error Message" := CopyStr('Context restriction: HTTP operations not allowed in this UI context.',
+                                                                             1, MaxStrLen(SelectedSubmissionLog."Error Message"));
+                                SelectedSubmissionLog."Last Updated" := CurrentDateTime;
+                                SelectedSubmissionLog.Modify();
+                            end;
                         until SelectedSubmissionLog.Next() = 0;
                     end;
 

@@ -163,10 +163,16 @@ page 50315 "e-Invoice Submission Log Card"
                 var
                     SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                 begin
-                    // Use context-safe refresh method
-                    if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
-                        // If direct method fails due to context restrictions, try alternative approach
+                    // Check if HTTP context is allowed first
+                    if not SubmissionStatusCU.IsHttpContextAllowed() then begin
+                        // Context restricted - offer alternative methods
                         SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
+                    end else begin
+                        // Use context-safe refresh method
+                        if not SubmissionStatusCU.RefreshSubmissionLogStatusSafe(Rec) then begin
+                            // If direct method fails due to context restrictions, try alternative approach
+                            SubmissionStatusCU.RefreshSubmissionLogStatusAlternative(Rec);
+                        end;
                     end;
                 end;
             }
