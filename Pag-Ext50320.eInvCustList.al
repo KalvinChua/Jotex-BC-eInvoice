@@ -46,6 +46,22 @@ pageextension 50320 eInvCustList extends "Customer List"
                 Editable = true;
                 Visible = true;
             }
+            field("Validation Status"; Rec."Validation Status")
+            {
+                ApplicationArea = All;
+                Caption = 'TIN Validation Status';
+                Editable = false;
+                Visible = true;
+                ToolTip = 'Shows the current TIN validation status for this customer';
+            }
+            field("Last TIN Validation"; Rec."Last TIN Validation")
+            {
+                ApplicationArea = All;
+                Caption = 'Last TIN Validation';
+                Editable = false;
+                Visible = true;
+                ToolTip = 'Shows when the TIN was last validated';
+            }
         }
     }
 
@@ -166,8 +182,112 @@ pageextension 50320 eInvCustList extends "Customer List"
                     end;
                 end;
             }
+
+            action(ValidateTIN)
+            {
+                ApplicationArea = All;
+                Caption = 'Validate TIN No.';
+                Image = Check;
+                ToolTip = 'Validate the selected customer''s TIN using MyInvois API';
+
+                trigger OnAction()
+                var
+                    Validator: Codeunit "eInvoice TIN Validator";
+                    Msg: Text;
+                begin
+                    if Rec."e-Invoice TIN No." = '' then
+                        Error('Please select a customer with a TIN No. to validate.');
+
+                    Msg := Validator.ValidateTIN(Rec);
+                    Message(Msg);
+                    CurrPage.Update(false);
+                end;
+            }
+
+            action(ValidateMultipleTINs)
+            {
+                ApplicationArea = All;
+                Caption = 'Validate Multiple TINs';
+                Image = CheckList;
+                ToolTip = 'Validate TIN for all customers that have TIN numbers but haven''t been validated recently';
+
+                trigger OnAction()
+                var
+                    Customer: Record Customer;
+                    Validator: Codeunit "eInvoice TIN Validator";
+                    ValidatedCount: Integer;
+                    ErrorCount: Integer;
+                    ProgressDialog: Dialog;
+                    TotalCount: Integer;
+                    CurrentCount: Integer;
+                begin
+                    if not Confirm('Do you want to validate TIN numbers for all customers that have TIN but haven''t been validated in the last 180 days?') then
+                        exit;
+
+                    Customer.Reset();
+                    Customer.SetFilter("e-Invoice TIN No.", '<>%1', '');
+                    Customer.SetFilter("e-Invoice ID Type", '<>%1', 0);
+                    Customer.SetFilter("e-Invoice ID No.", '<>%1', '');
+                    TotalCount := Customer.Count();
+
+                    if TotalCount = 0 then begin
+                        Message('No customers found with complete TIN information.');
+                        exit;
+                    end;
+
+                    ProgressDialog.Open('Validating TIN #1####### of #2####### customers...\Current: #3#########');
+
+                    if Customer.FindSet() then
+                        repeat
+                            CurrentCount += 1;
+                            ProgressDialog.Update(1, CurrentCount);
+                            ProgressDialog.Update(2, TotalCount);
+                            ProgressDialog.Update(3, Customer."No." + ' - ' + Customer.Name);
+
+                            if ShouldValidateTIN(Customer) then begin
+                                if TryValidateTIN(Customer, Validator) then
+                                    ValidatedCount += 1
+                                else
+                                    ErrorCount += 1;
+                            end;
+                        until Customer.Next() = 0;
+
+                    ProgressDialog.Close();
+                    Message('TIN validation completed.\Validated: %1\Errors: %2\Total processed: %3', ValidatedCount, ErrorCount, CurrentCount);
+                    CurrPage.Update(false);
+                end;
+            }
         }
     }
+
+    local procedure ShouldValidateTIN(var Customer: Record Customer): Boolean
+    var
+        CutoffDate: Date;
+    begin
+        // Skip if missing required fields
+        if (Customer."e-Invoice TIN No." = '') or
+           (Customer."e-Invoice ID Type" = 0) or
+           (Customer."e-Invoice ID No." = '') then
+            exit(false);
+
+        // Validate if never validated or last validation was more than 180 days ago
+        CutoffDate := CalcDate('<-180D>', Today);
+        exit((Customer."Last TIN Validation" = 0DT) or (DT2Date(Customer."Last TIN Validation") < CutoffDate));
+    end;
+
+    local procedure TryValidateTIN(var Customer: Record Customer; var Validator: Codeunit "eInvoice TIN Validator"): Boolean
+    var
+        Msg: Text;
+    begin
+        if not Customer.Get(Customer."No.") then
+            exit(false);
+
+        Commit();
+        if not Codeunit.Run(Codeunit::"eInvoice TIN Validator", Customer) then
+            exit(false);
+
+        exit(true);
+    end;
 
     local procedure GetStateCode(CountyText: Text): Code[2]
     begin

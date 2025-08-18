@@ -61,7 +61,7 @@ codeunit 50301 "eInvoice TIN Validator"
                     CustomerRec."Last TIN Validation" := CurrentDateTime();
                     CustomerRec.Modify();
                     InsertTinLog(CustomerRec, TIN, 'Valid', IDType, IDValue);
-                    exit(StrSubstNo('TIN: %1\nStatus: Valid', TIN));
+                    exit(StrSubstNo('TIN: %1' + '\' + 'Status: Valid', TIN));
                 end;
 
             400:
@@ -70,7 +70,7 @@ codeunit 50301 "eInvoice TIN Validator"
                     CustomerRec."Last TIN Validation" := CurrentDateTime();
                     CustomerRec.Modify();
                     InsertTinLog(CustomerRec, TIN, 'Invalid Input', IDType, IDValue);
-                    Error('TIN validation failed: Bad input format (400).\nPlease check the TIN, ID Type, or ID No.');
+                    Error('TIN validation failed: Bad input format (400).' + '\' + 'Please check the TIN, ID Type, or ID No.');
                 end;
 
             404:
@@ -79,7 +79,7 @@ codeunit 50301 "eInvoice TIN Validator"
                     CustomerRec."Last TIN Validation" := CurrentDateTime();
                     CustomerRec.Modify();
                     InsertTinLog(CustomerRec, TIN, 'Not Found', IDType, IDValue);
-                    exit(StrSubstNo('TIN: %1\nNo taxpayer found for this TIN and ID combination.', TIN));
+                    exit(StrSubstNo('TIN: %1' + '\' + 'No taxpayer found for this TIN and ID combination.', TIN));
                 end;
 
             else begin
@@ -113,7 +113,7 @@ codeunit 50301 "eInvoice TIN Validator"
                             CustomerRec."Validation Status" := CustomerRec."Validation Status"::"Valid";
                             CustomerRec."Last TIN Validation" := CurrentDateTime();
                             CustomerRec.Modify();
-                            MessageText := StrSubstNo('TIN: %1\nStatus: Valid (cached)', Tin);
+                            MessageText := StrSubstNo('TIN: %1' + '\' + 'Status: Valid (cached)', Tin);
                             exit(true);
                         end;
                     'Not Found':
@@ -121,7 +121,7 @@ codeunit 50301 "eInvoice TIN Validator"
                             CustomerRec."Validation Status" := CustomerRec."Validation Status"::"Not Found";
                             CustomerRec."Last TIN Validation" := CurrentDateTime();
                             CustomerRec.Modify();
-                            MessageText := StrSubstNo('TIN: %1\nNo taxpayer found (cached).', Tin);
+                            MessageText := StrSubstNo('TIN: %1' + '\' + 'No taxpayer found (cached).', Tin);
                             exit(true);
                         end;
                 end;

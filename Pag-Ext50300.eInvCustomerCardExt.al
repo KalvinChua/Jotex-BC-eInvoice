@@ -60,6 +60,16 @@ pageextension 50304 eInvCustomerCardExt extends "Customer Card"
                 }
             }
         }
+
+        addfirst(factboxes)
+        {
+            part("TIN Validation History"; "TIN Log FactBox")
+            {
+                ApplicationArea = All;
+                Caption = 'TIN Validation History';
+                SubPageLink = "Customer No." = field("No.");
+            }
+        }
     }
 
     actions
