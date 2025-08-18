@@ -5,7 +5,10 @@ page 50315 "e-Invoice Submission Log Card"
     Caption = 'e-Invoice Submission Log Entry';
     UsageCategory = None;
     ApplicationArea = All;
-    Editable = true; // Allow editing with restrictions
+    Editable = false; // Read-only - system-generated log entries should not be edited by users
+    InsertAllowed = false; // Prevent inserts from UI
+    ModifyAllowed = false; // Prevent modifications from UI
+    DeleteAllowed = false; // Use controlled delete actions instead
 
     layout
     {
@@ -18,26 +21,31 @@ page 50315 "e-Invoice Submission Log Card"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the unique entry number for this log entry.';
+                    Editable = false; // System-generated auto-increment field
                 }
                 field("Invoice No."; Rec."Invoice No.")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the invoice number that was submitted.';
+                    Editable = false; // System-populated from invoice - should not be modified
                 }
                 field("Customer Name"; Rec."Customer Name")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the customer name for this invoice submission.';
+                    Editable = false; // System-populated from invoice - should not be modified
                 }
                 field("Status"; Rec.Status)
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the submission status (Submitted, Accepted, Rejected, etc.).';
+                    Editable = false; // System-controlled status - should not be manually modified
                 }
                 field("Environment"; Rec.Environment)
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the environment (Preprod/Production) where the submission was made.';
+                    Editable = false; // Set during submission - should not be modified
                 }
             }
 
@@ -48,36 +56,43 @@ page 50315 "e-Invoice Submission Log Card"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the LHDN submission UID returned after submission.';
+                    Editable = false; // LHDN-generated identifier - should not be modified
                 }
                 field("Document UUID"; Rec."Document UUID")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the document UUID assigned by LHDN MyInvois.';
+                    Editable = false; // LHDN-generated identifier - should not be modified
                 }
                 field("Document Type Description"; Rec."Document Type Description")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the document type description (e.g., Standard Invoice, Credit Note, etc.).';
+                    Editable = false; // Calculated field - should not be modified
                 }
                 field("Submission Date"; Rec."Submission Date")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies when the invoice was submitted to LHDN.';
+                    Editable = false; // System-generated timestamp - should not be modified
                 }
                 field("Response Date"; Rec."Response Date")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies when the response was received from LHDN.';
+                    Editable = false; // System-generated timestamp - should not be modified
                 }
                 field("Last Updated"; Rec."Last Updated")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies when this log entry was last updated.';
+                    Editable = false; // System-generated timestamp - should not be modified
                 }
                 field("Posting Date"; Rec."Posting Date")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the posting date of the posted sales invoice.';
+                    Editable = false; // System-generated date - should not be modified
                 }
             }
 
@@ -88,11 +103,13 @@ page 50315 "e-Invoice Submission Log Card"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the user who made the submission.';
+                    Editable = false; // System-generated user tracking - should not be modified
                 }
                 field("Company Name"; Rec."Company Name")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the company name.';
+                    Editable = false; // System-generated company info - should not be modified
                 }
             }
 
@@ -105,6 +122,7 @@ page 50315 "e-Invoice Submission Log Card"
                     ApplicationArea = All;
                     ToolTip = 'Specifies any error message received from LHDN.';
                     MultiLine = true;
+                    Editable = false; // System-generated error message - should not be modified
                 }
             }
 
@@ -117,11 +135,13 @@ page 50315 "e-Invoice Submission Log Card"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the reason for cancellation.';
                     MultiLine = true;
+                    Editable = false; // System-generated cancellation reason - should not be modified
                 }
                 field("Cancellation Date"; Rec."Cancellation Date")
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies when the document was cancelled in LHDN.';
+                    Editable = false; // System-generated timestamp - should not be modified
                 }
             }
         }

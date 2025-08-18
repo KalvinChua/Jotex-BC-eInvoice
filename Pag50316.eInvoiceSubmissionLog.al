@@ -6,7 +6,10 @@ page 50316 "e-Invoice Submission Log"
     UsageCategory = Lists;
     ApplicationArea = All;
     CardPageId = "e-Invoice Submission Log Card";
-    Editable = true; // Allow editing and deletion with restrictions
+    Editable = false; // Read-only list; use actions for controlled updates
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false; // Deletions only via provided actions with validation
 
     layout
     {
