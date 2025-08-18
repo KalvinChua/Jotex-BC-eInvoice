@@ -166,22 +166,7 @@ pageextension 50320 eInvCustList extends "Customer List"
                 end;
             }
 
-            action(ResetAllCustomersEInvoiceRequirement)
-            {
-                ApplicationArea = All;
-                Caption = 'Reset All e-Invoice Requirements';
-                Image = Cancel;
-                ToolTip = 'Reset all customers to NOT require e-Invoice (revert changes)';
 
-                trigger OnAction()
-                var
-                    CustomerBulkUpdate: Codeunit "eInvoice Customer Bulk Update";
-                begin
-                    if Confirm('Do you want to reset ALL customers to NOT require e-Invoice? This will disable automatic submission for all customers.') then begin
-                        CustomerBulkUpdate.ResetAllCustomersEInvoiceRequirement();
-                    end;
-                end;
-            }
 
             action(ValidateTIN)
             {

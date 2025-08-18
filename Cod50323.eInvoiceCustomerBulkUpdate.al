@@ -71,48 +71,4 @@ codeunit 50323 "eInvoice Customer Bulk Update"
                TotalCustomers, RequireEInvoice, DontRequireEInvoice);
     end;
 
-    /// <summary>
-    /// Resets all customers to NOT require e-Invoice
-    /// Use this if you want to revert the changes
-    /// </summary>
-    procedure ResetAllCustomersEInvoiceRequirement()
-    var
-        Customer: Record Customer;
-        UpdatedCount: Integer;
-        TotalCount: Integer;
-        AlreadyResetCount: Integer;
-    begin
-        UpdatedCount := 0;
-        TotalCount := 0;
-        AlreadyResetCount := 0;
-
-        if Customer.FindSet() then begin
-            repeat
-                TotalCount += 1;
-
-                if Customer."Requires e-Invoice" then begin
-                    Customer."Requires e-Invoice" := false;
-                    if Customer.Modify() then
-                        UpdatedCount += 1;
-                end else begin
-                    AlreadyResetCount += 1;
-                end;
-            until Customer.Next() = 0;
-        end;
-
-        // Show results to user
-        if TotalCount = 0 then begin
-            Message('No customers found.');
-        end else begin
-            Message('Customer e-Invoice requirement reset completed!\\\\' +
-                   'Total customers: %1\\' +
-                   'Reset to NOT require e-Invoice: %2\\' +
-                   'Already did NOT require e-Invoice: %3',
-                   TotalCount, UpdatedCount, AlreadyResetCount);
-
-            Session.LogMessage('0000EIV08', StrSubstNo('eInvoice Customer Bulk Update: Reset %1 out of %2 customers to NOT require e-Invoice. %3 already did NOT require e-Invoice.',
-                UpdatedCount, TotalCount, AlreadyResetCount),
-                Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, '', '');
-        end;
-    end;
 }

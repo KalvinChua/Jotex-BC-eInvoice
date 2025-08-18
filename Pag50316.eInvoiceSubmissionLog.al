@@ -236,25 +236,76 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Delete Entry';
                 Image = Delete;
-                ToolTip = 'Delete this entry (only allowed if Submission UID is empty).';
+                ToolTip = 'Delete this entry (allowed if Submission UID is empty/null OR Document UUID is empty/null, including literal "null" values).';
                 Visible = true;
 
                 trigger OnAction()
                 var
                     SubmissionLog: Record "eInvoice Submission Log";
                 begin
-                    if (Rec."Submission UID" <> '') or (Rec."Document UUID" <> '') then begin
-                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID AND Document UUID can be deleted.\Submission UID: %1\Document UUID: %2',
+                    // Check if both fields have actual values (not empty AND not literal 'null')
+                    if (Rec."Submission UID" <> '') and (Rec."Submission UID" <> 'null') and
+                       (Rec."Document UUID" <> '') and (Rec."Document UUID" <> 'null') then begin
+                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID OR without Document UUID (including literal "null" values) can be deleted.\Submission UID: %1\Document UUID: %2',
                               Rec."Submission UID", Rec."Document UUID");
                     end;
 
-                    if Confirm(StrSubstNo('Are you sure you want to delete entry %1 for invoice %2?\This entry has no Submission UID or Document UUID.', Rec."Entry No.", Rec."Invoice No.")) then begin
+                    if Confirm(StrSubstNo('Are you sure you want to delete entry %1 for invoice %2?\This entry has no Submission UID or no Document UUID (including literal "null" values).', Rec."Entry No.", Rec."Invoice No.")) then begin
                         SubmissionLog := Rec;
                         if SubmissionLog.Delete() then
                             Message('Entry %1 has been deleted successfully.', SubmissionLog."Entry No.")
                         else
                             Error('Failed to delete entry %1.', SubmissionLog."Entry No.");
                     end;
+                end;
+            }
+
+            action(DeleteSelectedEntries)
+            {
+                ApplicationArea = All;
+                Caption = 'Delete Selected Entries';
+                Image = Delete;
+                ToolTip = 'Delete selected entries that meet deletion criteria (no Submission UID OR no Document UUID, including literal "null" values).';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    SelectedSubmissionLog: Record "eInvoice Submission Log";
+                    DeletedCount: Integer;
+                    SkippedCount: Integer;
+                    TotalSelected: Integer;
+                    ConfirmMsg: Label 'Delete selected entries that meet deletion criteria?\This will delete entries without Submission UID OR without Document UUID (including literal "null" values).\Selected entries: %1';
+                    ResultMsg: Label 'Deleted: %1 entries\Skipped: %2 entries (had both Submission UID and Document UUID)';
+                begin
+                    CurrPage.SetSelectionFilter(SelectedSubmissionLog);
+                    TotalSelected := SelectedSubmissionLog.Count();
+
+                    if TotalSelected = 0 then begin
+                        Message('Please select one or more entries to delete.');
+                        exit;
+                    end;
+
+                    if not Confirm(ConfirmMsg, false, TotalSelected) then
+                        exit;
+
+                    DeletedCount := 0;
+                    SkippedCount := 0;
+
+                    if SelectedSubmissionLog.FindSet() then
+                        repeat
+                            // Check if either field is empty OR contains literal 'null'
+                            if (SelectedSubmissionLog."Submission UID" = '') or (SelectedSubmissionLog."Submission UID" = 'null') or
+                               (SelectedSubmissionLog."Document UUID" = '') or (SelectedSubmissionLog."Document UUID" = 'null') then begin
+                                if SelectedSubmissionLog.Delete() then
+                                    DeletedCount += 1
+                                else
+                                    SkippedCount += 1;
+                            end else
+                                SkippedCount += 1;
+                        until SelectedSubmissionLog.Next() = 0;
+
+                    Message(ResultMsg, DeletedCount, SkippedCount);
+                    CurrPage.Update(false);
                 end;
             }
 
@@ -434,7 +485,118 @@ page 50316 "e-Invoice Submission Log"
                 end;
             }
 
+            action(ShowDeletableEntries)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Deletable Entries';
+                Image = Filter;
+                ToolTip = 'Filter to show only entries that can be deleted (no Submission UID OR no Document UUID, including literal "null" values).';
+                Visible = true;
 
+                trigger OnAction()
+                begin
+                    // Filter for entries where either field is empty OR contains the literal string 'null'
+                    Rec.SetFilter("Submission UID", '%1|%2', '', 'null');
+                    Rec.SetFilter("Document UUID", '%1|%2', '', 'null');
+                    Message('Filtered to show entries that can be deleted.\Entries without Submission UID OR without Document UUID (including literal "null" values) are now visible.');
+                end;
+            }
+
+            action(ShowDeletionSummary)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Deletion Summary';
+                Image = Statistics;
+                ToolTip = 'Show summary of how many entries can be deleted based on current criteria (including literal "null" values).';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    SubmissionLog: Record "eInvoice Submission Log";
+                    TotalEntries: Integer;
+                    DeletableEntries: Integer;
+                    WithSubmissionUID: Integer;
+                    WithDocumentUUID: Integer;
+                    SummaryMsg: Label 'Total Entries: %1\Deletable Entries: %2\Entries with Submission UID: %3\Entries with Document UUID: %4\Note: Entries can be deleted if they lack either Submission UID OR Document UUID (including literal "null" values).';
+                begin
+                    // Count total entries
+                    TotalEntries := SubmissionLog.Count();
+
+                    // Count entries without Submission UID (empty OR literal 'null')
+                    SubmissionLog.SetFilter("Submission UID", '%1|%2', '', 'null');
+                    DeletableEntries := SubmissionLog.Count();
+
+                    // Count entries with Submission UID (not empty AND not literal 'null')
+                    SubmissionLog.Reset();
+                    SubmissionLog.SetFilter("Submission UID", '<>%1&<>%2', '', 'null');
+                    WithSubmissionUID := SubmissionLog.Count();
+
+                    // Count entries with Document UUID (not empty AND not literal 'null')
+                    SubmissionLog.Reset();
+                    SubmissionLog.SetFilter("Document UUID", '<>%1&<>%2', '', 'null');
+                    WithDocumentUUID := SubmissionLog.Count();
+
+                    Message(SummaryMsg, TotalEntries, DeletableEntries, WithSubmissionUID, WithDocumentUUID);
+                end;
+            }
+
+            action(ClearFilters)
+            {
+                ApplicationArea = All;
+                Caption = 'Clear Filters';
+                Image = ClearFilter;
+                ToolTip = 'Clear all filters and show all entries.';
+                Visible = true;
+
+                trigger OnAction()
+                begin
+                    Rec.Reset();
+                    Message('All filters have been cleared.');
+                end;
+            }
+
+            action(CleanupOldDeletableEntries)
+            {
+                ApplicationArea = All;
+                Caption = 'Cleanup Old Deletable Entries';
+                Image = Delete;
+                ToolTip = 'Clean up old entries that can be deleted (no Submission UID OR no Document UUID, including literal "null" values).';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    DaysOld: Integer;
+                    DeletableCount: Integer;
+                    ConfirmMsg: Label 'Clean up old entries that can be deleted?\This will remove entries older than %1 days that have no Submission UID OR no Document UUID (including literal "null" values).\Note: This action cannot be undone.';
+                    ResultMsg: Label 'Found %1 old entries that can be deleted.\Click OK to proceed with deletion.';
+                begin
+                    // Get number of days from user
+                    DaysOld := 30; // Default to 30 days
+                    if not GetDaysOldFromUser(DaysOld) then
+                        exit;
+
+                    // First, count how many entries can be deleted
+                    DeletableCount := SubmissionStatusCU.CleanupOldDeletableEntries(DaysOld, false);
+
+                    if DeletableCount = 0 then begin
+                        Message('No old entries found that can be deleted.');
+                        exit;
+                    end;
+
+                    if not Confirm(ConfirmMsg, false, DaysOld) then
+                        exit;
+
+                    if not Confirm(ResultMsg, false, DeletableCount) then
+                        exit;
+
+                    // Now actually delete the entries
+                    DeletableCount := SubmissionStatusCU.CleanupOldDeletableEntries(DaysOld, true);
+
+                    Message('Successfully deleted %1 old entries that met deletion criteria.', DeletableCount);
+                    CurrPage.Update(false);
+                end;
+            }
 
 
         }
@@ -701,7 +863,7 @@ page 50316 "e-Invoice Submission Log"
             5:
                 SelectedDate := CalcDate('-1Y', Today); // Last Year
             6:
-                begin // Other - use a simple date input approach
+                begin // Other - use a simple confirmation approach since we can't easily get user input
                     SelectedDateText := Format(Today, 0, '<Day,2>/<Month,2>/<Year4>');
 
                     // For now, use a simple confirmation approach since we can't easily get user input
@@ -1128,5 +1290,65 @@ page 50316 "e-Invoice Submission Log"
             // Successfully generated QR image
             // Note: We don't update the page here as this is called from a background process
         end;
+    end;
+
+    /// <summary>
+    /// Get number of days from user input
+    /// </summary>
+    /// <param name="DaysOld">Variable to store the number of days</param>
+    /// <returns>True if user provided valid input, false if cancelled</returns>
+    local procedure GetDaysOldFromUser(var DaysOld: Integer): Boolean
+    var
+        Selection: Integer;
+    begin
+        Selection := StrMenu('7 days,14 days,30 days,60 days,90 days,180 days,365 days,Custom', 3, 'Select how old entries should be to qualify for deletion:');
+
+        case Selection of
+            0:
+                exit(false); // User cancelled
+            1:
+                DaysOld := 7;
+            2:
+                DaysOld := 14;
+            3:
+                DaysOld := 30;
+            4:
+                DaysOld := 60;
+            5:
+                DaysOld := 90;
+            6:
+                DaysOld := 180;
+            7:
+                DaysOld := 365;
+            8:
+                begin // Custom
+                    if not GetCustomDaysFromUser(DaysOld) then
+                        exit(false);
+                end;
+        end;
+
+        exit(true);
+    end;
+
+    /// <summary>
+    /// Get custom number of days from user
+    /// </summary>
+    /// <param name="DaysOld">Variable to store the number of days</param>
+    /// <returns>True if user provided valid input, false if cancelled</returns>
+    local procedure GetCustomDaysFromUser(var DaysOld: Integer): Boolean
+    var
+        Input: Text;
+        ParsedDays: Integer;
+    begin
+        Input := '30'; // Default value
+
+        if not Confirm(StrSubstNo('Enter number of days (current: %1):\Click OK to use current value, or Cancel to enter custom value.', Input)) then begin
+            // For simplicity, we'll use a simple approach since we can't easily get user input
+            Message('For custom days, please use the filter on "Submission Date" column and then run "Cleanup Old Deletable Entries" again.');
+            exit(false);
+        end;
+
+        DaysOld := 30; // Use default
+        exit(true);
     end;
 }

@@ -235,6 +235,36 @@ page 50315 "e-Invoice Submission Log Card"
                     end;
                 end;
             }
+
+            action(DeleteEntry)
+            {
+                ApplicationArea = All;
+                Caption = 'Delete Entry';
+                Image = Delete;
+                ToolTip = 'Delete this entry (allowed if Submission UID is empty/null OR Document UUID is empty/null, including literal "null" values).';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    SubmissionLog: Record "eInvoice Submission Log";
+                begin
+                    // Check if both fields have actual values (not empty AND not literal 'null')
+                    if (Rec."Submission UID" <> '') and (Rec."Submission UID" <> 'null') and
+                       (Rec."Document UUID" <> '') and (Rec."Document UUID" <> 'null') then begin
+                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID OR without Document UUID (including literal "null" values) can be deleted.\Submission UID: %1\Document UUID: %2',
+                              Rec."Submission UID", Rec."Document UUID");
+                    end;
+
+                    if Confirm(StrSubstNo('Are you sure you want to delete entry %1 for invoice %2?\This entry has no Submission UID or no Document UUID (including literal "null" values).', Rec."Entry No.", Rec."Invoice No.")) then begin
+                        SubmissionLog := Rec;
+                        if SubmissionLog.Delete() then begin
+                            Message('Entry %1 has been deleted successfully.', SubmissionLog."Entry No.");
+                            CurrPage.Close();
+                        end else
+                            Error('Failed to delete entry %1.', SubmissionLog."Entry No.");
+                    end;
+                end;
+            }
         }
     }
 

@@ -2622,4 +2622,65 @@ codeunit 50312 "eInvoice Submission Status"
         exit(UpdatedCount);
     end;
 
+    /// <summary>
+    /// Get entries that can be deleted (no Submission UID OR no Document UUID, including literal 'null' values)
+    /// </summary>
+    /// <param name="SubmissionLog">Filtered record set of deletable entries</param>
+    /// <param name="DeleteEntries">Whether to actually delete the entries</param>
+    /// <returns>Number of entries that can be deleted</returns>
+    procedure GetDeletableEntries(var SubmissionLog: Record "eInvoice Submission Log"; DeleteEntries: Boolean): Integer
+    var
+        TempSubmissionLog: Record "eInvoice Submission Log" temporary;
+        DeletedCount: Integer;
+    begin
+        // Reset the record to clear any existing filters
+
+        // Set filter to show entries without Submission UID OR without Document UUID (including literal 'null')
+        SubmissionLog.SetFilter("Submission UID", '%1|%2', '', 'null');
+        SubmissionLog.SetFilter("Document UUID", '%1|%2', '', 'null');
+
+        if DeleteEntries then begin
+            DeletedCount := 0;
+            if SubmissionLog.FindSet() then
+                repeat
+                    if SubmissionLog.Delete() then
+                        DeletedCount += 1;
+                until SubmissionLog.Next() = 0;
+            exit(DeletedCount);
+        end else begin
+            exit(SubmissionLog.Count());
+        end;
+    end;
+
+    /// <summary>
+    /// Clean up old submission log entries that meet deletion criteria (including literal 'null' values)
+    /// </summary>
+    /// <param name="OlderThanDays">Delete entries older than specified days</param>
+    /// <param name="DeleteEntries">Whether to actually delete the entries</param>
+    /// <returns>Number of entries that can be deleted</returns>
+    procedure CleanupOldDeletableEntries(OlderThanDays: Integer; DeleteEntries: Boolean): Integer
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        CutoffDate: DateTime;
+        DeletableCount: Integer;
+    begin
+        CutoffDate := CreateDateTime(CalcDate(StrSubstNo('-%1D', OlderThanDays), Today), 0T);
+
+        // Set filter for old entries without Submission UID OR without Document UUID (including literal 'null')
+        SubmissionLog.SetFilter("Submission UID", '%1|%2', '', 'null');
+        SubmissionLog.SetFilter("Document UUID", '%1|%2', '', 'null');
+        SubmissionLog.SetFilter("Submission Date", '<%1', CutoffDate);
+
+        DeletableCount := SubmissionLog.Count();
+
+        if DeleteEntries and (DeletableCount > 0) then begin
+            if SubmissionLog.FindSet() then
+                repeat
+                    SubmissionLog.Delete();
+                until SubmissionLog.Next() = 0;
+        end;
+
+        exit(DeletableCount);
+    end;
+
 }

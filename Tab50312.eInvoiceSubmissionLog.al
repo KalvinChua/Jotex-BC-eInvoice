@@ -160,8 +160,10 @@ table 50312 "eInvoice Submission Log"
 
     trigger OnDelete()
     begin
-        if ("Submission UID" <> '') or ("Document UUID" <> '') then
-            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID AND Document UUID can be deleted.\Submission UID: %1\Document UUID: %2',
+        // Check if both fields have actual values (not empty AND not literal 'null')
+        if ("Submission UID" <> '') and ("Submission UID" <> 'null') and
+           ("Document UUID" <> '') and ("Document UUID" <> 'null') then
+            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID OR without Document UUID (including literal "null" values) can be deleted.\Submission UID: %1\Document UUID: %2',
                   "Submission UID", "Document UUID");
     end;
 }
