@@ -602,6 +602,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     var
         CompanyInfo: Record "Company Information";
     begin
+        // Check if this is EXACTLY JOTEX SDN BHD (case-sensitive exact match)
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
         CanCancelEInvoice := IsCancellationAllowed();
         eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
