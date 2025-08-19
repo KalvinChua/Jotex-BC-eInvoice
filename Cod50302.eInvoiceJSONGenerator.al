@@ -941,7 +941,8 @@ codeunit 50302 "eInvoice JSON Generator"
         AddBasicField(InvoiceDocumentReferenceObject, 'ID', OriginalInvoiceNo);
 
         // If original invoice exists and has an LHDN UUID, include it
-        if SalesInvoiceHeader.Get(OriginalInvoiceNo) then
+        // Note: Sales Invoice Header No. field is Code[20], so truncate for lookup
+        if SalesInvoiceHeader.Get(CopyStr(OriginalInvoiceNo, 1, 20)) then
             if SalesInvoiceHeader."eInvoice UUID" <> '' then
                 AddBasicField(InvoiceDocumentReferenceObject, 'UUID', SalesInvoiceHeader."eInvoice UUID");
 
@@ -5646,7 +5647,8 @@ codeunit 50302 "eInvoice JSON Generator"
             InvoiceDocumentReferenceObject.Add('ID', IDObject);
 
             // Add issue date of the original invoice if available
-            if SalesInvoiceHeader.Get(SalesCrMemoHeader."Applies-to Doc. No.") then begin
+            // Note: Sales Invoice Header No. field is Code[20], so truncate for lookup
+            if SalesInvoiceHeader.Get(CopyStr(SalesCrMemoHeader."Applies-to Doc. No.", 1, 20)) then begin
                 AddBasicField(IssueDateObject, 'IssueDate', Format(SalesInvoiceHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
                 InvoiceDocumentReferenceObject.Add('IssueDate', IssueDateObject);
             end;
