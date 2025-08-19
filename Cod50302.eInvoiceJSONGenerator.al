@@ -901,7 +901,12 @@ codeunit 50302 "eInvoice JSON Generator"
     begin
         // Only add if there's a reference document
         if SalesInvoiceHeader."External Document No." <> '' then begin
-            AddBasicField(DocRefObject, 'ID', SalesInvoiceHeader."External Document No.");
+            // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
+            // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
+            if StrLen(SalesInvoiceHeader."External Document No.") > 26 then
+                AddBasicField(DocRefObject, 'ID', CopyStr(SalesInvoiceHeader."External Document No.", 1, 26))
+            else
+                AddBasicField(DocRefObject, 'ID', SalesInvoiceHeader."External Document No.");
             AdditionalDocRefArray.Add(DocRefObject);
             BillingRefObject.Add('AdditionalDocumentReference', AdditionalDocRefArray);
             BillingRefArray.Add(BillingRefObject);
@@ -927,6 +932,12 @@ codeunit 50302 "eInvoice JSON Generator"
         if OriginalInvoiceNo = '' then
             exit; // Nothing to reference
 
+        // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
+        // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
+        // Truncate if longer than 26 characters to comply with regulatory requirements
+        if StrLen(OriginalInvoiceNo) > 26 then
+            OriginalInvoiceNo := CopyStr(OriginalInvoiceNo, 1, 26);
+
         AddBasicField(InvoiceDocumentReferenceObject, 'ID', OriginalInvoiceNo);
 
         // If original invoice exists and has an LHDN UUID, include it
@@ -949,7 +960,12 @@ codeunit 50302 "eInvoice JSON Generator"
         // Only add if there are actual references
         if SalesInvoiceHeader."External Document No." <> '' then begin
             Clear(RefObject);
-            AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
+            // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
+            // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
+            if StrLen(SalesInvoiceHeader."External Document No.") > 26 then
+                AddBasicField(RefObject, 'ID', CopyStr(SalesInvoiceHeader."External Document No.", 1, 26))
+            else
+                AddBasicField(RefObject, 'ID', SalesInvoiceHeader."External Document No.");
             AddBasicField(RefObject, 'DocumentType', 'PurchaseOrder');
             AdditionalDocArray.Add(RefObject);
             HasReferences := true;
@@ -5621,7 +5637,12 @@ codeunit 50302 "eInvoice JSON Generator"
         // This is OPTIONAL but recommended for better traceability
         if SalesCrMemoHeader."Applies-to Doc. No." <> '' then begin
             // Enhanced billing reference structure for credit notes
-            AddBasicField(IDObject, 'ID', SalesCrMemoHeader."Applies-to Doc. No.");
+            // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
+            // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
+            if StrLen(SalesCrMemoHeader."Applies-to Doc. No.") > 26 then
+                AddBasicField(IDObject, 'ID', CopyStr(SalesCrMemoHeader."Applies-to Doc. No.", 1, 26))
+            else
+                AddBasicField(IDObject, 'ID', SalesCrMemoHeader."Applies-to Doc. No.");
             InvoiceDocumentReferenceObject.Add('ID', IDObject);
 
             // Add issue date of the original invoice if available
@@ -5649,7 +5670,12 @@ codeunit 50302 "eInvoice JSON Generator"
         // Only add if there are actual references - use same format as sales invoice
         if SalesCrMemoHeader."External Document No." <> '' then begin
             Clear(RefObject);
-            AddBasicField(RefObject, 'ID', SalesCrMemoHeader."External Document No.");
+            // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
+            // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
+            if StrLen(SalesCrMemoHeader."External Document No.") > 26 then
+                AddBasicField(RefObject, 'ID', CopyStr(SalesCrMemoHeader."External Document No.", 1, 26))
+            else
+                AddBasicField(RefObject, 'ID', SalesCrMemoHeader."External Document No.");
             AddBasicField(RefObject, 'DocumentType', 'PurchaseOrder');
             AdditionalDocArray.Add(RefObject);
             HasReferences := true;
