@@ -915,7 +915,7 @@ codeunit 50302 "eInvoice JSON Generator"
         BillingRefObject: JsonObject;
         InvoiceDocumentReferenceArray: JsonArray;
         InvoiceDocumentReferenceObject: JsonObject;
-        OriginalInvoiceNo: Code[20];
+        OriginalInvoiceNo: Code[50];
         SalesInvoiceHeader: Record "Sales Invoice Header";
     begin
         // Credit Note must reference the original invoice via BillingReference/InvoiceDocumentReference
