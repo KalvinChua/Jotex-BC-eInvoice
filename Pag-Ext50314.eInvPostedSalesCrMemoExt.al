@@ -283,14 +283,26 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
                         eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                         LhdnResponse: Text;
                         Success: Boolean;
+                        ErrorDetails: Text;
                     begin
-                        // Suppress generator popups; only show an error on failure
+                        // Suppress generator popups and show a non-blocking notification instead
                         eInvoiceGenerator.SetSuppressUserDialogs(true);
                         Success := eInvoiceGenerator.GetSignedCreditMemoAndSubmitToLHDN(Rec, LhdnResponse);
+
                         if Success then begin
                             SendSubmissionNotification(true, Rec."No.", LhdnResponse);
+                            // Update the credit memo status to show successful submission
+                            UpdateCreditMemoStatusFromResponse(LhdnResponse);
                         end else begin
-                            SendSubmissionNotification(false, Rec."No.", LhdnResponse);
+                            // Enhanced error handling for failed submissions
+                            ErrorDetails := ExtractLhdnErrorDetails(LhdnResponse);
+                            SendSubmissionNotification(false, Rec."No.", ErrorDetails);
+
+                            // Show detailed error message to user
+                            ShowLhdnSubmissionError(ErrorDetails, LhdnResponse);
+
+                            // Update the credit memo status to show failed submission
+                            UpdateCreditMemoStatusFromResponse(LhdnResponse);
                         end;
                     end;
                 }
@@ -510,15 +522,40 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
     end;
 
+    /// <summary>
+    /// Enhanced submission notification with detailed error information
+    /// Also updates submission log with error details for failed submissions
+    /// </summary>
+    /// <param name="Success">Whether submission was successful</param>
+    /// <param name="DocNo">Document number</param>
+    /// <param name="LhdnResponse">LHDN API response</param>
     local procedure SendSubmissionNotification(Success: Boolean; DocNo: Code[20]; LhdnResponse: Text)
     var
         Notif: Notification;
         Msg: Text;
+        ErrorDetails: Text;
+        SubmissionLog: Record "eInvoice Submission Log";
+        Customer: Record Customer;
+        CustomerName: Text[100];
     begin
-        if Success then
-            Msg := StrSubstNo('LHDN submission successful for Credit Memo %1. %2', DocNo, FormatLhdnResponseInline(LhdnResponse))
-        else
-            Msg := StrSubstNo('LHDN submission failed for Credit Memo %1.\Response: %2', DocNo, CopyStr(LhdnResponse, 1, 250));
+        // Get customer name for the submission log
+        CustomerName := '';
+        if Customer.Get(Rec."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
+        if Success then begin
+            Msg := StrSubstNo('LHDN submission successful for Credit Memo %1. %2', DocNo, FormatLhdnResponseInline(LhdnResponse));
+
+            // Update submission log with success status
+            UpdateSubmissionLogWithResponse(DocNo, 'Submitted', LhdnResponse, CustomerName, '');
+        end else begin
+            // Extract detailed error information for failed submissions
+            ErrorDetails := ExtractLhdnErrorDetails(LhdnResponse);
+            Msg := StrSubstNo('LHDN submission failed for Credit Memo %1.\\%2', DocNo, ErrorDetails);
+
+            // Update submission log with failure status and detailed error information
+            UpdateSubmissionLogWithResponse(DocNo, 'Submission Failed', LhdnResponse, CustomerName, ErrorDetails);
+        end;
 
         Notif.Scope := NotificationScope::LocalScope;
         Notif.Message(Msg);
@@ -1114,7 +1151,131 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         end;
     end;
 
+    /// <summary>
+    /// Extract detailed error information from LHDN API response for failed submissions
+    /// </summary>
+    /// <param name="LhdnResponse">Raw JSON response from LHDN API</param>
+    /// <returns>Formatted error details for user display</returns>
+    local procedure ExtractLhdnErrorDetails(LhdnResponse: Text): Text
+    var
+        ResponseJson: JsonObject;
+        JsonToken: JsonToken;
+        RejectedArray: JsonArray;
+        RejectedDoc: JsonObject;
+        ErrorObj: JsonObject;
+        DetailsArray: JsonArray;
+        DetailObj: JsonObject;
+        ErrorCode: Text;
+        ErrorMessage: Text;
+        Target: Text;
+        PropertyPath: Text;
+        ErrorDetails: Text;
+        i: Integer;
+        j: Integer;
+    begin
+        if not ResponseJson.ReadFrom(LhdnResponse) then
+            exit('Failed to parse LHDN response');
 
+        ErrorDetails := 'LHDN Submission Failed\\';
+
+        // Extract submission UID
+        if ResponseJson.Get('submissionUid', JsonToken) then begin
+            if JsonToken.AsValue().AsText() <> '' then
+                ErrorDetails += StrSubstNo('Submission ID: %1\\', JsonToken.AsValue().AsText())
+            else
+                ErrorDetails += 'Submission ID: null\\';
+        end;
+
+        // Extract rejected documents and their errors
+        if ResponseJson.Get('rejectedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            RejectedArray := JsonToken.AsArray();
+            ErrorDetails += StrSubstNo('Rejected Documents: %1\\', Format(RejectedArray.Count()));
+
+            for i := 0 to RejectedArray.Count() - 1 do begin
+                RejectedArray.Get(i, JsonToken);
+                if JsonToken.IsObject() then begin
+                    RejectedDoc := JsonToken.AsObject();
+
+                    // Get credit memo code number
+                    if RejectedDoc.Get('invoiceCodeNumber', JsonToken) then
+                        ErrorDetails += StrSubstNo('\\Credit Memo: %1\\', JsonToken.AsValue().AsText());
+
+                    // Get error details
+                    if RejectedDoc.Get('error', JsonToken) and JsonToken.IsObject() then begin
+                        ErrorObj := JsonToken.AsObject();
+
+                        // Get main error information
+                        if ErrorObj.Get('code', JsonToken) then
+                            ErrorCode := JsonToken.AsValue().AsText();
+                        if ErrorObj.Get('message', JsonToken) then
+                            ErrorMessage := JsonToken.AsValue().AsText();
+                        if ErrorObj.Get('target', JsonToken) then
+                            Target := JsonToken.AsValue().AsText();
+
+                        ErrorDetails += StrSubstNo('Error: %1 - %2 (Target: %3)\\',
+                                                 ErrorCode, ErrorMessage, Target);
+
+                        // Get detailed validation errors
+                        if ErrorObj.Get('details', JsonToken) and JsonToken.IsArray() then begin
+                            DetailsArray := JsonToken.AsArray();
+                            ErrorDetails += 'Validation Errors:\\';
+
+                            for j := 0 to DetailsArray.Count() - 1 do begin
+                                DetailsArray.Get(j, JsonToken);
+                                if JsonToken.IsObject() then begin
+                                    DetailObj := JsonToken.AsObject();
+
+                                    // Extract error details
+                                    if DetailObj.Get('code', JsonToken) then
+                                        ErrorCode := JsonToken.AsValue().AsText();
+                                    if DetailObj.Get('message', JsonToken) then
+                                        ErrorMessage := JsonToken.AsValue().AsText();
+                                    if DetailObj.Get('target', JsonToken) then
+                                        Target := JsonToken.AsValue().AsText();
+                                    if DetailObj.Get('propertyPath', JsonToken) then
+                                        PropertyPath := JsonToken.AsValue().AsText();
+
+                                    ErrorDetails += StrSubstNo('  • %1: %2 (Field: %3)\\',
+                                                             ErrorCode, ErrorMessage, Target);
+
+                                    if PropertyPath <> '' then
+                                        ErrorDetails += StrSubstNo('    Path: %1\\', PropertyPath);
+                                end;
+                            end;
+                        end;
+                    end;
+                end;
+            end;
+        end;
+
+        // Add accepted documents count if any
+        if ResponseJson.Get('acceptedDocuments', JsonToken) and JsonToken.IsArray() then begin
+            RejectedArray := JsonToken.AsArray();
+            ErrorDetails += StrSubstNo('\\Accepted Documents: %1', Format(RejectedArray.Count()));
+        end;
+
+        ErrorDetails += '\\Please review the errors and resubmit.';
+        exit(ErrorDetails);
+    end;
+
+    /// <summary>
+    /// Display comprehensive LHDN submission error to user with actionable information
+    /// </summary>
+    /// <param name="ErrorDetails">Formatted error details</param>
+    /// <param name="LhdnResponse">Raw LHDN response for debugging</param>
+    local procedure ShowLhdnSubmissionError(ErrorDetails: Text; LhdnResponse: Text)
+    var
+        ErrorMsg: Text;
+    begin
+        // Show detailed error message
+        ErrorMsg := StrSubstNo('LHDN Submission Failed for Credit Memo %1\\', Rec."No.");
+        ErrorMsg += '\\Please review the detailed error information below.';
+
+        Message(ErrorMsg);
+
+        // Show detailed error information in a message
+        Message(ErrorDetails);
+    end;
 
     /// <summary>
     /// Extract status from LHDN API response for display purposes
@@ -1233,6 +1394,50 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
         if Success then begin
             // Update the page to show the new QR image
             CurrPage.Update(false);
+        end;
+    end;
+
+    /// <summary>
+    /// Updates the submission log with the response from LHDN API
+    /// </summary>
+    /// <param name="DocNo">Document number</param>
+    /// <param name="NewStatus">New status for the submission log</param>
+    /// <param name="LhdnResponse">Raw LHDN API response</param>
+    /// <param name="CustomerName">Customer name for the submission log</param>
+    /// <param name="ErrorDetails">Detailed error message for failed submissions</param>
+    local procedure UpdateSubmissionLogWithResponse(DocNo: Code[20]; NewStatus: Text; LhdnResponse: Text; CustomerName: Text[100]; ErrorDetails: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+    begin
+        // Try to find existing log entry for this credit memo and submission UID
+        SubmissionLog.SetRange("Invoice No.", DocNo);
+        SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
+
+        if SubmissionLog.FindLast() then begin
+            // Update existing log entry
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Error Message" := ErrorDetails;
+            SubmissionLog."Document Type" := Rec."eInvoice Document Type";
+            if SubmissionLog.Modify() then begin
+                // Successfully updated log
+            end;
+        end else begin
+            // Create new log entry if none exists
+            SubmissionLog.Init();
+            SubmissionLog."Invoice No." := DocNo;
+            SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
+            SubmissionLog."Document UUID" := Rec."eInvoice UUID";
+            SubmissionLog.Status := NewStatus;
+            SubmissionLog."Customer Name" := CustomerName;
+            SubmissionLog."Submission Date" := CurrentDateTime;
+            SubmissionLog."Last Updated" := CurrentDateTime;
+            SubmissionLog."Error Message" := ErrorDetails;
+            SubmissionLog."Document Type" := Rec."eInvoice Document Type";
+            if SubmissionLog.Insert() then begin
+                // Successfully created log entry
+            end;
         end;
     end;
 }

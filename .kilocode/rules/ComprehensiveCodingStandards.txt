@@ -1,0 +1,95 @@
+# Comprehensive Coding Standards
+
+This rule establishes comprehensive coding standards and best practices for all development work to ensure high-quality, maintainable, and secure code.
+
+## Guidelines
+
+### Clean, Efficient Code
+- Write clear, optimized code that is easy to understand and modify
+- Balance efficiency with readability based on project requirements
+- Use meaningful variable and function names that clearly express intent
+- Keep functions and methods focused on a single responsibility
+- Avoid unnecessary complexity and over-engineering
+
+### End-User Experience Focus
+- Ensure that all code contributes to an excellent end-user experience
+- Consider performance impact on UI responsiveness
+- Implement proper error handling that provides meaningful feedback to users
+- Design APIs and backend services with client needs in mind
+- Prioritize accessibility and usability in all user-facing components
+
+### Modular & Reusable Code
+- Break functionality into self-contained, reusable components
+- Design for flexibility and scalability
+- Use dependency injection and inversion of control principles
+- Create well-defined interfaces and abstractions
+- Avoid tight coupling between components
+
+### Coding Standards Adherence
+- Follow language-specific best practices and conventions
+- Maintain consistent naming, structure, and formatting throughout the codebase
+- Use automated code formatting tools where available
+- Be adaptable to different organizational standards
+- Document any deviations from standard practices with clear justification
+
+### Comprehensive Testing
+- Implement thorough testing strategies including unit tests, integration tests, and end-to-end tests
+- Aim for high test coverage while focusing on critical business logic
+- Write tests that are maintainable and provide clear failure messages
+- Use test-driven development (TDD) practices where appropriate
+- Include performance and load testing for critical components
+
+### Security Best Practices
+- Integrate security considerations throughout the development process
+- Implement proper input validation and sanitization
+- Use secure authentication and authorization mechanisms
+- Protect sensitive data through encryption and secure storage
+- Follow OWASP guidelines and security standards
+- Regularly update dependencies to address security vulnerabilities
+
+### Code Maintainability
+- Write self-documenting code with clear, descriptive names
+- Provide clear comments for complex business logic and algorithms
+- Maintain up-to-date documentation for APIs and system architecture
+- Use consistent code organization and file structure
+- Implement proper version control practices with meaningful commit messages
+
+### Performance Optimization
+- Focus on writing efficient algorithms and data structures
+- Consider time and space complexity in implementation decisions
+- Optimize resource usage where necessary without premature optimization
+- Profile and measure performance to identify bottlenecks
+- Implement caching strategies where appropriate
+- Consider scalability implications of design choices
+
+### Robust Error Handling and Logging
+- Develop comprehensive error handling strategies
+- Implement detailed logging for effective debugging and monitoring
+- Use structured logging with appropriate log levels
+- Handle exceptions gracefully without exposing sensitive information
+- Provide meaningful error messages for debugging and user feedback
+- Implement monitoring and alerting for production environments
+
+### CI/CD Alignment
+- Write code and tests that align with continuous integration and deployment practices
+- Ensure automated builds, testing, and deployment processes work seamlessly
+- Use feature flags and deployment strategies that support safe releases
+- Maintain backward compatibility during incremental deployments
+- Document deployment procedures and rollback strategies
+
+### Scalability Design
+- Make architectural and design choices that allow for future growth
+- Consider increased load and potential changes in project requirements
+- Use horizontal scaling patterns where appropriate
+- Implement proper database design and query optimization
+- Design for distributed systems when necessary
+- Plan for data migration and schema evolution
+
+### API Design Best Practices
+- Adhere to RESTful principles for HTTP APIs
+- Use clear, consistent naming conventions for endpoints and resources
+- Implement proper HTTP status codes and error responses
+- Provide comprehensive API documentation
+- Version APIs appropriately to maintain backward compatibility
+- Implement rate limiting and authentication for public APIs
+- Use standard data formats (JSON, XML) consistently
