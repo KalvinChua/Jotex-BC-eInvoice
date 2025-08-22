@@ -1722,7 +1722,127 @@ codeunit 50302 "eInvoice JSON Generator"
         AddBasicField(TaxExchangeRateObject, 'Date', Format(Today(), 0, '<Year4>-<Month,2>-<Day,2>'));
 
         TaxExchangeRateArray.Add(TaxExchangeRateObject);
+        // Defensive: ensure shape is always an array by removing any previous scalar/object entry
+        if InvoiceObject.Contains('TaxExchangeRate') then
+            InvoiceObject.Remove('TaxExchangeRate');
         InvoiceObject.Add('TaxExchangeRate', TaxExchangeRateArray);
+
+        // Normalize any mis-shaped TaxExchangeRate into array-of-object with flat child fields
+        NormalizeTaxExchangeRate(InvoiceObject);
+    end;
+
+    /// <summary>
+    /// Normalizes TaxExchangeRate to the exact shape LHDN expects:
+    /// - Invoice.TaxExchangeRate MUST be an array with a single object
+    /// - The object's children (SourceCurrencyCode, TargetCurrencyCode, CalculationRate, Date)
+    ///   MUST each be arrays-of-objects with "_" values (no duplicate wrapper objects)
+    /// This also flattens cases like:
+    ///   "SourceCurrencyCode": { "SourceCurrencyCode": [ { "_" : "SGD" } ] }
+    /// into:
+    ///   "SourceCurrencyCode": [ { "_" : "SGD" } ]
+    /// </summary>
+    local procedure NormalizeTaxExchangeRate(var InvoiceObject: JsonObject)
+    var
+        TreToken: JsonToken;
+        TreArray: JsonArray;
+        TreObj: JsonObject;
+        NewTreObj: JsonObject;
+        ElemToken: JsonToken;
+    begin
+        if not InvoiceObject.Get('TaxExchangeRate', TreToken) then
+            exit;
+
+        // Case 1: Mis-shaped object - convert to array with flattened fields
+        if TreToken.IsObject() then begin
+            TreObj := TreToken.AsObject();
+
+            // Build a new object with flattened children
+            AddFlattenedField(TreObj, NewTreObj, 'SourceCurrencyCode');
+            AddFlattenedField(TreObj, NewTreObj, 'TargetCurrencyCode');
+            AddFlattenedField(TreObj, NewTreObj, 'CalculationRate');
+            AddFlattenedField(TreObj, NewTreObj, 'Date');
+
+            TreArray.Add(NewTreObj);
+            InvoiceObject.Remove('TaxExchangeRate');
+            InvoiceObject.Add('TaxExchangeRate', TreArray);
+            exit;
+        end;
+
+        // Case 2: Already an array - ensure the first element's children are flattened
+        if TreToken.IsArray() then begin
+            TreArray := TreToken.AsArray();
+            if TreArray.Count > 0 then begin
+                TreArray.Get(0, ElemToken);
+                if ElemToken.IsObject() then begin
+                    TreObj := ElemToken.AsObject();
+                    FlattenFieldInPlace(TreObj, 'SourceCurrencyCode');
+                    FlattenFieldInPlace(TreObj, 'TargetCurrencyCode');
+                    FlattenFieldInPlace(TreObj, 'CalculationRate');
+                    FlattenFieldInPlace(TreObj, 'Date');
+                end;
+            end;
+
+            // Re-assign to guarantee final shape is array
+            InvoiceObject.Remove('TaxExchangeRate');
+            InvoiceObject.Add('TaxExchangeRate', TreArray);
+        end;
+    end;
+
+    /// <summary>
+    /// Adds a flattened field to DestObj by extracting:
+    /// - SourceObj[Name] if it's already an array
+    /// - SourceObj[Name][Name] if it's an inner duplicate-wrapper object
+    /// - Otherwise wraps a scalar value into [ { "_" : value } ]
+    /// </summary>
+    local procedure AddFlattenedField(SourceObj: JsonObject; var DestObj: JsonObject; Name: Text)
+    var
+        T: JsonToken;
+        InnerObj: JsonObject;
+        InnerToken: JsonToken;
+        Arr: JsonArray;
+        ValueArr: JsonArray;
+        ValueObj: JsonObject;
+    begin
+        if SourceObj.Get(Name, T) then begin
+            if T.IsArray() then begin
+                DestObj.Add(Name, T.AsArray());
+                exit;
+            end;
+
+            if T.IsObject() then begin
+                InnerObj := T.AsObject();
+                if InnerObj.Get(Name, InnerToken) and InnerToken.IsArray() then begin
+                    DestObj.Add(Name, InnerToken.AsArray());
+                    exit;
+                end;
+            end;
+
+            if T.IsValue() then begin
+                // Fallback: wrap scalar into UBL array-of-object form
+                ValueObj.Add('_', Format(T.AsValue()));
+                ValueArr.Add(ValueObj);
+                DestObj.Add(Name, ValueArr);
+            end;
+        end;
+    end;
+
+    /// <summary>
+    /// In-place flattener for a field that may be in the duplicate-wrapper form:
+    ///   Name: { Name: [ { "_" : value } ] }  =>  Name: [ { "_" : value } ]
+    /// </summary>
+    local procedure FlattenFieldInPlace(var Obj: JsonObject; Name: Text)
+    var
+        T: JsonToken;
+        InnerObj: JsonObject;
+        InnerToken: JsonToken;
+    begin
+        if Obj.Get(Name, T) and T.IsObject() then begin
+            InnerObj := T.AsObject();
+            if InnerObj.Get(Name, InnerToken) and InnerToken.IsArray() then begin
+                Obj.Remove(Name);
+                Obj.Add(Name, InnerToken.AsArray());
+            end;
+        end;
     end;
 
     // ======================================================================================================
@@ -5581,24 +5701,33 @@ codeunit 50302 "eInvoice JSON Generator"
     // Overloaded version for credit memos
     local procedure AddTaxExchangeRate(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header"; SourceCurrencyCode: Code[10])
     var
-        ExchangeRateObject: JsonObject;
-        SourceCurrencyObject: JsonObject;
-        TargetCurrencyObject: JsonObject;
-        CalculationRateObject: JsonObject;
-        DateObject: JsonObject;
+        TaxExchangeRateArray: JsonArray;
+        TaxExchangeRateObject: JsonObject;
+        CurrencyExchangeRate: Record "Currency Exchange Rate";
+        ExchangeRate: Decimal;
     begin
-        // Create exchange rate structure for credit memos
-        AddBasicField(SourceCurrencyObject, 'SourceCurrencyCode', SourceCurrencyCode);
-        AddBasicField(TargetCurrencyObject, 'TargetCurrencyCode', 'MYR');
-        AddBasicField(CalculationRateObject, 'CalculationRate', '1.0');
-        AddBasicField(DateObject, 'Date', Format(SalesCrMemoHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+        // MANDATORY for non-MYR currencies per LHDN specification
+        // Get exchange rate from Business Central
+        ExchangeRate := 1.0; // Default
 
-        ExchangeRateObject.Add('SourceCurrencyCode', SourceCurrencyObject);
-        ExchangeRateObject.Add('TargetCurrencyCode', TargetCurrencyObject);
-        ExchangeRateObject.Add('CalculationRate', CalculationRateObject);
-        ExchangeRateObject.Add('Date', DateObject);
+        if CurrencyExchangeRate.Get(SourceCurrencyCode, SalesCrMemoHeader."Posting Date") then
+            ExchangeRate := CurrencyExchangeRate."Exchange Rate Amount"
+        else if CurrencyExchangeRate.Get(SourceCurrencyCode, Today()) then
+            ExchangeRate := CurrencyExchangeRate."Exchange Rate Amount";
 
-        InvoiceObject.Add('TaxExchangeRate', ExchangeRateObject);
+        AddBasicField(TaxExchangeRateObject, 'SourceCurrencyCode', SourceCurrencyCode);
+        AddBasicField(TaxExchangeRateObject, 'TargetCurrencyCode', 'MYR');
+        AddNumericField(TaxExchangeRateObject, 'CalculationRate', ExchangeRate);
+        AddBasicField(TaxExchangeRateObject, 'Date', Format(SalesCrMemoHeader."Posting Date", 0, '<Year4>-<Month,2>-<Day,2>'));
+
+        TaxExchangeRateArray.Add(TaxExchangeRateObject);
+        // Defensive: ensure shape is always an array by removing any previous scalar/object entry
+        if InvoiceObject.Contains('TaxExchangeRate') then
+            InvoiceObject.Remove('TaxExchangeRate');
+        InvoiceObject.Add('TaxExchangeRate', TaxExchangeRateArray);
+
+        // Normalize any mis-shaped TaxExchangeRate into array-of-object with flat child fields
+        NormalizeTaxExchangeRate(InvoiceObject);
     end;
 
     // Overloaded version for credit memos
