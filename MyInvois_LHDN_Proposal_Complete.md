@@ -22,7 +22,7 @@
 2. [Overview](#overview)
 3. [Current Environment](#current-environment)
 4. [Objective](#objective)
-5. [Requirements](#requirements)
+5. [Requirement](#requirements)
 6. [Company Overview](#company-overview)
 7. [Proposed Solutions](#proposed-solutions)
 8. [Proposed Technologies](#proposed-technologies)
@@ -34,10 +34,8 @@
 14. [Out Of Scope](#out-of-scope)
 15. [Assumptions](#assumptions)
 16. [Post Support](#post-support)
-17. [Financial Plan](#financial-plan)
-18. [Invoicing and Payment Terms](#invoicing-and-payment-terms)
-19. [Standard Terms & Conditions](#standard-terms-conditions)
-20. [Support and Maintenance](#support-and-maintenance)
+17. [Standard Terms & Conditions](#standard-terms-conditions)
+18. [Support and Maintenance](#support-and-maintenance)
 
 ---
 
@@ -71,7 +69,7 @@ To develop and deliver the MyInvois LHDN e-Invoice System for Microsoft Dynamics
 - Ensure secure digital signing and submission of invoices to LHDN API endpoints.
 - Empower users with intuitive interfaces for invoice management and status monitoring.
 
-### Requirements
+### Requirement
 
 As VENDOR understanding, CLIENT is looking for solutions which could address:
 
@@ -618,22 +616,6 @@ VENDOR will provide 30 days post-implementation support after go-live for the de
 - Performance optimization recommendations
 - Knowledge transfer sessions
 - Emergency support during business hours
-
----
-
-## Financial Plan
-
-### Invoicing and Payment Terms
-
-Invoicing for Professional Services for development and implementation shall be done based on the following:
-
-- **30%** upon confirmation or receiving PO
-- **50%** upon UAT completion and sign-off
-- **20%** upon successful go-live and project completion
-
-Invoicing for Microsoft Azure Services shall be done based on the following:
-
-- **100%** upon confirmation or receiving PO (prepaid consumption)
 
 ---
 
