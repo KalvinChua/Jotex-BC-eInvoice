@@ -129,18 +129,41 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 
 #### Complete End-to-End Workflow:
 
-1. **Document Creation**: Users create sales invoices/orders in Business Central with standard processes
-2. **Field Validation**: AL extension [Cod50306] automatically validates and populates e-Invoice fields
-3. **TIN Validation**: [Cod50301] validates customer TIN with LHDN API in real-time
-4. **Master Data Validation**: [Cod50307/Cod50308] validates state/country codes and classifications
-5. **JSON Generation**: [Cod50302/Cod50311] creates UBL 2.1 compliant JSON structure
-6. **Azure Function Call**: [Cod50310] securely transmits JSON to Azure Function for signing
-7. **Digital Signing**: Azure Function applies XAdES signature using JOTEX P12 certificate
-8. **Response Processing**: [Cod50310] receives signed document and LHDN-ready payload
-9. **LHDN Submission**: [Cod50302] submits signed document to LHDN MyInvois API
-10. **Status Tracking**: [Cod50312] monitors submission status with real-time updates
-11. **Audit Logging**: Complete transaction audit trail maintained in [Tab50312]
-12. **User Notification**: Real-time status updates and notifications via page extensions
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Business      │    │     AL Extension │    │   Azure Function │
+│   Central User  │────│   Processing     │────│   Digital Signing│
+│                 │    │                  │    │                 │
+│ • Create Invoice│    │ • Field Validation│    │ • XAdES Signing │
+│ • Post Document │    │ • TIN Validation │    │ • Certificate    │
+│ • Monitor Status│    │ • JSON Generation│    │ • LHDN Payload  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                        │                        │
+         │                        │                        │
+         ▼                        ▼                        ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   LHDN MyInvois │    │   Status Updates  │    │   Audit Trail   │
+│   API Submission│    │   & Monitoring    │    │   & Logging     │
+│                 │    │                  │    │                 │
+│ • Document Submit│    │ • Real-time Status│    │ • Complete Log │
+│ • Status Polling │    │ • Notifications   │    │ • Compliance   │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+**Detailed Process Flow:**
+
+1. **📄 Document Creation**: User creates sales invoice/order in Business Central
+2. **🔍 Field Validation**: [Cod50306] auto-validates and populates e-Invoice fields
+3. **✅ TIN Validation**: [Cod50301] validates customer TIN with LHDN API
+4. **🌍 Master Data Check**: [Cod50307/50308] validates state/country/classification codes
+5. **📋 JSON Generation**: [Cod50302/50311] creates UBL 2.1 compliant structure
+6. **🔒 Secure Transmission**: [Cod50310] sends JSON to Azure Function via HTTPS
+7. **✍️ Digital Signing**: Azure Function applies XAdES signature with JOTEX certificate
+8. **📦 Payload Preparation**: Creates LHDN-ready submission payload with base64 document
+9. **📤 API Submission**: [Cod50302] submits signed document to LHDN MyInvois API
+10. **📊 Status Monitoring**: [Cod50312] tracks submission with real-time updates
+11. **📝 Audit Logging**: Complete transaction history in [Tab50312] with correlation IDs
+12. **🔔 User Notification**: Status updates and alerts via page extensions
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
 
@@ -543,29 +566,85 @@ This comprehensive AL extension provides the complete Business Central integrati
 
 #### Complete Data Flow Architecture:
 
-**Business Central AL Extension Layer:**
-1. **Document Creation**: User creates sales document with standard Business Central processes
-2. **Event-Driven Validation**: [Cod50306] automatically validates and populates e-Invoice fields
-3. **TIN Verification**: [Cod50301] validates customer TIN with LHDN API
-4. **Master Data Validation**: [Cod50307/50308] validates state/country codes and classifications
-5. **UBL Structure Building**: [Cod50311] creates complete UBL 2.1 document structure
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          MyInvois LHDN e-Invoice System                     ║
+║                           Complete Data Flow Architecture                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-**Azure Function Processing Layer:**
-6. **Secure Transmission**: [Cod50310] sends JSON to Azure Function via HTTPS
-7. **XAdES Signing**: Azure Function applies official LHDN 7-step digital signature
-8. **Payload Preparation**: Creates LHDN-ready submission payload with base64 document and hash
-9. **Response Callback**: Returns signed document and LHDN payload to Business Central
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACE LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  📄 Business Central Client → Sales Invoice/Order Creation                 │
+│  👤 User Actions → Post Document → Monitor Status                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     BUSINESS CENTRAL AL EXTENSION LAYER                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  🔍 [Cod50306] Event Validation → Auto-populate e-Invoice fields            │
+│  ✅ [Cod50301] TIN Validation → LHDN API verification                       │
+│  🌍 [Cod50307/50308] Master Data → State/Country/Classification validation  │
+│  📋 [Cod50311] UBL Builder → Create complete UBL 2.1 structure             │
+│  🔒 [Cod50310] Azure Client → Secure HTTPS transmission                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       AZURE FUNCTION PROCESSING LAYER                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ✍️ Digital Signing → XAdES signature with JOTEX P12 certificate            │
+│  📦 Payload Prep → LHDN-ready format (base64 + SHA-256 hash)               │
+│  🔄 Response → Signed document + LHDN payload back to BC                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LHDN INTEGRATION LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  📤 [Cod50302] API Submission → OAuth 2.0 authenticated submission          │
+│  📊 [Cod50312] Status Tracking → Real-time monitoring & updates             │
+│  🔄 Error Handling → Intelligent retry with exponential backoff             │
+│  📝 [Tab50312] Audit Logging → Complete transaction history                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          LHDN MYINVOIS PLATFORM                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  📋 Document Processing → Validation & acceptance                           │
+│  📊 Status Updates → Real-time status via API polling                       │
+│  ✅ Compliance → Full LHDN regulatory compliance                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         USER EXPERIENCE & MONITORING                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  🔔 Notifications → Real-time status updates & alerts                       │
+│  📊 Dashboard → Status monitoring via page extensions                       │
+│  📋 Reports → Bulk processing & compliance reports                          │
+│  🔍 Troubleshooting → Error logs & resolution guidance                      │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-**LHDN Integration Layer:**
-10. **API Submission**: [Cod50302] submits signed document to LHDN MyInvois API
-11. **Status Polling**: [Cod50312] monitors submission status with real-time updates
-12. **Error Handling**: Intelligent retry logic with comprehensive error logging
-13. **Audit Trail**: Complete transaction history in [Tab50312] with correlation IDs
+═══════════════════════════════════════════════════════════════════════════════
+LEGEND:
+📄 User Interface    🔍 Validation      ✅ Verification    🌍 Master Data
+📋 Document Creation ✍️ Digital Signing 🔒 Security       📦 Packaging
+📤 API Communication 📊 Monitoring     📝 Audit Logging  🔔 Notifications
+═══════════════════════════════════════════════════════════════════════════════
+```
 
-**User Experience Layer:**
-14. **Status Monitoring**: Real-time updates via page extensions and notifications
-15. **Error Reporting**: User-friendly error messages with resolution guidance
-16. **Bulk Operations**: Efficient processing of multiple documents via reports
+**Layer-by-Layer Data Transformation:**
+
+1. **Input Layer**: Business Central sales document with standard fields
+2. **Validation Layer**: Automatic e-Invoice field population and TIN verification
+3. **Transformation Layer**: UBL 2.1 JSON structure creation with all mandatory fields
+4. **Security Layer**: XAdES digital signature application with certificate validation
+5. **Submission Layer**: OAuth 2.0 authenticated API submission to LHDN
+6. **Monitoring Layer**: Real-time status tracking and audit trail maintenance
+7. **User Layer**: Status notifications and compliance reporting
 
 #### Performance Characteristics:
 - **Response Time**: < 5 seconds for standard invoice processing
@@ -580,37 +659,197 @@ This comprehensive technology stack ensures a robust, secure, and scalable e-Inv
 
 ## Proposed Architecture
 
-The architecture follows a secure, scalable cloud-native design:
+The architecture follows a secure, scalable cloud-native design with clear separation of concerns:
 
-### Business Central Extension Layer:
-- Custom AL extension with core business logic
-- UI integration for user interaction
-- Data validation and transformation
-- API orchestration and error handling
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        SYSTEM ARCHITECTURE OVERVIEW                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-### Azure Integration Layer:
-- Azure Functions for digital signing and payload preparation
-- File-based certificate management for secure authentication
-- Application Insights for monitoring and logging
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACE LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  💻 Business Central Web Client                                             │
+│  📱 Mobile-Responsive Design                                                │
+│  🌐 Multi-Language Support (English/Malay)                                  │
+│  🔐 Role-Based Access Control                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                     BUSINESS CENTRAL AL EXTENSION LAYER                     ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    CORE BUSINESS LOGIC (25+ Codeunits)              │    ║
+║  │  • [Cod50302] JSON Generator & LHDN Submission Orchestrator         │    ║
+║  │  • [Cod50311] UBL Document Builder                                  │    ║
+║  │  • [Cod50310] Azure Function HTTP Client                            │    ║
+║  │  • [Cod50301] TIN Validator with LHDN API                           │    ║
+║  │  • [Cod50306] Event-Driven Field Population                         │    ║
+║  │  • [Cod50312] Status Tracking & Management                          │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    DATA MODEL EXTENSIONS (13+ Tables)               │    ║
+║  │  • Customer Extensions: TIN, ID Type, Address Fields                │    ║
+║  │  • Sales Document Extensions: e-Invoice Fields                      │    ║
+║  │  • Master Data Tables: State/Country/Currency Codes                 │    ║
+║  │  • Audit Tables: Submission Logs, TIN Validation History           │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    USER INTERFACE (20+ Page Extensions)             │    ║
+║  │  • Setup Pages: Configuration & Master Data Management             │    ║
+║  │  • Operational Pages: Status Monitoring & Logs                     │    ║
+║  │  • Document Extensions: Seamless Workflow Integration               │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+                                    │
+                                    ▼
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                       AZURE INTEGRATION LAYER                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    AZURE FUNCTIONS (5 Endpoints)                     │    ║
+║  │  • POST /api/eInvSigning - General document signing                 │    ║
+║  │  • POST /api/BusinessCentralSigning - BC optimized signing          │    ║
+║  │  • GET /api/health - Health check endpoint                          │    ║
+║  │  • GET/POST /api/connectivity-test - Connection validation          │    ║
+║  │  • POST /api/validate - Signature validation                        │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    SECURITY & CERTIFICATES                          │    ║
+║  │  • File-Based JOTEX P12 Certificate Management                     │    ║
+║  │  • Environment-Specific Loading (PREPROD/PROD)                     │    ║
+║  │  • XAdES Digital Signature (7-Step LHDN Process)                    │    ║
+║  │  • Serial Number Extraction for LHDN Compliance                    │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    MONITORING & LOGGING                             │    ║
+║  │  • Application Insights Integration                                │    ║
+║  │  • Request/Response Logging with Correlation IDs                   │    ║
+║  │  • Performance Metrics & Error Tracking                            │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+                                    │
+                                    ▼
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         LHDN INTEGRATION LAYER                             ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    LHDN MYINVOIS API                                │    ║
+║  │  • POST /api/v1.0/documentsubmissions - Document submission         │    ║
+║  │  • GET /api/v1.0/documents/{id} - Status retrieval                  │    ║
+║  │  • GET /api/v1.0/taxpayer/validation/{tin} - TIN validation        │    ║
+║  │  • POST /api/v1.0/documentsubmissions/batch - Bulk submission       │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    API SECURITY & AUTHENTICATION                     │    ║
+║  │  • OAuth 2.0 Client Credentials Flow                                │    ║
+║  │  • JWT Token Management                                             │    ║
+║  │  • Request Signing & Verification                                   │    ║
+║  │  • Rate Limiting & Throttling                                       │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-### LHDN Integration Layer:
-- Secure API communication
-- Request/response handling
-- Error parsing and retry logic
-- Status monitoring and updates
+═══════════════════════════════════════════════════════════════════════════════
+ARCHITECTURAL PRINCIPLES:
+✅ Secure by Design - Certificate-based authentication throughout
+✅ Scalable Architecture - Serverless Azure Functions with auto-scaling
+✅ Fault Tolerant - Comprehensive error handling and retry mechanisms
+✅ Compliant - Full LHDN MyInvois regulatory compliance
+✅ Maintainable - Modular design with clear separation of concerns
+✅ Monitorable - Complete observability with Application Insights
+═══════════════════════════════════════════════════════════════════════════════
+```
 
-### Security Layer:
-- Certificate-based authentication
-- Data encryption throughout
-- Role-based access control
-- Audit logging and monitoring
+### Architecture Components Detail:
 
-The architecture ensures:
-- High availability and scalability
-- Secure data processing and storage
-- Compliance with Malaysian regulations
-- Seamless integration with existing systems
-- Real-time monitoring and alerting
+#### Business Central Extension Layer:
+- **Custom AL extension** with core business logic for complete e-Invoice workflow
+- **UI integration** for seamless user interaction within standard BC processes
+- **Data validation and transformation** with automatic field population
+- **API orchestration** with intelligent error handling and retry mechanisms
+- **Event-driven automation** for real-time processing and status updates
+
+#### Azure Integration Layer:
+- **Azure Functions** for secure digital signing and payload preparation
+- **File-based certificate management** with environment-specific loading
+- **Application Insights** for comprehensive monitoring and logging
+- **Secure communication** with HTTPS and proper authentication
+
+#### LHDN Integration Layer:
+- **Direct API communication** with OAuth 2.0 authentication
+- **Request/response handling** with comprehensive error parsing
+- **Status monitoring and updates** with real-time polling
+- **Compliance validation** ensuring all LHDN requirements are met
+
+#### Security Layer:
+- **Certificate-based authentication** using JOTEX P12 certificates
+- **Data encryption** throughout the entire data flow
+- **Role-based access control** with appropriate security permissions
+- **Audit logging and monitoring** for complete transaction traceability
+
+### Component Interaction Diagram:
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        COMPONENT INTERACTION FLOW                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────┐ HTTPS/JSON   ┌──────────────────────┐
+│ Business Central│──────────────▶│ Azure Functions     │
+│ AL Extension    │               │ (Digital Signing)   │
+│ [Cod50310]      │◀──────────────│ [eInvSigning.cs]    │
+└─────────────────┘   Signed Doc  └──────────────────────┘
+         │                                        │
+         │ HTTPS/OAuth 2.0                       │
+         ▼                                        ▼
+┌─────────────────┐                        ┌──────────────────────┐
+│ LHDN MyInvois   │◀──────────────────────▶│ Certificate Store     │
+│ API Platform    │   Status Updates       │ (JOTEX P12 Files)    │
+│                 │                        │                      │
+└─────────────────┘                        └──────────────────────┘
+         │                                        │
+         │ Database Queries                       │
+         ▼                                        ▼
+┌─────────────────┐                        ┌──────────────────────┐
+│ SQL Database    │◀──────────────────────▶│ Application Insights │
+│ (BC + Extension)│   Audit Logs           │ (Monitoring)         │
+│ [Tab50312]      │                        │                      │
+└─────────────────┘                        └──────────────────────┘
+         │                                        │
+         │ UI Updates                             │
+         ▼                                        ▼
+┌─────────────────┐                        ┌──────────────────────┐
+│ User Interface  │◀──────────────────────▶│ Alert System          │
+│ (Page Extensions│   Notifications        │ (Email/SMS)          │
+│ [Pag-Ext503xx]  │                        │                      │
+└─────────────────┘                        └──────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+INTERACTION TYPES:
+🔄 Synchronous API calls    📡 Asynchronous callbacks
+💾 Database operations      📧 Notification systems
+🔐 Certificate operations   📊 Monitoring & logging
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+### Architecture Benefits:
+
+- **🏗️ High Availability**: Redundant components with automatic failover mechanisms
+- **📈 Scalability**: Auto-scaling Azure Functions handle variable loads efficiently
+- **🔒 Security**: End-to-end encryption with certificate-based authentication
+- **📋 Compliance**: Full LHDN regulatory compliance with comprehensive audit trails
+- **🔧 Maintainability**: Modular design with clear separation of concerns
+- **📊 Monitoring**: Real-time observability with Application Insights integration
+- **🔄 Integration**: Seamless integration with existing Business Central workflows
+- **⚡ Performance**: Optimized for high-volume processing with intelligent caching
+- **🛡️ Reliability**: Comprehensive error handling and automatic retry mechanisms
+- **📱 User Experience**: Intuitive interfaces with real-time status updates
 
 ---
 
