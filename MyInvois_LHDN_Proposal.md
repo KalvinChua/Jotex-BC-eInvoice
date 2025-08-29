@@ -118,8 +118,8 @@ VENDOR is proposing CLIENT to implement the MyInvois LHDN e-Invoice System using
 - **Business Central Extension** – Core e-Invoice processing and UI integration.
 - **Azure Functions** – Secure digital signing service for invoice authentication.
 - **LHDN API Integration** – Direct submission to MyInvois platform.
-- **Azure Storage** – Secure document and log storage.
-- **Azure Key Vault** – Certificate and secret management.
+- **Secure Storage Solutions** – Document and log storage with encryption.
+- **Certificate Management** – Secure JOTEX P12 certificate handling and lifecycle management.
 
 The proposed solution will transform CLIENT's invoicing processes from manual to fully automated digital compliance, ensuring regulatory adherence while improving operational efficiency.
 
@@ -188,8 +188,9 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
-- **Security**: Integrated with Azure Active Directory and Key Vault
+- **Security**: Integrated with Azure Active Directory and secure authentication
 - **Monitoring**: Application Insights integration for performance tracking
+- **Certificate Management**: Secure JOTEX P12 certificate handling
 - **Benefits**: Serverless architecture reduces operational overhead, automatic scaling for peak loads
 - **Production Ready**: Based on proven implementation with JOTEX certificate integration
 
@@ -201,21 +202,19 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Security**: OAuth 2.0, JWT validation, IP filtering
 - **Benefits**: Professional API management, enhanced security, developer experience
 
-##### Azure Key Vault Premium
-- **Certificate Management**: Secure storage of JOTEX P12 digital certificates
-- **Secret Management**: Encrypted storage of API keys and connection strings
-- **Key Rotation**: Automated certificate renewal and key rotation
-- **Access Policies**: Granular access control with Azure RBAC
-- **Audit Logging**: Comprehensive audit trails for compliance
-- **Benefits**: Enterprise-grade security, automated certificate lifecycle management
+##### Certificate Management
+- **JOTEX P12 Certificates**: Secure digital certificate storage and management
+- **Certificate Lifecycle**: Automated certificate renewal and validation
+- **Access Control**: Secure certificate access with proper authentication
+- **Compliance**: Malaysian Digital Signature Standard (DSS) compliance
+- **Benefits**: Enterprise-grade security, automated certificate management
 
-##### Azure Storage Account (General Purpose v2)
-- **Blob Storage**: Document storage with hierarchical namespaces
-- **Table Storage**: NoSQL storage for audit logs and metadata
-- **Queue Storage**: Message queuing for asynchronous processing
-- **Redundancy**: Geo-redundant storage (GRS) for disaster recovery
-- **Security**: Azure AD authentication, encryption at rest
-- **Benefits**: Scalable storage, cost-effective, high availability
+##### Data Storage and Processing
+- **Local/Document Storage**: Secure document and log storage solutions
+- **Audit Logging**: Comprehensive transaction and system audit trails
+- **Data Security**: Encrypted data storage and transmission
+- **Backup Solutions**: Automated backup and recovery procedures
+- **Benefits**: Flexible storage options, data integrity, compliance-ready
 
 ##### Azure Monitor and Application Insights
 - **Metrics Collection**: Real-time performance and health metrics
@@ -308,9 +307,9 @@ Direct integration with the official LHDN MyInvois platform ensures regulatory c
 #### System Integration Points:
 1. **Business Central ↔ Azure Functions**: Secure document signing workflow
 2. **Azure Functions ↔ LHDN API**: Direct API communication with authentication
-3. **Business Central ↔ Azure Storage**: Document and log storage
-4. **Azure Monitor ↔ All Components**: Centralized monitoring and alerting
-5. **Azure Key Vault ↔ All Components**: Secure credential management
+3. **Business Central ↔ Storage Systems**: Document and log storage integration
+4. **Monitoring Systems ↔ All Components**: Centralized monitoring and alerting
+5. **Security Systems ↔ All Components**: Secure credential and certificate management
 
 #### Data Flow Architecture:
 1. **Invoice Creation**: Business Central captures invoice data
@@ -345,8 +344,8 @@ The architecture follows a secure, scalable cloud-native design:
 ### Azure Integration Layer:
 - Azure Functions for digital signing
 - API Management for secure communication
-- Key Vault for certificate management
-- Storage for logs and temporary files
+- Certificate management for secure authentication
+- Storage solutions for logs and temporary files
 
 ### LHDN Integration Layer:
 - Secure API communication
@@ -582,7 +581,7 @@ For the purposes of the following sections of this proposal, the supported produ
 
 - Microsoft Dynamics 365 Business Central
 - MyInvois LHDN e-Invoice Extension
-- Microsoft Azure Services (Functions, Storage, Key Vault)
+- Microsoft Azure Services (Functions, Monitoring)
 - LHDN MyInvois API Integration
 
 ### Helpdesk Support

@@ -627,8 +627,8 @@ end;
    - Generate new certificate request
 
 2. **Update Azure Function**
-   - Upload new certificate to Key Vault
-   - Update certificate references
+   - Update certificate in secure storage
+   - Update certificate references in function
    - Test signing functionality
 
 3. **Update Business Central**

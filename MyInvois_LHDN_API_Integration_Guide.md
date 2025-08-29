@@ -389,7 +389,7 @@ public static class SignDocumentFunction
     private static async Task<string> SignDocumentWithCertificate(string unsignedJson)
     {
         // Implementation based on: https://github.com/acutraaq/eInvAzureSign
-        // Load certificate from Key Vault or local store
+        // Load certificate from secure storage or local environment
         var certificate = LoadCertificate();
 
         // Create content to sign
@@ -409,7 +409,7 @@ public static class SignDocumentFunction
     private static X509Certificate2 LoadCertificate()
     {
         // Refer to: https://github.com/acutraaq/eInvAzureSign
-        // Load certificate from Key Vault or environment
+        // Load certificate from secure storage or environment
         var certPassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
         var certData = Convert.FromBase64String(Environment.GetEnvironmentVariable("CERTIFICATE_DATA"));
 

@@ -245,9 +245,9 @@ The Azure Function serves as the secure bridge between Business Central and LHDN
 
 #### Required Components
 - **Function App**: Hosts the signing service
-- **Storage Account**: For function logs and temporary files
-- **Key Vault**: For secure certificate storage
-- **Application Insights**: For monitoring and logging
+- **Storage Solutions**: For function logs and temporary files
+- **Certificate Management**: For secure certificate storage and access
+- **Monitoring Tools**: For logging and performance tracking
 
 ### Step-by-Step Azure Setup
 
@@ -295,14 +295,12 @@ az functionapp config appsettings set \
     "LOG_LEVEL=Information"
 ```
 
-#### 5. Upload Digital Certificate
-```azurecli
-# Upload P12 certificate to Key Vault
-az keyvault certificate import \
-  --vault-name "kv-myinvois-prod" \
-  --name "myinvois-signing-cert" \
-  --file "certificate.p12" \
-  --password "certificate-password"
+#### 5. Configure Digital Certificate
+```bash
+# Configure certificate access for Azure Function
+# Certificate should be securely stored and accessible to the function
+# Implementation details based on: https://github.com/acutraaq/eInvAzureSign
+# Follow your organization's certificate management procedures
 ```
 
 ### Azure Function Code Deployment
