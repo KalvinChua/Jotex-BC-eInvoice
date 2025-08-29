@@ -128,6 +128,14 @@ Business Central → Azure Function → LHDN MyInvois API
 - **Troubleshooting**: Systematic problem resolution procedures
 - **Best Practices**: Proven implementation and operational practices
 
+### Reference Implementation
+- **GitHub Repository**: https://github.com/acutraaq/eInvAzureSign
+  - Production-ready Azure Function code for document signing
+  - JOTEX P12 certificate integration examples
+  - LHDN API communication patterns
+  - Error handling and retry mechanisms
+  - Complete working implementation reference
+
 ### Support Channels
 - **Internal Documentation**: Comprehensive self-service resources
 - **System Monitoring**: Built-in health checks and diagnostics

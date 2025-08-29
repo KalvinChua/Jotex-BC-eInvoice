@@ -315,8 +315,16 @@ end;
 
 ### Azure Function Code Examples
 
-#### Document Signing Function (C#)
+#### Reference Implementation
+
+**Note**: The following examples are based on the reference implementation available at:
+**GitHub Repository**: https://github.com/acutraaq/eInvAzureSign
+
+This repository contains the actual Azure Function code used for document signing in the MyInvois LHDN e-Invoice system. Please refer to this repository for the most up-to-date implementation details.
+
+#### Document Signing Function (Based on Reference Implementation)
 ```csharp
+// Based on: https://github.com/acutraaq/eInvAzureSign
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -351,7 +359,7 @@ public static class SignDocumentFunction
                 return new BadRequestObjectResult("Missing required parameters");
             }
 
-            // Sign document
+            // Sign document using reference implementation
             var signedDocument = await SignDocumentWithCertificate(data.unsignedJson.ToString());
 
             // Prepare LHDN payload
@@ -380,6 +388,7 @@ public static class SignDocumentFunction
 
     private static async Task<string> SignDocumentWithCertificate(string unsignedJson)
     {
+        // Implementation based on: https://github.com/acutraaq/eInvAzureSign
         // Load certificate from Key Vault or local store
         var certificate = LoadCertificate();
 
@@ -399,6 +408,7 @@ public static class SignDocumentFunction
 
     private static X509Certificate2 LoadCertificate()
     {
+        // Refer to: https://github.com/acutraaq/eInvAzureSign
         // Load certificate from Key Vault or environment
         var certPassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
         var certData = Convert.FromBase64String(Environment.GetEnvironmentVariable("CERTIFICATE_DATA"));

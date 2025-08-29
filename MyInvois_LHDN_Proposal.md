@@ -185,11 +185,13 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 
 ##### Azure Functions v4
 - **Runtime**: .NET 6.0 Isolated Process Model
+- **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
 - **Security**: Integrated with Azure Active Directory and Key Vault
 - **Monitoring**: Application Insights integration for performance tracking
 - **Benefits**: Serverless architecture reduces operational overhead, automatic scaling for peak loads
+- **Production Ready**: Based on proven implementation with JOTEX certificate integration
 
 ##### Azure API Management v2
 - **API Gateway**: Centralized API management and security

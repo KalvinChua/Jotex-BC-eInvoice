@@ -321,6 +321,13 @@ end;
 
 ### Testing and Validation
 
+#### Reference Implementation
+
+**Important**: For actual implementation details and working code examples, refer to the GitHub repository:
+**Repository**: https://github.com/acutraaq/eInvAzureSign
+
+This repository contains the production-ready Azure Function code for document signing and LHDN integration.
+
 #### Unit Test Example
 ```al
 // Example: Unit test for JSON generation
