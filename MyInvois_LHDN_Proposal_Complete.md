@@ -1,18 +1,19 @@
 # MyInvois LHDN e-Invoice System Implementation Proposal
 
 **Date:** August 29, 2025
+**Project Status:** Development In Progress (Started July 2025)
 
-**From:**  
-[Your Company Name]  
-[Your Company Address]  
-[City, State, Postcode]  
+**From:**
+[Your Company Name]
+[Your Company Address]
+[City, State, Postcode]
 
-**To:**  
-[Client Company Name]  
-[Client Address]  
-[City, State, Postcode]  
+**To:**
+[Client Company Name]
+[Client Address]
+[City, State, Postcode]
 
-**Subject:** MyInvois LHDN e-Invoice System Implementation
+**Subject:** MyInvois LHDN e-Invoice System Implementation - Progress Update
 
 ---
 
@@ -518,12 +519,12 @@ The project is structured around six major milestones, each representing a criti
 
 | **Milestone** | **Description** | **Deliverables** | **Duration** | **Success Criteria** |
 |---------------|-----------------|------------------|--------------|---------------------|
-| **🏁 M1: Project Kickoff** | Project initiation and planning phase completion | • Project charter<br>• Initial requirements document<br>• Project plan<br>• Team assignments | 5 days | • All stakeholders aligned<br>• Requirements baseline established<br>• Project plan approved |
-| **📋 M2: Design Approval** | Technical design and architecture completion | • Functional specifications<br>• Technical design documents<br>• UI/UX mockups<br>• Security architecture | 12 days | • Design review completed<br>• CLIENT approval obtained<br>• Technical feasibility confirmed |
-| **⚙️ M3: Development Complete** | Core system development and integration finished | • Fully functional e-Invoice system<br>• Integration testing completed<br>• User documentation<br>• Test cases prepared | 60 days | • All features implemented<br>• System integration tested<br>• Code review completed<br>• SIT passed |
-| **🧪 M4: Testing Complete** | Quality assurance and validation finished | • UAT test results<br>• Performance test reports<br>• Security audit results<br>• Go-live readiness assessment | 18 days | • UAT sign-off obtained<br>• All critical defects resolved<br>• Performance benchmarks met<br>• Security compliance verified |
-| **🚀 M5: Go-Live** | Production deployment and handover | • Production system deployed<br>• User training completed<br>• Data migration finished<br>• Go-live support provided | 8 days | • System stable in production<br>• Users trained and confident<br>• Business processes validated<br>• Support handover completed |
-| **✅ M6: Project Closure** | Final deliverables and project sign-off | • Complete documentation set<br>• Knowledge transfer completed<br>• Final project review<br>• Maintenance procedures established | 5 days | • All deliverables accepted<br>• CLIENT satisfaction confirmed<br>• Support team fully trained<br>• Project closure report approved |
+| **🏁 M1: Project Kickoff** | Project initiation and planning phase completion | • Project charter<br>• Initial requirements document<br>• Project plan<br>• Team assignments | 3 days | • All stakeholders aligned<br>• Requirements baseline established<br>• Project plan approved |
+| **📋 M2: Design Approval** | Technical design and architecture completion | • Functional specifications<br>• Technical design documents<br>• UI/UX mockups<br>• Security architecture | 5 days | • Design review completed<br>• CLIENT approval obtained<br>• Technical feasibility confirmed |
+| **⚙️ M3: Development Complete** | Core system development and integration finished | • Fully functional e-Invoice system<br>• Integration testing completed<br>• User documentation<br>• Test cases prepared | 20 days | • All features implemented<br>• System integration tested<br>• Code review completed<br>• SIT passed |
+| **🧪 M4: Testing Complete** | Quality assurance and validation finished | • UAT test results<br>• Performance test reports<br>• Security audit results<br>• Go-live readiness assessment | 10 days | • UAT sign-off obtained<br>• All critical defects resolved<br>• Performance benchmarks met<br>• Security compliance verified |
+| **🚀 M5: Go-Live** | Production deployment and handover | • Production system deployed<br>• User training completed<br>• Data migration finished<br>• Go-live support provided | 5 days | • System stable in production<br>• Users trained and confident<br>• Business processes validated<br>• Support handover completed |
+| **✅ M6: Project Closure** | Final deliverables and project sign-off | • Complete documentation set<br>• Knowledge transfer completed<br>• Final project review<br>• Maintenance procedures established | 3 days | • All deliverables accepted<br>• CLIENT satisfaction confirmed<br>• Support team fully trained<br>• Project closure report approved |
 
 ### Milestone Dependencies & Critical Path
 
@@ -566,30 +567,94 @@ Each milestone includes a formal review process:
 
 ### Milestone Success Metrics
 
-| **Milestone** | **Key Metrics** | **Target** |
-|---------------|-----------------|------------|
-| **M1: Kickoff** | • Requirements completeness<br>• Stakeholder alignment | 100% |
-| **M2: Design** | • Design review feedback<br>• Technical feasibility | >95% positive |
-| **M3: Development** | • Feature completion<br>• Code quality<br>• Integration test pass rate | 100% / A grade / >98% |
-| **M4: Testing** | • UAT pass rate<br>• Performance benchmarks<br>• Security compliance | >95% / Met / 100% |
-| **M5: Go-Live** | • System uptime<br>• User adoption<br>• Support ticket volume | >99.5% / >80% / <5/day |
-| **M6: Closure** | • Documentation completeness<br>• Knowledge transfer<br>• CLIENT satisfaction | 100% / Complete / >4/5 |
+| **Milestone** | **Key Metrics** | **Target** | **Status** | **Timeline** |
+|---------------|-----------------|------------|------------|-------------|
+| **✅ M1: Kickoff** | • Requirements completeness<br>• Stakeholder alignment | 100% | **Completed** | July 2025 |
+| **✅ M2: Design** | • Design review feedback<br>• Technical feasibility | >95% positive | **Completed** | July 2025 |
+| **🔄 M3: Development** | • Feature completion<br>• Code quality<br>• Integration test pass rate | 100% / A grade / >98% | **In Progress** | Aug-Sep 2025 |
+| **⏳ M4: Testing** | • UAT pass rate<br>• Performance benchmarks<br>• Security compliance | >95% / Met / 100% | **Pending** | Sep-Oct 2025 |
+| **⏳ M5: Go-Live** | • System uptime<br>• User adoption<br>• Support ticket volume | >99.5% / >80% / <5/day | **Pending** | Oct 2025 |
+| **⏳ M6: Closure** | • Documentation completeness<br>• Knowledge transfer<br>• CLIENT satisfaction | 100% / Complete / >4/5 | **Pending** | Oct 2025 |
 
-## Estimated Project Timeline
+## Current Project Status & Timeline
 
-Below the estimate timeline for the project, assuming no holidays in between. The actual timeline will be subject to the actual start date and factor in Malaysian public holidays.
+**Project Start Date:** July 2025
+**Current Status:** Development in Progress
 
-| Task Description | Duration | Month 1 | Month 2 | Month 3 | Month 4 | Month 5 |
-|------------------|----------|---------|---------|---------|---------|---------|
-| Envisioning | 5 | W1-W1 | | | | |
-| Planning | 12 | W2-W4 | W1 | | | |
-| Development | 60 | W1-W4 | W2-W4 | W1-W4 | W1-W2 | |
-| Testing | 10 | | | W1-W2 | W3-W4 | |
-| Stabilizing | 8 | | | W3-W4 | W1 | |
-| Deployment | 8 | | | | W2 | W1 |
-| Project Sign-Off | 5 | | | | | W2 |
+### Project Timeline Overview
 
-**Note:** Some tasks will run concurrently and CLIENT user cooperation is required to ensure timeline is met. If there are delays due to CLIENT user availability, project timeline may be affected.
+The project is currently in the development phase with the following adjusted timeline from July 2025 onwards:
+
+| Task Description | Duration | July-Aug 2025 | Aug-Sep 2025 | Sep-Oct 2025 |
+|------------------|----------|---------------|--------------|-------------|
+| **✅ Envisioning & Planning** | 10 days | Completed | | |
+| **🔄 Core Development** | 25 days | In Progress | W1-W2 | |
+| **⏳ Integration & Testing** | 15 days | | W2-W4 | W1 |
+| **⏳ Deployment & Go-Live** | 8 days | | | W2 |
+| **⏳ Project Closure** | 3 days | | | W2 |
+
+### Current Development Status (August 2025)
+
+#### **Completed Milestones:**
+- ✅ **M1: Project Kickoff** - Completed (July 2025)
+- ✅ **M2: Design Approval** - Completed (July 2025)
+- 🔄 **M3: Development Complete** - In Progress (August 2025)
+
+#### **Current Activities:**
+- Core Business Central extension development
+- Azure Functions implementation
+- LHDN API integration setup
+- Initial testing and validation
+
+### Remaining Timeline (September-October 2025)
+
+#### **September 2025: Testing & Finalization**
+- **Week 1**: Core development completion, comprehensive testing begins
+- **Week 2**: User acceptance testing, performance optimization
+- **Week 3**: Final testing, bug fixes, production environment setup
+- **Week 4**: Production deployment preparation, user training setup
+
+#### **October 2025: Deployment & Closure**
+- **Week 1**: Production deployment, go-live support
+- **Week 2**: Final testing in production, project handover, closure
+
+### Timeline Assumptions
+- **Working Days**: 22 days per month (Monday-Friday, excluding holidays)
+- **Parallel Work**: Development and testing phases overlap where possible
+- **Client Availability**: Daily collaboration during testing phases
+- **Prerequisites**: All required access and credentials available from project start
+
+### Malaysian Public Holidays 2025 Impact
+
+The 2-month timeline accounts for the following Malaysian public holidays in 2025:
+
+#### **Federal Territory Holidays:**
+- **New Year's Day**: January 1
+- **Chinese New Year**: January 29-30
+- **Labour Day**: May 1
+- **Vesak Day**: May 12
+- **Hari Raya Puasa**: March 31-April 1
+- **Hari Raya Haji**: June 17
+- **National Day**: August 31
+- **Malaysia Day**: September 16
+- **Deepavali**: October 20
+- **Christmas Day**: December 25
+
+#### **Timeline Adjustment:**
+- **Estimated Holiday Impact**: 2-3 working days lost per month due to public holidays
+- **Contingency Built-in**: Timeline assumes project starts on a Monday and avoids major holiday periods
+- **Holiday Coordination**: Team will plan around holidays to minimize impact
+- **Make-up Time**: Any holiday-related delays will be compensated by accelerated work in adjacent weeks
+
+**Note:** If the project timeline conflicts with major holiday periods (e.g., Chinese New Year, Hari Raya), we can adjust the start date to ensure optimal productivity.
+
+### Critical Success Factors
+- **Daily Stand-ups**: Brief progress updates and issue resolution
+- **Weekly Reviews**: Milestone verification and course correction
+- **Immediate Feedback**: Rapid response to testing results
+- **Resource Availability**: Dedicated team members throughout project
+
+**Note:** This accelerated timeline requires close collaboration and assumes all prerequisites are met. Any delays in client feedback or prerequisite delivery may impact the schedule.
 
 ---
 
