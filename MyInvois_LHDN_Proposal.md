@@ -85,7 +85,7 @@ As VENDOR understanding, CLIENT is looking for solutions which could address:
 - Comprehensive error handling and retry mechanisms for failed submissions.
 - Complete audit logging and compliance reporting capabilities.
 - Role-based access control ensuring appropriate security and data visibility.
-- Real-time dashboards and notifications for invoice status monitoring.
+- Real-time status monitoring and notifications for invoice processing.
 - Bulk processing capabilities for high-volume invoice scenarios.
 - Mobile-responsive user interfaces for cross-device accessibility.
 - Multi-language support (English/Malay) for diverse user groups.
@@ -102,7 +102,7 @@ As VENDOR understanding, CLIENT is looking for solutions which could address:
 - **Digital Transformation** – Streamlining business processes through automation and cloud adoption.
 - **Compliance Solutions** – Implementing regulatory compliance systems for various industries.
 - **Cloud Integration** – Seamless integration with Microsoft Azure services and APIs.
-- **Data Analytics** – Providing insights through reporting and dashboard solutions.
+- **Data Analytics** – Providing insights through logging and monitoring.
 - **Quality Assurance** – Comprehensive testing and validation procedures.
 
 We have successfully delivered numerous Business Central implementations and integrations, with particular expertise in Malaysian market requirements and LHDN compliance solutions.
@@ -127,32 +127,48 @@ The proposed solution will transform CLIENT's invoicing processes from manual to
 
 The proposed solution will leverage Microsoft Dynamics 365 Business Central extension with Azure cloud services to digitize and automate the e-Invoice process.
 
-#### Workflow Overview:
+#### Complete End-to-End Workflow:
 
-1. Users create sales invoices in Business Central with standard processes.
-2. The e-Invoice extension automatically validates customer TIN and populates required fields.
-3. System generates UBL 2.1 compliant JSON structure with all mandatory fields.
-4. Document is digitally signed using JOTEX P12 certificate through Azure Functions.
-5. Signed document and LHDN-ready payload are returned to Business Central.
-6. Business Central submits the signed document to LHDN MyInvois API.
-7. System tracks submission status and provides real-time updates.
-8. Comprehensive audit logging captures all actions and system responses.
-9. Users can monitor invoice status through integrated dashboards and receive notifications.
+1. **Document Creation**: Users create sales invoices/orders in Business Central with standard processes
+2. **Field Validation**: AL extension [Cod50306] automatically validates and populates e-Invoice fields
+3. **TIN Validation**: [Cod50301] validates customer TIN with LHDN API in real-time
+4. **Master Data Validation**: [Cod50307/Cod50308] validates state/country codes and classifications
+5. **JSON Generation**: [Cod50302/Cod50311] creates UBL 2.1 compliant JSON structure
+6. **Azure Function Call**: [Cod50310] securely transmits JSON to Azure Function for signing
+7. **Digital Signing**: Azure Function applies XAdES signature using JOTEX P12 certificate
+8. **Response Processing**: [Cod50310] receives signed document and LHDN-ready payload
+9. **LHDN Submission**: [Cod50302] submits signed document to LHDN MyInvois API
+10. **Status Tracking**: [Cod50312] monitors submission status with real-time updates
+11. **Audit Logging**: Complete transaction audit trail maintained in [Tab50312]
+12. **User Notification**: Real-time status updates and notifications via page extensions
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
 
 #### Key Features:
 
-- Automatic UBL 2.1 JSON generation with proper namespace declarations.
-- Real-time TIN validation with LHDN API integration.
-- Digital signing using Azure Functions and certificate management.
-- Multi-level error handling with intelligent retry mechanisms.
-- Comprehensive audit trails and compliance reporting.
-- Role-based security and access control.
-- Real-time dashboards and status monitoring.
-- Bulk processing capabilities for high-volume scenarios.
-- Mobile-responsive user interfaces.
-- Multi-language support (English/Malay).
+**Business Central AL Extension:**
+- **25+ Codeunits**: Comprehensive business logic for complete e-Invoice workflow
+- **Event-Driven Automation**: Automatic field population and validation on document creation
+- **Real-time TIN Validation**: Direct LHDN API integration for customer verification
+- **UBL 2.1 JSON Generation**: Complete document structure building with all mandatory fields
+- **Multi-Document Support**: Invoices, Credit Notes, Debit Notes, and Self-billed variants
+- **Master Data Management**: Complete state, country, currency, and classification code management
+- **Audit Trail**: Comprehensive logging of all transactions and system events
+- **Error Handling**: Intelligent retry mechanisms with user-friendly error messages
+- **Bulk Processing**: Efficient handling of high-volume document batches
+
+**Azure Function Integration:**
+- **XAdES Digital Signing**: Official LHDN 7-step signing process with JOTEX certificates
+- **Environment-Specific**: Separate PREPROD and PRODUCTION certificate handling
+- **Security**: File-based certificate management with proper access controls
+- **Performance**: Sub-second signing with comprehensive error handling
+
+**User Experience:**
+- **Seamless Integration**: Works within standard Business Central workflows
+- **Real-time Status**: Live monitoring of submission status and processing
+- **Mobile-Responsive**: Cross-device compatibility for all interfaces
+- **Multi-language**: English and Malay language support
+- **Role-Based Access**: Appropriate security and data visibility controls
 
 ---
 
@@ -164,12 +180,15 @@ Business Central serves as the core platform for invoice creation and management
 
 #### Core Capabilities:
 - **Version**: Microsoft Dynamics 365 Business Central 2022 Wave 2 or later
-- **AL Language Development**: Custom extension development using AL (Application Language) for e-Invoice functionality
-- **Table Extensions**: Enhanced data models for customers, items, and sales documents with e-Invoice fields
-- **Page Extensions**: Integrated user interfaces for e-Invoice management and real-time monitoring
-- **Codeunits**: Business logic implementation for JSON generation, validation, and API orchestration
-- **Reports**: Advanced reporting capabilities for bulk processing and compliance documentation
-- **Workflow Integration**: Seamless integration with existing sales, purchase, and financial processes
+- **AL Extension**: Complete e-Invoice solution with 25+ codeunits and comprehensive functionality
+- **Object Range**: 50300-50399 with structured naming convention (Cod, Tab, Pag prefixes)
+- **Table Extensions**: 13+ table extensions for customers, sales documents, items, and vendors
+- **Page Extensions**: 20+ page extensions for seamless UI integration and status monitoring
+- **Codeunits**: Business logic for JSON generation, TIN validation, Azure Function integration, and LHDN submission
+- **Master Data Tables**: 12 reference tables for state codes, country codes, classifications, and audit logs
+- **Reports**: Batch processing reports for bulk invoice and credit memo exports
+- **Event Subscribers**: Automatic field population and validation on document creation/modification
+- **Workflow Integration**: Native integration with standard Business Central sales and posting processes
 
 #### Key Benefits:
 - **Unified Platform**: Single system for ERP and e-Invoice compliance
@@ -185,7 +204,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 #### Core Services:
 
 ##### Azure Functions v4
-- **Runtime**: .NET 6.0 Isolated Process Model
+- **Runtime**: .NET 8.0 Isolated Process Model
 - **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
@@ -207,7 +226,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Metrics Collection**: Real-time performance and health metrics
 - **Log Analytics**: Centralized logging and query capabilities
 - **Alerting**: Intelligent alerting based on metrics and logs
-- **Dashboards**: Custom dashboards for system monitoring
+- **Logging**: Comprehensive request/response logging
 - **Integration**: Native integration with Azure Functions
 - **Benefits**: Proactive monitoring, rapid issue detection and resolution
 
@@ -330,24 +349,223 @@ This is the production signing service used by Business Central. It is implement
 - Monitoring
   - Application Insights telemetry configured in [Program.cs](external/eInvAzureSign/Program.cs:11)
 
+### Business Central AL Extension – Technical Reference
+
+This is the core Business Central extension that handles the complete e-Invoice workflow from creation to LHDN submission. It is implemented as a comprehensive AL extension with 25+ codeunits, multiple table/page extensions, and full integration with the Azure Function signing service.
+
+#### AL Extension Architecture
+- **Extension ID**: MyInvoisLHDN
+- **Target Version**: Business Central 2022 Wave 2+
+- **Language**: AL (Application Language)
+- **Object Range**: 50300-50399
+- **Dependencies**: Base Business Central modules
+
+#### Core Codeunits (Business Logic)
+
+##### Document Processing Engine
+- **[Cod50302.eInvoiceJSONGenerator.al](Cod50302.eInvoiceJSONGenerator.al)**: Main JSON generation and LHDN submission orchestrator
+  - `GenerateEInvoiceJson()`: Creates UBL 2.1 compliant JSON
+  - `GetSignedInvoiceAndSubmitToLHDN()`: Complete signing and submission workflow
+  - `AddAmountField()`: Handles negative amounts for discounts/adjustments
+  - `SetSuppressUserDialogs()`: UI control for automated processing
+
+- **[Cod50311.eInvoiceUBLDocumentBuilder.al](Cod50311.eInvoiceUBLDocumentBuilder.al)**: UBL document structure builder
+  - `CreateInvoiceObject()`: Builds complete invoice structure
+  - `AddSupplierInformation()`: Company/supplier data mapping
+  - `AddCustomerInformation()`: Customer data with TIN validation
+  - `AddInvoiceLines()`: Line items with classifications and taxes
+
+##### Azure Function Integration
+- **[Cod50310.eInvoiceAzureFunctionClient.al](Cod50310.eInvoiceAzureFunctionClient.al)**: HTTP client for Azure Function communication
+  - `TryPostToAzureFunction()`: Secure payload transmission
+  - `ProcessAzureFunctionResponse()`: Response parsing and validation
+  - `HandleSigningErrors()`: Comprehensive error handling
+  - Request correlation and timeout management
+
+##### Validation and Compliance
+- **[Cod50301.eInvoiceTINValidator.al](Cod50301.eInvoiceTINValidator.al)**: TIN validation and verification
+  - `ValidateCustomerTIN()`: Real-time TIN validation with LHDN API
+  - `CallLhdnTinValidationApi()`: Direct LHDN API integration
+  - `LogValidationResult()`: Audit trail maintenance
+  - `HandleValidationErrors()`: User-friendly error messages
+
+- **[Cod50300.eInvoiceHelper.al](Cod50300.eInvoiceHelper.al)**: Common utilities and helpers
+  - `FormatAmount()`: Currency and decimal formatting
+  - `ValidateDateFormat()`: ISO date compliance
+  - `GenerateCorrelationId()`: Unique request tracking
+  - `LogActivity()`: Comprehensive audit logging
+
+##### Event-Driven Automation
+- **[Cod50305.eInvSalesInvPostingSub.al](Cod50305.eInvSalesInvPostingSub.al)**: Sales invoice posting automation
+  - `OnAfterPostSalesDoc()`: Automatic e-Invoice processing
+  - `CopyEInvoiceFieldsToPostedDoc()`: Field preservation
+  - `TriggerAutoSubmission()`: Conditional auto-submission
+
+- **[Cod50306.eInvFieldPopulation.al](Cod50306.eInvFieldPopulation.al)**: Automatic field population
+  - `PopulateEInvoiceFieldsOnValidate()`: Real-time field updates
+  - `SetDefaultValues()`: Smart defaults based on document type
+  - `ValidateFieldDependencies()`: Cross-field validation
+
+- **[Cod50309.eInvFieldPopulationHandler.al](Cod50309.eInvFieldPopulationHandler.al)**: Event handling coordination
+  - `HandleFieldValidationEvents()`: Centralized validation logic
+  - `ManageFieldDependencies()`: Dynamic field relationships
+  - `ProcessBulkUpdates()`: Mass field population
+
+##### Master Data Management
+- **[Cod50307.eInvoiceCountryCodeMgt.al](Cod50307.eInvoiceCountryCodeMgt.al)**: Country code management
+- **[Cod50308.eInvoiceStateCodeMgt.al](Cod50308.eInvoiceStateCodeMgt.al)**: State code validation
+- **[Cod50330.eInvoiceQRManager.al](Cod50330.eInvoiceQRManager.al)**: QR code generation for invoices
+
+##### Maintenance and Operations
+- **[Cod50312.eInvoiceSubmissionStatus.al](Cod50312.eInvoiceSubmissionStatus.al)**: Status tracking and management
+  - `UpdateSubmissionStatus()`: Real-time status updates
+  - `GetSubmissionHistory()`: Historical data retrieval
+  - `HandleStatusTransitions()`: Workflow state management
+
+- **[Cod50320.eInvoiceCancellationHelper.al](Cod50320.eInvoiceCancellationHelper.al)**: Document cancellation handling
+- **[Cod50321.eInvoiceDataUpgrade.al](Cod50321.eInvoiceDataUpgrade.al)**: Data migration and upgrades
+- **[Cod50322.eInvoicePostingDatePopulator.al](Cod50322.eInvoicePostingDatePopulator.al)**: Posting date management
+- **[Cod50323.eInvoiceCustomerBulkUpdate.al](Cod50323.eInvoiceCustomerBulkUpdate.al)**: Bulk customer operations
+- **[Cod50324.eInvoiceCustomerNameUpgrade.al](Cod50324.eInvoiceCustomerNameUpgrade.al)**: Customer data standardization
+
+#### Table Extensions (Data Model)
+
+##### Customer Extensions
+- **[Tab-Ext50300.eInvoiceCustomerExt.al](Tab-Ext50300.eInvoiceCustomerExt.al)**: Customer e-Invoice fields
+  - TIN number and validation status
+  - ID type (NRIC/BRN/PASSPORT/ARMY)
+  - Address validation fields
+  - e-Invoice enablement flag
+
+##### Sales Document Extensions
+- **[Tab-Ext50301.eInvSalesInvHeaderExt.al](Tab-Ext50301.eInvSalesInvHeaderExt.al)**: Sales invoice header fields
+- **[Tab-Ext50305.eInvSalesHeader.al](Tab-Ext50305.eInvSalesHeader.al)**: Sales header e-Invoice fields
+- **[Tab-Ext50307.eInvSalesLineExt.al](Tab-Ext50307.eInvSalesLineExt.al)**: Sales line extensions
+- **[Tab-Ext50308.eInvSalesCreditMemoLinesExt.al](Tab-Ext50308.eInvSalesCreditMemoLinesExt.al)**: Credit memo lines
+- **[Tab-Ext50309.eInvSalesCrHeaderExt.al](Tab-Ext50309.eInvSalesCrHeaderExt.al)**: Credit memo header
+
+##### Item and Vendor Extensions
+- **[Tab-Ext50302.eInvItemExt.al](Tab-Ext50302.eInvItemExt.al)**: Item classification fields
+- **[Tab-Ext50304.eInvoiceVendorExt.al](Tab-Ext50304.eInvoiceVendorExt.al)**: Vendor e-Invoice fields
+
+##### Archive and History
+- **[Tab-Ext50312.eInvSalesLineArc.al](Tab-Ext50312.eInvSalesLineArc.al)**: Sales line archive
+- **[Tab-Ext50313.eInvSalesHeaderArch.al](Tab-Ext50313.eInvSalesHeaderArch.al)**: Sales header archive
+
+#### Master Data Tables
+
+##### Configuration Tables
+- **[Tab50300.eInvoiceSetup.al](Tab50300.eInvoiceSetup.al)**: System configuration
+  - Azure Function URL and credentials
+  - LHDN API endpoints and tokens
+  - Environment settings (PREPROD/PRODUCTION)
+  - Processing parameters and timeouts
+
+##### Reference Data Tables
+- **[Tab50301.eInvoiceTINLog.al](Tab50301.eInvoiceTINLog.al)**: TIN validation history
+- **[Tab50302.eInvoiceTypes.al](Tab50302.eInvoiceTypes.al)**: Document type definitions
+- **[Tab50303.CurrencyCodes.al](Tab50303.CurrencyCodes.al)**: Currency code mappings
+- **[Tab50304.MSICCodes.al](Tab50304.MSICCodes.al)**: Industry classification codes
+- **[Tab50305.StateCodes.al](Tab50305.StateCodes.al)**: Malaysian state codes
+- **[Tab50306.CountryCodes.al](Tab50306.CountryCodes.al)**: Country code definitions
+- **[Tab50307.PaymentModes.al](Tab50307.PaymentModes.al)**: Payment method classifications
+- **[Tab50308.eInvoiceClassification.al](Tab50308.eInvoiceClassification.al)**: Product/service classifications
+- **[Tab50309.eInvoiceTaxTypes.al](Tab50309.eInvoiceTaxTypes.al)**: Tax category definitions
+- **[Tab50310.eInvoiceUOM.al](Tab50310.eInvoiceUOM.al)**: Unit of measure mappings
+- **[Tab50311.eInvoiceVersion.al](Tab50311.eInvoiceVersion.al)**: UBL version specifications
+- **[Tab50312.eInvoiceSubmissionLog.al](Tab50312.eInvoiceSubmissionLog.al)**: Complete audit trail
+
+#### Page Extensions (User Interface)
+
+##### Setup and Configuration
+- **[Pag50300.eInvoiceSetupCard.al](Pag50300.eInvoiceSetupCard.al)**: Main system configuration
+- **[Pag50304.eInvoiceTypes.al](Pag50304.eInvoiceTypes.al)**: Document type management
+- **[Pag50305.eInvoiceCurrencyCodes.al](Pag50305.eInvoiceCurrencyCodes.al)**: Currency setup
+- **[Pag50306.MSICCodeList.al](Pag50306.MSICCodeList.al)**: Industry code management
+- **[Pag50307.StateCodeList.al](Pag50307.StateCodeList.al)**: State code configuration
+- **[Pag50308.CountryCodeList.al](Pag50308.CountryCodeList.al)**: Country code setup
+
+##### Operational Pages
+- **[Pag50301.TINValidationLog.al](Pag50301.TINValidationLog.al)**: TIN validation history
+- **[Pag50315.eInvoiceSubmissionLogCard.al](Pag50315.eInvoiceSubmissionLogCard.al)**: Submission details
+- **[Pag50316.eInvoiceSubmissionLog.al](Pag50316.eInvoiceSubmissionLog.al)**: Submission history
+
+##### Document Extensions
+- **[Pag-Ext50300.eInvCustomerCardExt.al](Pag-Ext50300.eInvCustomerCardExt.al)**: Customer card extensions
+- **[Pag-Ext50301.eInvoiceCompanyInfo.al](Pag-Ext50301.eInvoiceCompanyInfo.al)**: Company information
+- **[Pag-Ext50306.eInvPostedSalesInvoiceExt.al](Pag-Ext50306.eInvPostedSalesInvoiceExt.al)**: Posted invoice actions
+- **[Pag-Ext50307.eInvSalesInvoiceExt.al](Pag-Ext50307.eInvSalesInvoiceExt.al)**: Sales invoice extensions
+- **[Pag-Ext50308.eInvItemCardExt.al](Pag-Ext50308.eInvItemCardExt.al)**: Item card extensions
+
+#### Reports
+- **[Rep50300.ExportPostedSalesBatcheInv.al](Rep50300.ExportPostedSalesBatcheInv.al)**: Batch export functionality
+- **[Rep50301.ExportCreditMemoBatcheInv.al](Rep50301.ExportCreditMemoBatcheInv.al)**: Credit memo batch export
+
+#### AL Extension Integration Flow
+
+##### Complete e-Invoice Processing Workflow
+1. **Document Creation**: User creates sales document in Business Central
+2. **Field Validation**: [Cod50306] validates and populates e-Invoice fields automatically
+3. **TIN Validation**: [Cod50301] validates customer TIN with LHDN API
+4. **JSON Generation**: [Cod50302] creates UBL 2.1 compliant JSON structure
+5. **Azure Function Call**: [Cod50310] sends JSON to Azure Function for signing
+6. **Response Processing**: [Cod50310] receives signed document and LHDN payload
+7. **LHDN Submission**: [Cod50302] submits to LHDN MyInvois API
+8. **Status Tracking**: [Cod50312] updates submission status and logs
+9. **Audit Logging**: Complete transaction audit trail maintained
+
+##### Error Handling and Recovery
+- **Network Failures**: Automatic retry with exponential backoff
+- **Validation Errors**: User-friendly error messages with correction guidance
+- **Certificate Issues**: Automatic certificate validation and renewal alerts
+- **LHDN API Errors**: Detailed error parsing and user notification
+- **System Failures**: Comprehensive logging and recovery procedures
+
+##### Performance Optimizations
+- **Batch Processing**: Efficient handling of multiple documents
+- **Caching**: Master data caching to reduce database calls
+- **Async Processing**: Background processing for long-running operations
+- **Memory Management**: Efficient memory usage for large document sets
+- **Database Optimization**: Optimized queries and indexing
+
+This comprehensive AL extension provides the complete Business Central integration layer, handling everything from data validation to LHDN submission while maintaining full audit compliance and user experience standards.
+
 ### Technology Integration Architecture
 
 #### System Integration Points:
-1. **Business Central ↔ Azure Functions**: Secure document signing and payload preparation
-2. **Business Central ↔ LHDN API**: Direct API communication with authentication
-3. **Azure Functions ↔ Business Central**: Signed document and status callbacks
-4. **Application Insights ↔ All Components**: Centralized monitoring and logging
-5. **Certificate Management**: File-based certificate handling and validation
+1. **Business Central AL Extension ↔ Azure Functions**: Secure JSON transmission and signed document retrieval
+2. **Business Central AL Extension ↔ LHDN API**: Direct OAuth 2.0 authenticated API communication
+3. **Azure Functions ↔ Business Central**: Signed document and LHDN payload callbacks
+4. **Business Central Event System**: Automatic field population and validation triggers
+5. **Application Insights**: Centralized monitoring and logging for both AL and Azure components
+6. **Certificate Management**: File-based certificate handling with environment-specific loading
+7. **Master Data Synchronization**: Real-time validation of state, country, and classification codes
 
-#### Data Flow Architecture:
-1. **Invoice Creation**: Business Central captures invoice data
-2. **Validation**: Real-time TIN and data validation
-3. **JSON Generation**: UBL 2.1 compliant JSON creation
-4. **Digital Signing**: Azure Functions applies JOTEX signature and returns signed document
-5. **Payload Preparation**: LHDN-ready payload created with base64 document and hash
-6. **API Submission**: Business Central submits signed document to LHDN MyInvois
-7. **Status Tracking**: Real-time status monitoring and updates
-8. **Audit Logging**: Comprehensive audit trail maintenance
+#### Complete Data Flow Architecture:
+
+**Business Central AL Extension Layer:**
+1. **Document Creation**: User creates sales document with standard Business Central processes
+2. **Event-Driven Validation**: [Cod50306] automatically validates and populates e-Invoice fields
+3. **TIN Verification**: [Cod50301] validates customer TIN with LHDN API
+4. **Master Data Validation**: [Cod50307/50308] validates state/country codes and classifications
+5. **UBL Structure Building**: [Cod50311] creates complete UBL 2.1 document structure
+
+**Azure Function Processing Layer:**
+6. **Secure Transmission**: [Cod50310] sends JSON to Azure Function via HTTPS
+7. **XAdES Signing**: Azure Function applies official LHDN 7-step digital signature
+8. **Payload Preparation**: Creates LHDN-ready submission payload with base64 document and hash
+9. **Response Callback**: Returns signed document and LHDN payload to Business Central
+
+**LHDN Integration Layer:**
+10. **API Submission**: [Cod50302] submits signed document to LHDN MyInvois API
+11. **Status Polling**: [Cod50312] monitors submission status with real-time updates
+12. **Error Handling**: Intelligent retry logic with comprehensive error logging
+13. **Audit Trail**: Complete transaction history in [Tab50312] with correlation IDs
+
+**User Experience Layer:**
+14. **Status Monitoring**: Real-time updates via page extensions and notifications
+15. **Error Reporting**: User-friendly error messages with resolution guidance
+16. **Bulk Operations**: Efficient processing of multiple documents via reports
 
 #### Performance Characteristics:
 - **Response Time**: < 5 seconds for standard invoice processing
@@ -476,7 +694,7 @@ The proposed solutions involve development, implementation, and deployment of th
 - Develop AL extension with core e-Invoice functionality
 - Implement Azure Functions for digital signing
 - Configure LHDN API integration and authentication
-- Design user interfaces and reporting dashboards
+- Design user interfaces and status monitoring
 - **Milestone: Design Approved**
 
 - Develop Business Central extension components
