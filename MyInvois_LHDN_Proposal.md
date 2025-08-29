@@ -133,10 +133,11 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 2. The e-Invoice extension automatically validates customer TIN and populates required fields.
 3. System generates UBL 2.1 compliant JSON structure with all mandatory fields.
 4. Document is digitally signed using JOTEX P12 certificate through Azure Functions.
-5. Signed document is submitted to LHDN MyInvois API with proper authentication.
-6. System tracks submission status and provides real-time updates.
-7. Comprehensive audit logging captures all actions and system responses.
-8. Users can monitor invoice status through integrated dashboards and receive notifications.
+5. Signed document and LHDN-ready payload are returned to Business Central.
+6. Business Central submits the signed document to LHDN MyInvois API.
+7. System tracks submission status and provides real-time updates.
+8. Comprehensive audit logging captures all actions and system responses.
+9. Users can monitor invoice status through integrated dashboards and receive notifications.
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
 
@@ -188,7 +189,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
-- **Security**: Integrated with Azure Active Directory and secure authentication
+- **Security**: Integrated with Azure Active Directory and secure certificate management
 - **Monitoring**: Application Insights integration for performance tracking
 - **Certificate Management**: Secure JOTEX P12 certificate handling
 - **Benefits**: Serverless architecture reduces operational overhead, automatic scaling for peak loads
@@ -203,18 +204,19 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Benefits**: Professional API management, enhanced security, developer experience
 
 ##### Certificate Management
-- **JOTEX P12 Certificates**: Secure digital certificate storage and management
-- **Certificate Lifecycle**: Automated certificate renewal and validation
+- **JOTEX P12 Certificates**: File-based certificate storage and management
+- **Environment-Specific Loading**: PREPROD and PRODUCTION certificate handling
+- **Serial Number Extraction**: Decimal format extraction for LHDN compliance
 - **Access Control**: Secure certificate access with proper authentication
 - **Compliance**: Malaysian Digital Signature Standard (DSS) compliance
-- **Benefits**: Enterprise-grade security, automated certificate management
+- **Benefits**: Production-ready implementation, no Key Vault dependency
 
 ##### Data Storage and Processing
-- **Local/Document Storage**: Secure document and log storage solutions
+- **File-Based Storage**: Certificate and configuration file management
 - **Audit Logging**: Comprehensive transaction and system audit trails
 - **Data Security**: Encrypted data storage and transmission
 - **Backup Solutions**: Automated backup and recovery procedures
-- **Benefits**: Flexible storage options, data integrity, compliance-ready
+- **Benefits**: Production-ready implementation, simplified deployment
 
 ##### Azure Monitor and Application Insights
 - **Metrics Collection**: Real-time performance and health metrics
@@ -302,23 +304,70 @@ Direct integration with the official LHDN MyInvois platform ensures regulatory c
 - **Response Caching**: Intelligent caching to reduce API calls
 - **Error Classification**: Automated error categorization and handling
 
+### Azure Function Implementation (eInvAzureSign) – Technical Reference
+
+This is the production signing service used by Business Central. It is implemented in the eInvAzureSign repository and is referenced here to align proposal claims with the working codebase.
+
+- Runtime and hosting
+  - .NET 8.0 Isolated Azure Functions (Application Insights enabled)
+  - Dependency Injection configured in [Program.cs](external/eInvAzureSign/Program.cs:11)
+
+- Endpoints
+  - General signing: [eInvSigning.Run()](external/eInvAzureSign/eInvSigning.cs:45) → POST /api/eInvSigning
+  - Business Central optimized: [eInvSigning.ProcessBusinessCentralRequest()](external/eInvAzureSign/eInvSigning.cs:814) → POST /api/BusinessCentralSigning
+  - Health: [eInvSigning.HealthCheck()](external/eInvAzureSign/eInvSigning.cs:431) → GET /api/health
+  - Connectivity test: [eInvSigning.ConnectivityTest()](external/eInvAzureSign/eInvSigning.cs:379) → GET/POST /api/connectivity-test
+  - Signature validation: [eInvSigning.ValidateSignature()](external/eInvAzureSign/eInvSigning.cs:450) → POST /api/validate
+
+- LHDN 7‑step signing pipeline (XAdES)
+  - Orchestrated by [HardcodedDigitalSignatureService.GenerateOfficialLhdnSignature()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:312)
+  - Transform/remove UBLExtensions/Signature: [TransformDocument()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:394)
+  - RSA‑SHA256 using provider pattern: [SignDocumentUsingCertProviderMethod()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:149)
+  - Build signed properties: [CreateLhdnSignedProperties()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:440)
+  - Final UBL with UBLExtensions + Signature: [CreateLhdnCompliantSignedDocument()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:520)
+
+- Certificate management (file‑based; no Key Vault required)
+  - Environment‑specific loading: [LoadCertificateForEnvironment()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:41)
+    - PREPROD: JOTEX_SDN._BHD..p12
+    - PROD: CERT_19448802.p12
+  - Serial number (decimal) extraction for LHDN: [GetCertificateSerialNumberAsDecimal()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:130)
+
+- Business Central interoperability
+  - Clean placeholder and normalize UBL numbers: [BusinessCentralService.CleanBusinessCentralJson()](external/eInvAzureSign/Services/BusinessCentralService.cs:23), [NormalizeDataTypes()](external/eInvAzureSign/Services/BusinessCentralService.cs:103)
+  - Embed XAdES into BC UBL: [EmbedSignatureIntoBusinessCentralJson()](external/eInvAzureSign/Services/BusinessCentralService.cs:56)
+  - Async webhook callback back to BC (signed payload/status): [BusinessCentralHttpService.SendSignedInvoiceCallbackAsync()](external/eInvAzureSign/Services/BusinessCentralHttpService.cs:36)
+
+- Returned artifacts to Business Central
+  - Signed JSON with UBLExtensions and Signature
+  - LHDN “documents” payload (base64 document + SHA‑256 hash + codeNumber) created by [CreateLhdnSubmissionDocument()](external/eInvAzureSign/eInvSigning.cs:714)
+
+- Data quality and safeguards
+  - Normalize IssueDate/IssueTime to current UTC to avoid CF321: [NormalizeInvoiceDateTimeToUtc()](external/eInvAzureSign/eInvSigning.cs:1003)
+  - Environment heuristics for safety/logging: [DetectEnvironmentFromJson()](external/eInvAzureSign/eInvSigning.cs:1090)
+  - Request validation: [ValidateRequest()](external/eInvAzureSign/eInvSigning.cs:505)
+  - Correlation IDs and processing time metrics in BC flow: [ProcessBusinessCentralRequest()](external/eInvAzureSign/eInvSigning.cs:814)
+
+- Monitoring
+  - Application Insights telemetry configured in [Program.cs](external/eInvAzureSign/Program.cs:11)
+
 ### Technology Integration Architecture
 
 #### System Integration Points:
-1. **Business Central ↔ Azure Functions**: Secure document signing workflow
-2. **Azure Functions ↔ LHDN API**: Direct API communication with authentication
-3. **Business Central ↔ Storage Systems**: Document and log storage integration
+1. **Business Central ↔ Azure Functions**: Secure document signing and payload preparation
+2. **Business Central ↔ LHDN API**: Direct API communication with authentication
+3. **Azure Functions ↔ Business Central**: Signed document and status callbacks
 4. **Monitoring Systems ↔ All Components**: Centralized monitoring and alerting
-5. **Security Systems ↔ All Components**: Secure credential and certificate management
+5. **Certificate Management**: File-based certificate handling and validation
 
 #### Data Flow Architecture:
 1. **Invoice Creation**: Business Central captures invoice data
 2. **Validation**: Real-time TIN and data validation
 3. **JSON Generation**: UBL 2.1 compliant JSON creation
-4. **Digital Signing**: Azure Functions applies JOTEX signature
-5. **API Submission**: Secure submission to LHDN MyInvois
-6. **Status Tracking**: Real-time status monitoring and updates
-7. **Audit Logging**: Comprehensive audit trail maintenance
+4. **Digital Signing**: Azure Functions applies JOTEX signature and returns signed document
+5. **Payload Preparation**: LHDN-ready payload created with base64 document and hash
+6. **API Submission**: Business Central submits signed document to LHDN MyInvois
+7. **Status Tracking**: Real-time status monitoring and updates
+8. **Audit Logging**: Comprehensive audit trail maintenance
 
 #### Performance Characteristics:
 - **Response Time**: < 5 seconds for standard invoice processing
@@ -342,10 +391,10 @@ The architecture follows a secure, scalable cloud-native design:
 - API orchestration and error handling
 
 ### Azure Integration Layer:
-- Azure Functions for digital signing
-- API Management for secure communication
+- Azure Functions for digital signing and payload preparation
 - Certificate management for secure authentication
-- Storage solutions for logs and temporary files
+- File-based storage for certificates and configuration
+- Application Insights for monitoring and logging
 
 ### LHDN Integration Layer:
 - Secure API communication
