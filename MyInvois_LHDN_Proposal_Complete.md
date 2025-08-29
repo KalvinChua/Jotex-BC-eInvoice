@@ -86,7 +86,7 @@ As VENDOR understanding, CLIENT is looking for solutions which could address:
 - Real-time status monitoring and notifications for invoice processing.
 - Bulk processing capabilities for high-volume invoice scenarios.
 - Web-responsive user interfaces for cross-device accessibility.
-- Multi-language support (English/Malay) for diverse user groups.
+- User-friendly interface optimized for English-speaking users.
 
 ---
 
@@ -129,9 +129,9 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Business      │    │     AL Extension │    │   Azure Function │
-│   Central User  │────│   Processing     │────│   Digital Signing│
-│                 │    │                  │    │                 │
+│   Business      │    │   e-Invoice       │    │   Azure Function │
+│   Central User  │────│   Processing      │────│   Digital Signing│
+│                 │    │                   │    │                 │
 │ • Create Invoice│    │ • Field Validation│    │ • XAdES Signing │
 │ • Post Document │    │ • TIN Validation │    │ • Certificate    │
 │ • Monitor Status│    │ • JSON Generation│    │ • LHDN Payload  │
@@ -161,22 +161,22 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 9. **📤 API Submission**: Submits signed document to LHDN MyInvois API
 10. **📊 Status Monitoring**: Tracks submission with real-time updates
 11. **📝 Audit Logging**: Complete transaction history with correlation IDs
-12. **🔔 User Notification**: Status updates and alerts via page extensions
+12. **🔔 User Notification**: Status updates and alerts via integrated dashboards
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
 
 #### Key Features:
 
-**Business Central AL Extension:**
-- **25+ Codeunits**: Comprehensive business logic for complete e-Invoice workflow
-- **Event-Driven Automation**: Automatic field population and validation on document creation
-- **Real-time TIN Validation**: Direct LHDN API integration for customer verification
-- **UBL 2.1 JSON Generation**: Complete document structure building with all mandatory fields
+**Integrated e-Invoice System:**
+- **Comprehensive Business Logic**: Complete automated workflow for e-Invoice processing
+- **Smart Automation**: Automatic field population and validation during document creation
+- **Real-time TIN Validation**: Direct regulatory API integration for customer verification
+- **Standard Document Generation**: Complete structured document creation with all required fields
 - **Multi-Document Support**: Invoices, Credit Notes, Debit Notes, and Self-billed variants
-- **Master Data Management**: Complete state, country, currency, and classification code management
-- **Audit Trail**: Comprehensive logging of all transactions and system events
-- **Error Handling**: Intelligent retry mechanisms with user-friendly error messages
-- **Bulk Processing**: Efficient handling of high-volume document batches
+- **Master Data Management**: Complete reference data management for compliance
+- **Audit Trail**: Comprehensive transaction logging and event tracking
+- **Intelligent Error Handling**: Automated retry mechanisms with clear user feedback
+- **High-Volume Processing**: Efficient bulk document handling capabilities
 
 **Azure Function Integration:**
 - **XAdES Digital Signing**: Official LHDN 7-step signing process with JOTEX certificates
@@ -188,7 +188,7 @@ The solution supports all LHDN document types and ensures complete compliance wi
 - **Seamless Integration**: Works within standard Business Central workflows
 - **Real-time Status**: Live monitoring of submission status and processing
 - **Web-Responsive**: Cross-device compatibility for all interfaces
-- **Multi-language**: English and Malay language support
+- **User-Friendly**: Intuitive English interface for all users
 - **Role-Based Access**: Appropriate security and data visibility controls
 
 ---
@@ -201,11 +201,11 @@ Business Central serves as the core platform for invoice creation and management
 
 #### Core Capabilities:
 - **Version**: Microsoft Dynamics 365 Business Central 2022 Wave 2 or later
-- **AL Extension**: Complete e-Invoice solution with 25+ codeunits and comprehensive functionality
-- **Object Range**: 50300-50399 with structured naming convention (Cod, Tab, Pag prefixes)
-- **Table Extensions**: 13+ table extensions for customers, sales documents, items, and vendors
-- **Page Extensions**: 20+ page extensions for seamless UI integration and status monitoring
-- **Codeunits**: Business logic for JSON generation, TIN validation, Azure Function integration, and LHDN submission
+- **Custom Extension**: Complete e-Invoice solution with comprehensive business logic and functionality
+- **Integrated Components**: Structured system components for seamless data flow and processing
+- **Enhanced Data Models**: Extended customer, sales document, item, and vendor data structures
+- **User Interface Enhancements**: Integrated dashboards and monitoring interfaces
+- **Business Processing Engine**: Automated workflows for document generation, validation, and submission
 - **Master Data Tables**: 12 reference tables for state codes, country codes, classifications, and audit logs
 - **Reports**: Batch processing reports for bulk invoice and credit memo exports
 - **Event Subscribers**: Automatic field population and validation on document creation/modification
@@ -344,21 +344,21 @@ The proposed architecture follows a layered approach ensuring scalability, secur
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ║                                                                             ║
 ║  ┌─────────────────────────────────────────────────────────────────────┐    ║
-║  │                    BUSINESS LOGIC LAYER (25+ Codeunits)             │    ║
-║  │  • JSON Generator & LHDN Submission Orchestrator                    │    ║
-║  │  • UBL Document Builder                                             │    ║
-║  │  • Azure Function HTTP Client                                       │    ║
-║  │  • TIN Validator with LHDN API                                      │    ║
-║  │  • Event-Driven Field Population                                    │    ║
+║  │                    BUSINESS LOGIC LAYER (Processing Engine)         │    ║
+║  │  • Document Generation & Regulatory Submission Orchestrator         │    ║
+║  │  • Standard Document Builder                                        │    ║
+║  │  • Secure Communication Client                                      │    ║
+║  │  • Tax Validation with Regulatory API                               │    ║
+║  │  • Automated Field Population                                       │    ║
 ║  │  • Status Tracking & Management                                     │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ║                                                                             ║
 ║  ┌─────────────────────────────────────────────────────────────────────┐    ║
-║  │                    DATA MODEL LAYER (13+ Table Extensions)          │    ║
-║  │  • Customer Extensions: TIN, ID Type, Address Fields                │    ║
-║  │  • Sales Document Extensions: e-Invoice Fields                      │    ║
-║  │  • Master Data Tables: State/Country/Currency Codes                 │    ║
-║  │  • Audit Tables: Submission Logs, TIN Validation History           │    ║
+║  │                    DATA MODEL LAYER (Enhanced Data Structures)      │    ║
+║  │  • Customer Data: Tax ID, Identification, Address Information       │    ║
+║  │  • Sales Document Data: e-Invoice Fields and Metadata               │    ║
+║  │  • Reference Data: Geographic and Currency Code Management          │    ║
+║  │  • Audit Data: Transaction Logs, Validation History                 │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
                                      │
@@ -418,8 +418,8 @@ The proposed architecture follows a layered approach ensuring scalability, secur
 ```
 ┌─────────────────┐ HTTPS/JSON   ┌──────────────────────┐
 │ Business Central│──────────────▶│ Azure Functions     │
-│ AL Extension    │               │ (Digital Signing)   │
-│ [Cod50310]      │◀──────────────│ [eInvSigning.cs]    │
+│ e-Invoice System│               │ (Digital Signing)   │
+│ Processing      │◀──────────────│ Service             │
 └─────────────────┘   Signed Doc  └──────────────────────┘
          │                                        │
          │ HTTPS/OAuth 2.0                       │
@@ -434,16 +434,16 @@ The proposed architecture follows a layered approach ensuring scalability, secur
          ▼                                        ▼
 ┌─────────────────┐                        ┌──────────────────────┐
 │ SQL Database    │◀──────────────────────▶│ Application Insights │
-│ (BC + Extension)│   Audit Logs           │ (Monitoring)         │
-│ [Tab50312]      │                        │                      │
+│ (Business Data) │   Audit Logs           │ (Monitoring)         │
+│ & Audit Trail   │                        │                      │
 └─────────────────┘                        └──────────────────────┘
          │                                        │
          │ UI Updates                             │
          ▼                                        ▼
 ┌─────────────────┐                        ┌──────────────────────┐
 │ User Interface  │◀──────────────────────▶│ Alert System          │
-│ (Page Extensions│   Notifications        │ (Email/SMS)          │
-│ [Pag-Ext503xx]  │                        │                      │
+│ (Web Portal)    │   Notifications        │ (Email/SMS)          │
+│ & Dashboards    │                        │                      │
 └─────────────────┘                        └──────────────────────┘
 ```
 
@@ -487,7 +487,7 @@ We approach all our projects following the Microsoft Solutions Framework (MSF) m
 |------------------------|------------|
 | Envisioning: Team and stakeholder alignment, risk and environment assessment, requirement gathering sessions, define scope, features, and success criteria, prepare initial project plan | Vision/Scope Approved (5 man-days) |
 | Planning: Environment and license review, conceptual design of user interface and data models, define access matrix and security roles, draft functional specification, identify test plan and use cases | Functional Specification Conceptual Design (12 man-days) |
-| Developing: Configure Azure and Business Central environments, develop AL extension with core e-Invoice functionality, implement Azure Functions for digital signing, configure LHDN API integration and authentication, design user interfaces and status monitoring, perform System Integration Testing (SIT), identify pilot users for testing and feedback | Development (60 man-days) |
+| Developing: Configure cloud and ERP environments, develop e-Invoice system with core functionality, implement secure digital signing services, configure regulatory API integration and authentication, design user interfaces and monitoring dashboards, perform system integration testing, identify pilot users for testing and feedback | Development (60 man-days) |
 | Stabilizing: Prepare and deploy staging environment, conduct User Acceptance Testing (UAT) with pilot users, apply fixes and improvements from UAT feedback | Test Lab Testing (10 man-days) |
 | Deploying: Configure production environment, execute data migration and validation, deploy solution to production, conduct user training and knowledge transfer, provide go-live support and monitoring | Implementation & Deployment (8 man-days) |
 
@@ -538,18 +538,18 @@ The proposed solutions involve development, implementation, and deployment of th
 - Preparing Functional Specification & Requirement Documentation
 - **Milestone: Envisioning Phase Sign-Off**
 
-- Design Business Central extension architecture
-- Develop AL extension with core e-Invoice functionality
-- Implement Azure Functions for digital signing
-- Configure LHDN API integration and authentication
-- Design user interfaces and status monitoring
+- Design integrated ERP system architecture
+- Develop e-Invoice system with core functionality
+- Implement secure digital signing services
+- Configure regulatory API integration and authentication
+- Design user interfaces and monitoring dashboards
 - **Milestone: Design Approved**
 
-- Develop Business Central extension components
-- Implement table extensions and page customizations
-- Develop codeunits for JSON generation and API integration
-- Create Azure Functions for secure document signing
-- Implement error handling and retry mechanisms
+- Develop integrated system components
+- Implement enhanced data structures and user interfaces
+- Develop automated processing workflows and API integration
+- Create secure digital signing services
+- Implement comprehensive error handling and recovery mechanisms
 - **Milestone: Development Complete**
 
 - Configure test environments and test data
