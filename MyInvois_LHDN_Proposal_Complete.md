@@ -2,15 +2,15 @@
 
 **Date:** August 29, 2025
 
-**From:**
-[Your Company Name]
-[Your Company Address]
-[City, State, Postcode]
+**From:**  
+[Your Company Name]  
+[Your Company Address]  
+[City, State, Postcode]  
 
-**To:**
-[Client Company Name]
-[Client Address]
-[City, State, Postcode]
+**To:**  
+[Client Company Name]  
+[Client Address]  
+[City, State, Postcode]  
 
 **Subject:** MyInvois LHDN e-Invoice System Implementation
 
@@ -92,189 +92,20 @@ As VENDOR understanding, CLIENT is looking for solutions which could address:
 
 ---
 
-## Business Case
+## Company Overview
 
-### Current Pain Points
-1. **Manual Processing**: Invoices created manually leading to delays and errors
-2. **Compliance Risk**: Potential penalties for non-compliance with LHDN requirements
-3. **Limited Visibility**: No real-time tracking of invoice status and processing
-4. **Resource Intensive**: High administrative overhead for invoice management
-5. **Data Silos**: Disconnected systems leading to reconciliation challenges
+[Your Company Name] is a leading provider of Microsoft technology solutions, specializing in digital transformation and enterprise application development. With extensive experience in Microsoft Dynamics 365 Business Central and Azure cloud services, we deliver innovative solutions that drive business efficiency and compliance.
 
-### Market Context
-- **LHDN Mandate**: All B2B transactions above RM30,000 must be e-Invoiced by 2025
-- **Industry Trend**: 85% of Malaysian businesses are adopting e-Invoice solutions
-- **Competitive Advantage**: Early adopters gain operational efficiencies and cost savings
-- **Regulatory Pressure**: Increasing scrutiny on tax compliance and digital transformation
+### Our core competencies include:
 
-### Expected Benefits
-- **Compliance Assurance**: Zero risk of LHDN non-compliance penalties
-- **Process Automation**: 70% reduction in manual invoice processing tasks
-- **Cost Reduction**: RM XX,XXX annual savings on administrative costs
-- **Improved Accuracy**: 99% reduction in invoice processing errors
-- **Enhanced Visibility**: Real-time dashboard for invoice status and metrics
-- **Faster Processing**: Invoice processing time reduced from days to minutes
+- **Enterprise Application Development** – Custom development using Microsoft technologies including Business Central, Azure, and Power Platform.
+- **Digital Transformation** – Streamlining business processes through automation and cloud adoption.
+- **Compliance Solutions** – Implementing regulatory compliance systems for various industries.
+- **Cloud Integration** – Seamless integration with Microsoft Azure services and APIs.
+- **Data Analytics** – Providing insights through logging and monitoring.
+- **Quality Assurance** – Comprehensive testing and validation procedures.
 
----
-
-## Implementation Approach
-
-### Project Methodology
-We follow Microsoft's Solutions Framework (MSF) with agile development practices:
-
-1. **Envisioning** (2 weeks): Requirements gathering and solution design
-2. **Planning** (3 weeks): Technical design and project planning
-3. **Development** (8 weeks): Solution development and testing
-4. **Stabilization** (2 weeks): User acceptance testing and refinements
-5. **Deployment** (1 week): Production deployment and go-live
-
-### Key Deliverables
-- **Business Central Extension**: Complete e-Invoice solution
-- **Azure Infrastructure**: Cloud services for digital signing
-- **Documentation**: User guides and technical documentation
-- **Training**: User training and knowledge transfer
-- **Support**: Post-implementation support and maintenance
-
-### Success Criteria
-- **Functional**: All LHDN requirements met and tested
-- **Performance**: < 5 seconds average processing time
-- **Compliance**: 100% LHDN compliance validation
-- **User Adoption**: 95% user satisfaction rating
-- **ROI**: Positive return on investment within 8 months
-
----
-
-## Project Timeline
-
-### Phase 1: Planning & Design (Weeks 1-5)
-- Business requirements analysis
-- Technical architecture design
-- LHDN compliance review
-- Project planning and scheduling
-- Environment setup and configuration
-
-### Phase 2: Development (Weeks 6-13)
-- Business Central extension development
-- Azure Functions implementation
-- LHDN API integration
-- Testing and quality assurance
-- User interface development
-
-### Phase 3: Testing & Deployment (Weeks 14-16)
-- System integration testing
-- User acceptance testing
-- Performance testing
-- Production deployment
-- Go-live support
-
-### Key Milestones
-- **Week 5**: Design approval and development kickoff
-- **Week 10**: Core functionality complete
-- **Week 13**: Testing complete and deployment ready
-- **Week 16**: Production go-live and project closure
-
----
-
-## Investment & ROI
-
-### Project Costs
-- **Development & Implementation**: RM XXX,XXX
-- **Azure Infrastructure** (Annual): RM XX,XXX
-- **Licenses & Certificates**: RM X,XXX
-- **Training & Documentation**: RM XX,XXX
-- **Total Investment**: RM XXX,XXX
-
-### Cost Savings (Annual)
-- **Administrative Cost Reduction**: RM XXX,XXX
-- **Paper & Printing Savings**: RM XX,XXX
-- **Error Correction Savings**: RM XX,XXX
-- **Compliance Penalty Avoidance**: RM XX,XXX
-- **Total Annual Savings**: RM XXX,XXX
-
-### ROI Calculation
-- **Payback Period**: 8 months
-- **Year 1 ROI**: 150%
-- **Year 2 ROI**: 250%
-- **Year 3 ROI**: 350%
-- **NPV**: RM XXX,XXX over 3 years
-
-### Funding Options
-- **Internal Funding**: Company budget allocation
-- **Lease Financing**: Equipment and software leasing
-- **Cloud Credits**: Microsoft Azure consumption credits
-- **Government Grants**: Digital transformation incentives
-
----
-
-## Risk Mitigation
-
-### Technical Risks
-- **LHDN API Changes**: Regular monitoring and adaptation strategy
-- **Certificate Expiry**: Automated monitoring and renewal process
-- **System Performance**: Scalable architecture with performance monitoring
-- **Data Security**: End-to-end encryption and compliance measures
-
-### Business Risks
-- **Regulatory Changes**: Continuous compliance monitoring and updates
-- **User Adoption**: Comprehensive training and change management
-- **Budget Overruns**: Fixed-price contract with milestone-based payments
-- **Timeline Delays**: Agile methodology with regular progress reviews
-
-### Operational Risks
-- **System Downtime**: 99.9% uptime SLA with disaster recovery plan
-- **Data Loss**: Daily backups with offsite storage
-- **Skill Dependencies**: Knowledge transfer and documentation
-- **Vendor Dependencies**: Multiple certified partners and backup options
-
-### Mitigation Strategies
-- **Regular Reviews**: Weekly progress meetings and monthly steering committee
-- **Quality Assurance**: Comprehensive testing at each phase
-- **Change Management**: Structured process for requirement changes
-- **Communication Plan**: Regular updates to all stakeholders
-
----
-
-## Next Steps
-
-### Immediate Actions (Next 2 Weeks)
-1. **Proposal Review**: Schedule meeting to discuss proposal details
-2. **Requirements Validation**: Confirm business requirements and priorities
-3. **Budget Approval**: Initiate budget approval process
-4. **Team Alignment**: Identify project team and stakeholders
-
-### Project Initiation (Next 4 Weeks)
-1. **Contract Signing**: Finalize project agreement
-2. **Kickoff Meeting**: Project initiation and team alignment
-3. **Environment Setup**: Prepare development and test environments
-4. **Requirements Workshop**: Detailed requirements gathering session
-
-### Long-term Planning
-1. **Change Management**: Develop user adoption and training plan
-2. **Success Metrics**: Define KPIs and success criteria
-3. **Support Structure**: Establish ongoing support and maintenance plan
-4. **Future Roadmap**: Plan for system enhancements and updates
-
----
-
-## Contact Information
-
-### Project Team
-- **Project Manager**: [Name] - [Email] - [Phone]
-- **Technical Lead**: [Name] - [Email] - [Phone]
-- **Business Analyst**: [Name] - [Email] - [Phone]
-
-### Company Details
-- **Address**: [Your Company Address]
-- **Phone**: [Your Company Phone]
-- **Email**: [Your Company Email]
-- **Website**: [Your Company Website]
-
-### Response Time
-We aim to respond to your queries within 24 hours during business days.
-
----
-
-*This proposal is valid for 30 days from the date of issue. We look forward to partnering with [Client Company Name] on this transformative e-Invoice project.*
+We have successfully delivered numerous Business Central implementations and integrations, with particular expertise in Malaysian market requirements and LHDN compliance solutions.
 
 ---
 
@@ -322,16 +153,16 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 **Detailed Process Flow:**
 
 1. **📄 Document Creation**: User creates sales invoice/order in Business Central
-2. **🔍 Field Validation**: [Cod50306] auto-validates and populates e-Invoice fields
-3. **✅ TIN Validation**: [Cod50301] validates customer TIN with LHDN API
-4. **🌍 Master Data Check**: [Cod50307/50308] validates state/country/classification codes
-5. **📋 JSON Generation**: [Cod50302/50311] creates UBL 2.1 compliant structure
-6. **🔒 Secure Transmission**: [Cod50310] sends JSON to Azure Function via HTTPS
+2. **🔍 Field Validation**: System auto-validates and populates e-Invoice fields
+3. **✅ TIN Validation**: Real-time TIN validation with LHDN API
+4. **🌍 Master Data Check**: Validates state/country/classification codes
+5. **📋 JSON Generation**: Creates UBL 2.1 compliant structure
+6. **🔒 Secure Transmission**: Sends JSON to Azure Function via HTTPS
 7. **✍️ Digital Signing**: Azure Function applies XAdES signature with JOTEX certificate
 8. **📦 Payload Preparation**: Creates LHDN-ready submission payload with base64 document
-9. **📤 API Submission**: [Cod50302] submits signed document to LHDN MyInvois API
-10. **📊 Status Monitoring**: [Cod50312] tracks submission with real-time updates
-11. **📝 Audit Logging**: Complete transaction history in [Tab50312] with correlation IDs
+9. **📤 API Submission**: Submits signed document to LHDN MyInvois API
+10. **📊 Status Monitoring**: Tracks submission with real-time updates
+11. **📝 Audit Logging**: Complete transaction history with correlation IDs
 12. **🔔 User Notification**: Status updates and alerts via page extensions
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
@@ -495,386 +326,45 @@ Direct integration with the official LHDN MyInvois platform ensures regulatory c
 - **Response Caching**: Intelligent caching to reduce API calls
 - **Error Classification**: Automated error categorization and handling
 
-### Azure Function Implementation (eInvAzureSign) – Technical Reference
-
-This is the production signing service used by Business Central. It is implemented in the eInvAzureSign repository and is referenced here to align proposal claims with the working codebase.
-
-- Runtime and hosting
-  - .NET 8.0 Isolated Azure Functions (Application Insights enabled)
-  - Dependency Injection configured in [Program.cs](external/eInvAzureSign/Program.cs:11)
-
-- Endpoints
-  - General signing: [eInvSigning.Run()](external/eInvAzureSign/eInvSigning.cs:45) → POST /api/eInvSigning
-  - Business Central optimized: [eInvSigning.ProcessBusinessCentralRequest()](external/eInvAzureSign/eInvSigning.cs:814) → POST /api/BusinessCentralSigning
-  - Health: [eInvSigning.HealthCheck()](external/eInvAzureSign/eInvSigning.cs:431) → GET /api/health
-  - Connectivity test: [eInvSigning.ConnectivityTest()](external/eInvAzureSign/eInvSigning.cs:379) → GET/POST /api/connectivity-test
-  - Signature validation: [eInvSigning.ValidateSignature()](external/eInvAzureSign/eInvSigning.cs:450) → POST /api/validate
-
-- LHDN 7‑step signing pipeline (XAdES)
-  - Orchestrated by [HardcodedDigitalSignatureService.GenerateOfficialLhdnSignature()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:312)
-  - Transform/remove UBLExtensions/Signature: [TransformDocument()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:394)
-  - RSA‑SHA256 using provider pattern: [SignDocumentUsingCertProviderMethod()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:149)
-  - Build signed properties: [CreateLhdnSignedProperties()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:440)
-  - Final UBL with UBLExtensions + Signature: [CreateLhdnCompliantSignedDocument()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:520)
-
-- Certificate management (file‑based; no Key Vault required)
-  - Environment‑specific loading: [LoadCertificateForEnvironment()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:41)
-    - PREPROD: JOTEX_SDN._BHD..p12
-    - PROD: CERT_19448802.p12
-  - Serial number (decimal) extraction for LHDN: [GetCertificateSerialNumberAsDecimal()](external/eInvAzureSign/Services/HardcodedDigitalSignatureService.cs:130)
-
-- Business Central interoperability
-  - Clean placeholder and normalize UBL numbers: [BusinessCentralService.CleanBusinessCentralJson()](external/eInvAzureSign/Services/BusinessCentralService.cs:23), [NormalizeDataTypes()](external/eInvAzureSign/Services/BusinessCentralService.cs:103)
-  - Embed XAdES into BC UBL: [EmbedSignatureIntoBusinessCentralJson()](external/eInvAzureSign/Services/BusinessCentralService.cs:56)
-  - Async webhook callback back to BC (signed payload/status): [BusinessCentralHttpService.SendSignedInvoiceCallbackAsync()](external/eInvAzureSign/Services/BusinessCentralHttpService.cs:36)
-
-- Returned artifacts to Business Central
-  - Signed JSON with UBLExtensions and Signature
-  - LHDN “documents” payload (base64 document + SHA‑256 hash + codeNumber) created by [CreateLhdnSubmissionDocument()](external/eInvAzureSign/eInvSigning.cs:714)
-
-- Data quality and safeguards
-  - Normalize IssueDate/IssueTime to current UTC to avoid CF321: [NormalizeInvoiceDateTimeToUtc()](external/eInvAzureSign/eInvSigning.cs:1003)
-  - Environment heuristics for safety/logging: [DetectEnvironmentFromJson()](external/eInvAzureSign/eInvSigning.cs:1090)
-  - Request validation: [ValidateRequest()](external/eInvAzureSign/eInvSigning.cs:505)
-  - Correlation IDs and processing time metrics in BC flow: [ProcessBusinessCentralRequest()](external/eInvAzureSign/eInvSigning.cs:814)
-
-- Monitoring
-  - Application Insights telemetry configured in [Program.cs](external/eInvAzureSign/Program.cs:11)
-
-### Business Central AL Extension – Technical Reference
-
-This is the core Business Central extension that handles the complete e-Invoice workflow from creation to LHDN submission. It is implemented as a comprehensive AL extension with 25+ codeunits, multiple table/page extensions, and full integration with the Azure Function signing service.
-
-#### AL Extension Architecture
-- **Extension ID**: MyInvoisLHDN
-- **Target Version**: Business Central 2022 Wave 2+
-- **Language**: AL (Application Language)
-- **Object Range**: 50300-50399
-- **Dependencies**: Base Business Central modules
-
-#### Core Codeunits (Business Logic)
-
-##### Document Processing Engine
-- **[Cod50302.eInvoiceJSONGenerator.al](Cod50302.eInvoiceJSONGenerator.al)**: Main JSON generation and LHDN submission orchestrator
-  - `GenerateEInvoiceJson()`: Creates UBL 2.1 compliant JSON
-  - `GetSignedInvoiceAndSubmitToLHDN()`: Complete signing and submission workflow
-  - `AddAmountField()`: Handles negative amounts for discounts/adjustments
-  - `SetSuppressUserDialogs()`: UI control for automated processing
-
-- **[Cod50311.eInvoiceUBLDocumentBuilder.al](Cod50311.eInvoiceUBLDocumentBuilder.al)**: UBL document structure builder
-  - `CreateInvoiceObject()`: Builds complete invoice structure
-  - `AddSupplierInformation()`: Company/supplier data mapping
-  - `AddCustomerInformation()`: Customer data with TIN validation
-  - `AddInvoiceLines()`: Line items with classifications and taxes
-
-##### Azure Function Integration
-- **[Cod50310.eInvoiceAzureFunctionClient.al](Cod50310.eInvoiceAzureFunctionClient.al)**: HTTP client for Azure Function communication
-  - `TryPostToAzureFunction()`: Secure payload transmission
-  - `ProcessAzureFunctionResponse()`: Response parsing and validation
-  - `HandleSigningErrors()`: Comprehensive error handling
-  - Request correlation and timeout management
-
-##### Validation and Compliance
-- **[Cod50301.eInvoiceTINValidator.al](Cod50301.eInvoiceTINValidator.al)**: TIN validation and verification
-  - `ValidateCustomerTIN()`: Real-time TIN validation with LHDN API
-  - `CallLhdnTinValidationApi()`: Direct LHDN API integration
-  - `LogValidationResult()`: Audit trail maintenance
-  - `HandleValidationErrors()`: User-friendly error messages
-
-- **[Cod50300.eInvoiceHelper.al](Cod50300.eInvoiceHelper.al)**: Common utilities and helpers
-  - `FormatAmount()`: Currency and decimal formatting
-  - `ValidateDateFormat()`: ISO date compliance
-  - `GenerateCorrelationId()`: Unique request tracking
-  - `LogActivity()`: Comprehensive audit logging
-
-##### Event-Driven Automation
-- **[Cod50305.eInvSalesInvPostingSub.al](Cod50305.eInvSalesInvPostingSub.al)**: Sales invoice posting automation
-  - `OnAfterPostSalesDoc()`: Automatic e-Invoice processing
-  - `CopyEInvoiceFieldsToPostedDoc()`: Field preservation
-  - `TriggerAutoSubmission()`: Conditional auto-submission
-
-- **[Cod50306.eInvFieldPopulation.al](Cod50306.eInvFieldPopulation.al)**: Automatic field population
-  - `PopulateEInvoiceFieldsOnValidate()`: Real-time field updates
-  - `SetDefaultValues()`: Smart defaults based on document type
-  - `ValidateFieldDependencies()`: Cross-field validation
-
-- **[Cod50309.eInvFieldPopulationHandler.al](Cod50309.eInvFieldPopulationHandler.al)**: Event handling coordination
-  - `HandleFieldValidationEvents()`: Centralized validation logic
-  - `ManageFieldDependencies()`: Dynamic field relationships
-  - `ProcessBulkUpdates()`: Mass field population
-
-##### Master Data Management
-- **[Cod50307.eInvoiceCountryCodeMgt.al](Cod50307.eInvoiceCountryCodeMgt.al)**: Country code management
-- **[Cod50308.eInvoiceStateCodeMgt.al](Cod50308.eInvoiceStateCodeMgt.al)**: State code validation
-- **[Cod50330.eInvoiceQRManager.al](Cod50330.eInvoiceQRManager.al)**: QR code generation for invoices
-
-##### Maintenance and Operations
-- **[Cod50312.eInvoiceSubmissionStatus.al](Cod50312.eInvoiceSubmissionStatus.al)**: Status tracking and management
-  - `UpdateSubmissionStatus()`: Real-time status updates
-  - `GetSubmissionHistory()`: Historical data retrieval
-  - `HandleStatusTransitions()`: Workflow state management
-
-- **[Cod50320.eInvoiceCancellationHelper.al](Cod50320.eInvoiceCancellationHelper.al)**: Document cancellation handling
-- **[Cod50321.eInvoiceDataUpgrade.al](Cod50321.eInvoiceDataUpgrade.al)**: Data migration and upgrades
-- **[Cod50322.eInvoicePostingDatePopulator.al](Cod50322.eInvoicePostingDatePopulator.al)**: Posting date management
-- **[Cod50323.eInvoiceCustomerBulkUpdate.al](Cod50323.eInvoiceCustomerBulkUpdate.al)**: Bulk customer operations
-- **[Cod50324.eInvoiceCustomerNameUpgrade.al](Cod50324.eInvoiceCustomerNameUpgrade.al)**: Customer data standardization
-
-#### Table Extensions (Data Model)
-
-##### Customer Extensions
-- **[Tab-Ext50300.eInvoiceCustomerExt.al](Tab-Ext50300.eInvoiceCustomerExt.al)**: Customer e-Invoice fields
-  - TIN number and validation status
-  - ID type (NRIC/BRN/PASSPORT/ARMY)
-  - Address validation fields
-  - e-Invoice enablement flag
-
-##### Sales Document Extensions
-- **[Tab-Ext50301.eInvSalesInvHeaderExt.al](Tab-Ext50301.eInvSalesInvHeaderExt.al)**: Sales invoice header fields
-- **[Tab-Ext50305.eInvSalesHeader.al](Tab-Ext50305.eInvSalesHeader.al)**: Sales header e-Invoice fields
-- **[Tab-Ext50307.eInvSalesLineExt.al](Tab-Ext50307.eInvSalesLineExt.al)**: Sales line extensions
-- **[Tab-Ext50308.eInvSalesCreditMemoLinesExt.al](Tab-Ext50308.eInvSalesCreditMemoLinesExt.al)**: Credit memo lines
-- **[Tab-Ext50309.eInvSalesCrHeaderExt.al](Tab-Ext50309.eInvSalesCrHeaderExt.al)**: Credit memo header
-
-##### Item and Vendor Extensions
-- **[Tab-Ext50302.eInvItemExt.al](Tab-Ext50302.eInvItemExt.al)**: Item classification fields
-- **[Tab-Ext50304.eInvoiceVendorExt.al](Tab-Ext50304.eInvoiceVendorExt.al)**: Vendor e-Invoice fields
-
-##### Archive and History
-- **[Tab-Ext50312.eInvSalesLineArc.al](Tab-Ext50312.eInvSalesLineArc.al)**: Sales line archive
-- **[Tab-Ext50313.eInvSalesHeaderArch.al](Tab-Ext50313.eInvSalesHeaderArch.al)**: Sales header archive
-
-#### Master Data Tables
-
-##### Configuration Tables
-- **[Tab50300.eInvoiceSetup.al](Tab50300.eInvoiceSetup.al)**: System configuration
-  - Azure Function URL and credentials
-  - LHDN API endpoints and tokens
-  - Environment settings (PREPROD/PRODUCTION)
-  - Processing parameters and timeouts
-
-##### Reference Data Tables
-- **[Tab50301.eInvoiceTINLog.al](Tab50301.eInvoiceTINLog.al)**: TIN validation history
-- **[Tab50302.eInvoiceTypes.al](Tab50302.eInvoiceTypes.al)**: Document type definitions
-- **[Tab50303.CurrencyCodes.al](Tab50303.CurrencyCodes.al)**: Currency code mappings
-- **[Tab50304.MSICCodes.al](Tab50304.MSICCodes.al)**: Industry classification codes
-- **[Tab50305.StateCodes.al](Tab50305.StateCodes.al)**: Malaysian state codes
-- **[Tab50306.CountryCodes.al](Tab50306.CountryCodes.al)**: Country code definitions
-- **[Tab50307.PaymentModes.al](Tab50307.PaymentModes.al)**: Payment method classifications
-- **[Tab50308.eInvoiceClassification.al](Tab50308.eInvoiceClassification.al)**: Product/service classifications
-- **[Tab50309.eInvoiceTaxTypes.al](Tab50309.eInvoiceTaxTypes.al)**: Tax category definitions
-- **[Tab50310.eInvoiceUOM.al](Tab50310.eInvoiceUOM.al)**: Unit of measure mappings
-- **[Tab50311.eInvoiceVersion.al](Tab50311.eInvoiceVersion.al)**: UBL version specifications
-- **[Tab50312.eInvoiceSubmissionLog.al](Tab50312.eInvoiceSubmissionLog.al)**: Complete audit trail
-
-#### Page Extensions (User Interface)
-
-##### Setup and Configuration
-- **[Pag50300.eInvoiceSetupCard.al](Pag50300.eInvoiceSetupCard.al)**: Main system configuration
-- **[Pag50304.eInvoiceTypes.al](Pag50304.eInvoiceTypes.al)**: Document type management
-- **[Pag50305.eInvoiceCurrencyCodes.al](Pag50305.eInvoiceCurrencyCodes.al)**: Currency setup
-- **[Pag50306.MSICCodeList.al](Pag50306.MSICCodeList.al)**: Industry code management
-- **[Pag50307.StateCodeList.al](Pag50307.StateCodeList.al)**: State code configuration
-- **[Pag50308.CountryCodeList.al](Pag50308.CountryCodeList.al)**: Country code setup
-
-##### Operational Pages
-- **[Pag50301.TINValidationLog.al](Pag50301.TINValidationLog.al)**: TIN validation history
-- **[Pag50315.eInvoiceSubmissionLogCard.al](Pag50315.eInvoiceSubmissionLogCard.al)**: Submission details
-- **[Pag50316.eInvoiceSubmissionLog.al](Pag50316.eInvoiceSubmissionLog.al)**: Submission history
-
-##### Document Extensions
-- **[Pag-Ext50300.eInvCustomerCardExt.al](Pag-Ext50300.eInvCustomerCardExt.al)**: Customer card extensions
-- **[Pag-Ext50301.eInvoiceCompanyInfo.al](Pag-Ext50301.eInvoiceCompanyInfo.al)**: Company information
-- **[Pag-Ext50306.eInvPostedSalesInvoiceExt.al](Pag-Ext50306.eInvPostedSalesInvoiceExt.al)**: Posted invoice actions
-- **[Pag-Ext50307.eInvSalesInvoiceExt.al](Pag-Ext50307.eInvSalesInvoiceExt.al)**: Sales invoice extensions
-- **[Pag-Ext50308.eInvItemCardExt.al](Pag-Ext50308.eInvItemCardExt.al)**: Item card extensions
-
-#### Reports
-- **[Rep50300.ExportPostedSalesBatcheInv.al](Rep50300.ExportPostedSalesBatcheInv.al)**: Batch export functionality
-- **[Rep50301.ExportCreditMemoBatcheInv.al](Rep50301.ExportCreditMemoBatcheInv.al)**: Credit memo batch export
-
-#### AL Extension Integration Flow
-
-##### Complete e-Invoice Processing Workflow
-1. **Document Creation**: User creates sales document in Business Central
-2. **Field Validation**: [Cod50306] validates and populates e-Invoice fields automatically
-3. **TIN Validation**: [Cod50301] validates customer TIN with LHDN API
-4. **JSON Generation**: [Cod50302] creates UBL 2.1 compliant JSON structure
-5. **Azure Function Call**: [Cod50310] sends JSON to Azure Function for signing
-6. **Response Processing**: [Cod50310] receives signed document and LHDN payload
-7. **LHDN Submission**: [Cod50302] submits to LHDN MyInvois API
-8. **Status Tracking**: [Cod50312] updates submission status and logs
-9. **Audit Logging**: Complete transaction audit trail maintained
-
-##### Error Handling and Recovery
-- **Network Failures**: Automatic retry with exponential backoff
-- **Validation Errors**: User-friendly error messages with correction guidance
-- **Certificate Issues**: Automatic certificate validation and renewal alerts
-- **LHDN API Errors**: Detailed error parsing and user notification
-- **System Failures**: Comprehensive logging and recovery procedures
-
-##### Performance Optimizations
-- **Batch Processing**: Efficient handling of multiple documents
-- **Caching**: Master data caching to reduce database calls
-- **Async Processing**: Background processing for long-running operations
-- **Memory Management**: Efficient memory usage for large document sets
-- **Database Optimization**: Optimized queries and indexing
-
-This comprehensive AL extension provides the complete Business Central integration layer, handling everything from data validation to LHDN submission while maintaining full audit compliance and user experience standards.
-
-### Technology Integration Architecture
-
-#### System Integration Points:
-1. **Business Central AL Extension ↔ Azure Functions**: Secure JSON transmission and signed document retrieval
-2. **Business Central AL Extension ↔ LHDN API**: Direct OAuth 2.0 authenticated API communication
-3. **Azure Functions ↔ Business Central**: Signed document and LHDN payload callbacks
-4. **Business Central Event System**: Automatic field population and validation triggers
-5. **Application Insights**: Centralized monitoring and logging for both AL and Azure components
-6. **Certificate Management**: File-based certificate handling with environment-specific loading
-7. **Master Data Synchronization**: Real-time validation of state, country, and classification codes
-
-#### Complete Data Flow Architecture:
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                          MyInvois LHDN e-Invoice System                     ║
-║                           Complete Data Flow Architecture                   ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           USER INTERFACE LAYER                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  📄 Business Central Client → Sales Invoice/Order Creation                 │
-│  👤 User Actions → Post Document → Monitor Status                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     BUSINESS CENTRAL AL EXTENSION LAYER                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  🔍 [Cod50306] Event Validation → Auto-populate e-Invoice fields            │
-│  ✅ [Cod50301] TIN Validation → LHDN API verification                       │
-│  🌍 [Cod50307/50308] Master Data → State/Country/Classification validation  │
-│  📋 [Cod50311] UBL Builder → Create complete UBL 2.1 structure             │
-│  🔒 [Cod50310] Azure Client → Secure HTTPS transmission                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       AZURE FUNCTION PROCESSING LAYER                       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ✍️ Digital Signing → XAdES signature with JOTEX P12 certificate            │
-│  📦 Payload Prep → LHDN-ready format (base64 + SHA-256 hash)               │
-│  🔄 Response → Signed document + LHDN payload back to BC                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         LHDN INTEGRATION LAYER                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  📤 [Cod50302] API Submission → OAuth 2.0 authenticated submission          │
-│  📊 [Cod50312] Status Tracking → Real-time monitoring & updates             │
-│  🔄 Error Handling → Intelligent retry with exponential backoff             │
-│  📝 [Tab50312] Audit Logging → Complete transaction history                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          LHDN MYINVOIS PLATFORM                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  📋 Document Processing → Validation & acceptance                           │
-│  📊 Status Updates → Real-time status via API polling                       │
-│  ✅ Compliance → Full LHDN regulatory compliance                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         USER EXPERIENCE & MONITORING                        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  🔔 Notifications → Real-time status updates & alerts                       │
-│  📊 Dashboard → Status monitoring via page extensions                       │
-│  📋 Reports → Bulk processing & compliance reports                          │
-│  🔍 Troubleshooting → Error logs & resolution guidance                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-═══════════════════════════════════════════════════════════════════════════════
-LEGEND:
-📄 User Interface    🔍 Validation      ✅ Verification    🌍 Master Data
-📋 Document Creation ✍️ Digital Signing 🔒 Security       📦 Packaging
-📤 API Communication 📊 Monitoring     📝 Audit Logging  🔔 Notifications
-═══════════════════════════════════════════════════════════════════════════════
-```
-
-**Layer-by-Layer Data Transformation:**
-
-1. **Input Layer**: Business Central sales document with standard fields
-2. **Validation Layer**: Automatic e-Invoice field population and TIN verification
-3. **Transformation Layer**: UBL 2.1 JSON structure creation with all mandatory fields
-4. **Security Layer**: XAdES digital signature application with certificate validation
-5. **Submission Layer**: OAuth 2.0 authenticated API submission to LHDN
-6. **Monitoring Layer**: Real-time status tracking and audit trail maintenance
-7. **User Layer**: Status notifications and compliance reporting
-
-#### Performance Characteristics:
-- **Response Time**: < 5 seconds for standard invoice processing
-- **Throughput**: 100+ invoices per minute during peak hours
-- **Availability**: 99.9% uptime with automated failover
-- **Scalability**: Auto-scaling from 1 to 200 concurrent instances
-- **Data Retention**: 7-year audit trail retention for compliance
-
-This comprehensive technology stack ensures a robust, secure, and scalable e-Invoice solution that meets Malaysian regulatory requirements while providing excellent performance and user experience.
-
 ---
 
 ## Proposed Architecture
 
-The architecture follows a secure, scalable cloud-native design with clear separation of concerns:
+### System Architecture Overview
+
+The proposed architecture follows a layered approach ensuring scalability, security, and maintainability:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                        SYSTEM ARCHITECTURE OVERVIEW                        ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           USER INTERFACE LAYER                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  💻 Business Central Web Client                                             │
-│  🖥️ Web-Responsive Design                                                  │
-│  🌐 Multi-Language Support (English/Malay)                                  │
-│  🔐 Role-Based Access Control                                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                     BUSINESS CENTRAL AL EXTENSION LAYER                     ║
+║                         BUSINESS CENTRAL LAYER                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  ┌─────────────────────────────────────────────────────────────────────┐    ║
-║  │                    CORE BUSINESS LOGIC (25+ Codeunits)              │    ║
-║  │  • [Cod50302] JSON Generator & LHDN Submission Orchestrator         │    ║
-║  │  • [Cod50311] UBL Document Builder                                  │    ║
-║  │  • [Cod50310] Azure Function HTTP Client                            │    ║
-║  │  • [Cod50301] TIN Validator with LHDN API                           │    ║
-║  │  • [Cod50306] Event-Driven Field Population                         │    ║
-║  │  • [Cod50312] Status Tracking & Management                          │    ║
+║  │                    USER INTERFACE LAYER (20+ Pages)                 │    ║
+║  │  • Setup Pages: Configuration & Master Data Management             │    ║
+║  │  • Operational Pages: Status Monitoring & Logs                     │    ║
+║  │  • Document Extensions: Seamless Workflow Integration               │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ║                                                                             ║
 ║  ┌─────────────────────────────────────────────────────────────────────┐    ║
-║  │                    DATA MODEL EXTENSIONS (13+ Tables)               │    ║
+║  │                    BUSINESS LOGIC LAYER (25+ Codeunits)             │    ║
+║  │  • JSON Generator & LHDN Submission Orchestrator                    │    ║
+║  │  • UBL Document Builder                                             │    ║
+║  │  • Azure Function HTTP Client                                       │    ║
+║  │  • TIN Validator with LHDN API                                      │    ║
+║  │  • Event-Driven Field Population                                    │    ║
+║  │  • Status Tracking & Management                                     │    ║
+║  └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                             ║
+║  ┌─────────────────────────────────────────────────────────────────────┐    ║
+║  │                    DATA MODEL LAYER (13+ Table Extensions)          │    ║
 ║  │  • Customer Extensions: TIN, ID Type, Address Fields                │    ║
 ║  │  • Sales Document Extensions: e-Invoice Fields                      │    ║
 ║  │  • Master Data Tables: State/Country/Currency Codes                 │    ║
 ║  │  • Audit Tables: Submission Logs, TIN Validation History           │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
-║                                                                             ║
-║  ┌─────────────────────────────────────────────────────────────────────┐    ║
-║  │                    USER INTERFACE (20+ Page Extensions)             │    ║
-║  │  • Setup Pages: Configuration & Master Data Management             │    ║
-║  │  • Operational Pages: Status Monitoring & Logs                     │    ║
-║  │  • Document Extensions: Seamless Workflow Integration               │    ║
-║  └─────────────────────────────────────────────────────────────────────┘    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-                                    │
-                                    ▼
+                                     │
+                                     ▼
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                       AZURE INTEGRATION LAYER                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -902,8 +392,8 @@ The architecture follows a secure, scalable cloud-native design with clear separ
 ║  │  • Performance Metrics & Error Tracking                            │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-                                    │
-                                    ▼
+                                     │
+                                     ▼
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                         LHDN INTEGRATION LAYER                             ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -923,52 +413,11 @@ The architecture follows a secure, scalable cloud-native design with clear separ
 ║  │  • Rate Limiting & Throttling                                       │    ║
 ║  └─────────────────────────────────────────────────────────────────────┘    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-
-═══════════════════════════════════════════════════════════════════════════════
-ARCHITECTURAL PRINCIPLES:
-✅ Secure by Design - Certificate-based authentication throughout
-✅ Scalable Architecture - Serverless Azure Functions with auto-scaling
-✅ Fault Tolerant - Comprehensive error handling and retry mechanisms
-✅ Compliant - Full LHDN MyInvois regulatory compliance
-✅ Maintainable - Modular design with clear separation of concerns
-✅ Monitorable - Complete observability with Application Insights
-═══════════════════════════════════════════════════════════════════════════════
 ```
 
-### Architecture Components Detail:
-
-#### Business Central Extension Layer:
-- **Custom AL extension** with core business logic for complete e-Invoice workflow
-- **UI integration** for seamless user interaction within standard BC processes
-- **Data validation and transformation** with automatic field population
-- **API orchestration** with intelligent error handling and retry mechanisms
-- **Event-driven automation** for real-time processing and status updates
-
-#### Azure Integration Layer:
-- **Azure Functions** for secure digital signing and payload preparation
-- **File-based certificate management** with environment-specific loading
-- **Application Insights** for comprehensive monitoring and logging
-- **Secure communication** with HTTPS and proper authentication
-
-#### LHDN Integration Layer:
-- **Direct API communication** with OAuth 2.0 authentication
-- **Request/response handling** with comprehensive error parsing
-- **Status monitoring and updates** with real-time polling
-- **Compliance validation** ensuring all LHDN requirements are met
-
-#### Security Layer:
-- **Certificate-based authentication** using JOTEX P12 certificates
-- **Data encryption** throughout the entire data flow
-- **Role-based access control** with appropriate security permissions
-- **Audit logging and monitoring** for complete transaction traceability
-
-### Component Interaction Diagram:
+### Component Interaction Flow
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                        COMPONENT INTERACTION FLOW                           ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
 ┌─────────────────┐ HTTPS/JSON   ┌──────────────────────┐
 │ Business Central│──────────────▶│ Azure Functions     │
 │ AL Extension    │               │ (Digital Signing)   │
@@ -998,16 +447,9 @@ ARCHITECTURAL PRINCIPLES:
 │ (Page Extensions│   Notifications        │ (Email/SMS)          │
 │ [Pag-Ext503xx]  │                        │                      │
 └─────────────────┘                        └──────────────────────┘
-
-═══════════════════════════════════════════════════════════════════════════════
-INTERACTION TYPES:
-🔄 Synchronous API calls    📡 Asynchronous callbacks
-💾 Database operations      📧 Notification systems
-🔐 Certificate operations   📊 Monitoring & logging
-═══════════════════════════════════════════════════════════════════════════════
 ```
 
-### Architecture Benefits:
+### Architecture Benefits
 
 - **🏗️ High Availability**: Redundant components with automatic failover mechanisms
 - **📈 Scalability**: Auto-scaling Azure Functions handle variable loads efficiently
@@ -1047,9 +489,9 @@ We approach all our projects following the Microsoft Solutions Framework (MSF) m
 |------------------------|------------|
 | Envisioning: Team and stakeholder alignment, risk and environment assessment, requirement gathering sessions, define scope, features, and success criteria, prepare initial project plan | Vision/Scope Approved (5 man-days) |
 | Planning: Environment and license review, conceptual design of user interface and data models, define access matrix and security roles, draft functional specification, identify test plan and use cases | Functional Specification Conceptual Design (12 man-days) |
-| Developing: Configure Power Platform environments, develop core modules in Power Apps, implement SharePoint backend for data storage and evidence handling, perform System Integration Testing (SIT), identify pilot users for testing and feedback | Development (60 man-days) |
+| Developing: Configure Azure and Business Central environments, develop AL extension with core e-Invoice functionality, implement Azure Functions for digital signing, configure LHDN API integration and authentication, design user interfaces and status monitoring, perform System Integration Testing (SIT), identify pilot users for testing and feedback | Development (60 man-days) |
 | Stabilizing: Prepare and deploy staging environment, conduct User Acceptance Testing (UAT) with pilot users, apply fixes and improvements from UAT feedback | Test Lab Testing (10 man-days) |
-| Deploying: Finalize staging deployment, performance tuning, validate readiness for production rollout | Pilot and staging (8 man-days) |
+| Deploying: Configure production environment, execute data migration and validation, deploy solution to production, conduct user training and knowledge transfer, provide go-live support and monitoring | Implementation & Deployment (8 man-days) |
 
 ---
 
@@ -1061,11 +503,11 @@ Below are estimated project plan and timeline.
 |-------|-------------|-----------|
 | **Envisioning** | • Team and stakeholder alignment<br>• Risk and environment assessment<br>• Requirement gathering sessions<br>• Define scope, features, and success criteria<br>• Prepare initial project plan | Vision Scope (5 man-days) |
 | **Planning** | • Environment and license review<br>• Conceptual design of user interface and data models<br>• Define access matrix and security roles<br>• Draft functional specification<br>• Identify test plan and use cases | Functional Specification Conceptual Design (12 man-days) |
-| **Development** | • Configure Power Platform environments<br>• Develop core modules in Power Apps<br>• Implement SharePoint backend for data storage and evidence handling<br>• Perform System Integration Testing (SIT)<br>• Identify pilot users for testing and feedback | Development (60 man-days) |
+| **Developing** | • Configure Azure and Business Central environments<br>• Develop AL extension with core e-Invoice functionality<br>• Implement Azure Functions for digital signing<br>• Configure LHDN API integration and authentication<br>• Design user interfaces and status monitoring<br>• Perform System Integration Testing (SIT)<br>• Identify pilot users for testing and feedback | Development (60 man-days) |
 | **Testing (SIT/UAT)** | • Set up test/staging environment<br>• Perform System Integration Testing (SIT)<br>• Conduct User Acceptance Testing (UAT) with pilot users<br>• Apply fixes and improvements from UAT feedback | Test Lab Testing (10 man-days) |
 | **Stabilizing** | • Finalize staging deployment<br>• Performance tuning<br>• Validate readiness for production rollout | Pilot and staging (8 man-days) |
 | **Deploying** | • Deploy solution to production environment<br>• Final security and permission configuration<br>• Monitor go-live performance and verify critical workflows | Implementation & Deployment (8 man-days) |
-| **Project Closure** | • Conduct final project review and feedback session<br>• Prepare and hand over all documentation<br>• Conduct knowledge transfer and admin training<br>• Obtain final sign-off from KPJ stakeholders | Project Closure (5 man-days) |
+| **Project Closure** | • Conduct final project review and feedback session<br>• Prepare and hand over all documentation<br>• Conduct knowledge transfer and admin training<br>• Obtain final sign-off from CLIENT stakeholders | Project Closure (5 man-days) |
 
 ---
 
@@ -1197,9 +639,7 @@ Invoicing for Microsoft Azure Services shall be done based on the following:
 
 ## Standard Terms & Conditions
 
-CLIENT agrees to pay VENDOR based on the agreed contractual sum plus all travel and other expenses incurred in association with the project work.
-
-VENDOR cannot confirm the availability of the above resources until CLIENT agrees and signs acceptance of this proposal. At least two (2) weeks are needed for VENDOR to mobilize its resources for the project.
+CLIENT agrees to pay VENDOR based on the agreed contractual sum plus all travel and other expenses incurred in association with the project work. VENDOR cannot confirm the availability of the above resources until CLIENT agrees and signed acceptance of this proposal. At least two (2) weeks are needed for VENDOR to mobilize its resources for the project.
 
 Should there be additional time needed by VENDOR for the project (i.e., more time needed due to changes in project scope), VENDOR shall highlight to CLIENT.
 
@@ -1207,7 +647,7 @@ This proposal expires on **December 31, 2025**, unless otherwise agreed to by bo
 
 ---
 
-## Support and Maintenance – Microsoft Business Central/Managed Security Service
+## Support and Maintenance
 
 ### Overview
 
@@ -1277,7 +717,7 @@ Email support shall be responded within **4 hours** upon receiving such request.
 
 ### Telephone Support
 
-Telephone support shall be used by CLIENT as one of the mediums of communication with VENDOR for incident submission and resolution.
+Telephone support shall be used by CLIENT as one of the mediums of communication with VHDN for incident submission and resolution.
 
 Telephone support shall be responded within **4 hours** upon receiving such request.
 
@@ -1305,21 +745,6 @@ Tasks to be performed during preventive maintenance:
 - Perform database maintenance and cleanup
 - Review monitoring and alerting configurations
 
-### Development
-
-CLIENT may engage VENDOR for additional development and enhancements using available support man-days.
-
-Development services include:
-
-- Business Central extension enhancements
-- Azure Functions modifications
-- API integration updates
-- UI/UX improvements
-- Reporting enhancements
-- Performance optimizations
-
-VENDOR will submit scope of work with required man-days to CLIENT for approval before proceeding with any development work.
-
 ### Annual Support & Maintenance Service – Level Agreement (SLA)
 
 The Severity Level for each escalated incident is defined based on the following support level agreement:
@@ -1342,7 +767,6 @@ VENDOR will provide remote and/or on-site services under the following condition
 - Existing MyInvois LHDN e-Invoice System implemented by VENDOR
 - Solutions deployed by VENDOR
 - No third-party integrations beyond VENDOR's scope
-- Travel location within reasonable distance
 
 ### Service Limitation
 
