@@ -159,45 +159,174 @@ The solution supports all LHDN document types and ensures complete compliance wi
 
 ### Microsoft Dynamics 365 Business Central
 
-Business Central serves as the core platform for invoice creation and management:
+Business Central serves as the core platform for invoice creation and management, providing a robust foundation for e-Invoice processing.
 
-- **AL Language Development** – Custom extension development for e-Invoice functionality.
-- **Table Extensions** – Enhanced customer, item, and sales document tables.
-- **Page Extensions** – Integrated UI for e-Invoice management and monitoring.
-- **Codeunits** – Business logic for JSON generation, validation, and API integration.
-- **Reports** – Bulk processing and compliance reporting capabilities.
-- **Workflow Integration** – Seamless integration with existing sales processes.
+#### Core Capabilities:
+- **Version**: Microsoft Dynamics 365 Business Central 2022 Wave 2 or later
+- **AL Language Development**: Custom extension development using AL (Application Language) for e-Invoice functionality
+- **Table Extensions**: Enhanced data models for customers, items, and sales documents with e-Invoice fields
+- **Page Extensions**: Integrated user interfaces for e-Invoice management and real-time monitoring
+- **Codeunits**: Business logic implementation for JSON generation, validation, and API orchestration
+- **Reports**: Advanced reporting capabilities for bulk processing and compliance documentation
+- **Workflow Integration**: Seamless integration with existing sales, purchase, and financial processes
+
+#### Key Benefits:
+- **Unified Platform**: Single system for ERP and e-Invoice compliance
+- **Real-time Processing**: Immediate validation and status updates
+- **Scalability**: Handles high-volume invoice processing efficiently
+- **Customization**: Flexible extension model for specific business requirements
+- **Security**: Built-in role-based security and audit trails
 
 ### Microsoft Azure Cloud Services
 
-Azure provides the cloud infrastructure and services for secure processing:
+Azure provides enterprise-grade cloud infrastructure and services for secure, scalable e-Invoice processing.
 
-- **Azure Functions** – Serverless compute for digital signing operations.
-- **Azure API Management** – Secure API gateway for LHDN integration.
-- **Azure Key Vault** – Secure certificate and secret management.
-- **Azure Storage** – Document storage and audit log retention.
-- **Azure Monitor** – Comprehensive monitoring and alerting.
-- **Azure Active Directory** – Authentication and authorization.
+#### Core Services:
+
+##### Azure Functions v4
+- **Runtime**: .NET 6.0 Isolated Process Model
+- **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
+- **Scaling**: Consumption plan with automatic scaling (1-200 instances)
+- **Security**: Integrated with Azure Active Directory and Key Vault
+- **Monitoring**: Application Insights integration for performance tracking
+- **Benefits**: Serverless architecture reduces operational overhead, automatic scaling for peak loads
+
+##### Azure API Management v2
+- **API Gateway**: Centralized API management and security
+- **Policies**: Rate limiting, authentication, request/response transformation
+- **Developer Portal**: Self-service API documentation and testing
+- **Analytics**: Real-time API usage and performance metrics
+- **Security**: OAuth 2.0, JWT validation, IP filtering
+- **Benefits**: Professional API management, enhanced security, developer experience
+
+##### Azure Key Vault Premium
+- **Certificate Management**: Secure storage of JOTEX P12 digital certificates
+- **Secret Management**: Encrypted storage of API keys and connection strings
+- **Key Rotation**: Automated certificate renewal and key rotation
+- **Access Policies**: Granular access control with Azure RBAC
+- **Audit Logging**: Comprehensive audit trails for compliance
+- **Benefits**: Enterprise-grade security, automated certificate lifecycle management
+
+##### Azure Storage Account (General Purpose v2)
+- **Blob Storage**: Document storage with hierarchical namespaces
+- **Table Storage**: NoSQL storage for audit logs and metadata
+- **Queue Storage**: Message queuing for asynchronous processing
+- **Redundancy**: Geo-redundant storage (GRS) for disaster recovery
+- **Security**: Azure AD authentication, encryption at rest
+- **Benefits**: Scalable storage, cost-effective, high availability
+
+##### Azure Monitor and Application Insights
+- **Metrics Collection**: Real-time performance and health metrics
+- **Log Analytics**: Centralized logging and query capabilities
+- **Alerting**: Intelligent alerting based on metrics and logs
+- **Dashboards**: Custom dashboards for system monitoring
+- **Integration**: Native integration with Azure Functions and API Management
+- **Benefits**: Proactive monitoring, rapid issue detection and resolution
+
+##### Azure Active Directory Premium P1
+- **Authentication**: Single sign-on and multi-factor authentication
+- **Authorization**: Role-based access control (RBAC)
+- **Conditional Access**: Policy-based access controls
+- **Identity Protection**: Risk detection and automated responses
+- **Benefits**: Enhanced security, compliance with industry standards
 
 ### Digital Security Technologies
 
-Security technologies ensure compliance and data protection:
+Security technologies ensure compliance with Malaysian regulations and protect sensitive financial data.
 
-- **JOTEX P12 Digital Certificates** – Malaysian digital signature standard.
-- **SSL/TLS Encryption** – Secure data transmission.
-- **OAuth 2.0** – API authentication with LHDN.
-- **Azure Security Center** – Threat monitoring and compliance.
-- **Data encryption** at rest and in transit.
+#### Digital Signature Infrastructure:
+- **JOTEX P12 Certificates**: Malaysian Digital Signature Standard (DSS) compliant
+- **Certificate Authority**: Integration with licensed Malaysian Certificate Authorities
+- **Key Management**: Hardware Security Modules (HSM) for private key protection
+- **Signature Algorithm**: RSA 2048-bit with SHA-256 hashing
+- **Compliance**: Meets Malaysian Communications and Multimedia Commission (MCMC) requirements
 
-### LHDN MyInvois API
+#### Data Protection:
+- **Encryption at Rest**: AES-256 encryption for all stored data
+- **Encryption in Transit**: TLS 1.3 for all network communications
+- **Data Masking**: Sensitive data masking in logs and user interfaces
+- **Tokenization**: PCI DSS compliant tokenization for payment data
 
-Direct integration with official LHDN platform:
+#### Authentication and Authorization:
+- **OAuth 2.0**: Industry-standard authorization framework
+- **JWT Tokens**: JSON Web Tokens for secure API authentication
+- **API Keys**: Secure API key management with rotation policies
+- **Certificate-based Authentication**: Mutual TLS for high-security scenarios
 
-- **Document Submission API** – Secure invoice submission.
-- **Status Retrieval API** – Real-time status tracking.
-- **TIN Validation API** – Customer verification.
-- **Error Handling** – Comprehensive error response management.
-- **Rate Limiting** – Respectful of API limitations.
+#### Security Monitoring:
+- **Azure Security Center**: Continuous security assessment and recommendations
+- **Threat Intelligence**: Integration with Microsoft Defender for Cloud
+- **Vulnerability Scanning**: Automated vulnerability detection and patching
+- **Compliance Monitoring**: Continuous compliance with ISO 27001 and GDPR
+
+### LHDN MyInvois API Integration
+
+Direct integration with the official LHDN MyInvois platform ensures regulatory compliance and seamless document submission.
+
+#### API Endpoints and Capabilities:
+
+##### Document Submission API
+- **Endpoint**: `POST /api/v1.0/documentsubmissions`
+- **Authentication**: OAuth 2.0 Bearer tokens
+- **Payload Format**: JSON with UBL 2.1 structure
+- **Rate Limits**: 100 requests per minute, 10,000 per hour
+- **Response Format**: JSON with submission ID and status
+- **Error Handling**: Detailed error codes and messages
+
+##### Document Status Retrieval API
+- **Endpoint**: `GET /api/v1.0/documents/{documentId}`
+- **Authentication**: OAuth 2.0 Bearer tokens
+- **Response Format**: JSON with detailed status information
+- **Real-time Updates**: Status polling every 30 seconds
+- **Historical Data**: 90-day status history retention
+
+##### TIN Validation API
+- **Endpoint**: `GET /api/v1.0/taxpayer/validation/{tin}`
+- **Authentication**: OAuth 2.0 Bearer tokens
+- **Response Format**: JSON with validation status and taxpayer details
+- **Caching**: 24-hour validation result caching
+- **Error Handling**: Invalid TIN format detection
+
+##### Bulk Submission API
+- **Endpoint**: `POST /api/v1.0/documentsubmissions/batch`
+- **Batch Size**: Maximum 50 documents per batch
+- **Processing**: Asynchronous processing with status callbacks
+- **Error Handling**: Individual document error reporting
+- **Benefits**: Efficient bulk processing for high-volume scenarios
+
+#### API Integration Features:
+- **Automatic Retries**: Intelligent retry logic with exponential backoff
+- **Circuit Breaker**: Automatic failover for API unavailability
+- **Request Throttling**: Respectful rate limiting to prevent API rejection
+- **Response Caching**: Intelligent caching to reduce API calls
+- **Error Classification**: Automated error categorization and handling
+
+### Technology Integration Architecture
+
+#### System Integration Points:
+1. **Business Central ↔ Azure Functions**: Secure document signing workflow
+2. **Azure Functions ↔ LHDN API**: Direct API communication with authentication
+3. **Business Central ↔ Azure Storage**: Document and log storage
+4. **Azure Monitor ↔ All Components**: Centralized monitoring and alerting
+5. **Azure Key Vault ↔ All Components**: Secure credential management
+
+#### Data Flow Architecture:
+1. **Invoice Creation**: Business Central captures invoice data
+2. **Validation**: Real-time TIN and data validation
+3. **JSON Generation**: UBL 2.1 compliant JSON creation
+4. **Digital Signing**: Azure Functions applies JOTEX signature
+5. **API Submission**: Secure submission to LHDN MyInvois
+6. **Status Tracking**: Real-time status monitoring and updates
+7. **Audit Logging**: Comprehensive audit trail maintenance
+
+#### Performance Characteristics:
+- **Response Time**: < 5 seconds for standard invoice processing
+- **Throughput**: 100+ invoices per minute during peak hours
+- **Availability**: 99.9% uptime with automated failover
+- **Scalability**: Auto-scaling from 1 to 200 concurrent instances
+- **Data Retention**: 7-year audit trail retention for compliance
+
+This comprehensive technology stack ensures a robust, secure, and scalable e-Invoice solution that meets Malaysian regulatory requirements while providing excellent performance and user experience.
 
 ---
 
