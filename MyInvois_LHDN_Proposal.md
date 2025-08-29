@@ -195,14 +195,6 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Benefits**: Serverless architecture reduces operational overhead, automatic scaling for peak loads
 - **Production Ready**: Based on proven implementation with JOTEX certificate integration
 
-##### Azure API Management v2
-- **API Gateway**: Centralized API management and security
-- **Policies**: Rate limiting, authentication, request/response transformation
-- **Developer Portal**: Self-service API documentation and testing
-- **Analytics**: Real-time API usage and performance metrics
-- **Security**: OAuth 2.0, JWT validation, IP filtering
-- **Benefits**: Professional API management, enhanced security, developer experience
-
 ##### Certificate Management
 - **JOTEX P12 Certificates**: File-based certificate storage and management
 - **Environment-Specific Loading**: PREPROD and PRODUCTION certificate handling
@@ -211,27 +203,13 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 - **Compliance**: Malaysian Digital Signature Standard (DSS) compliance
 - **Benefits**: Production-ready implementation, no Key Vault dependency
 
-##### Data Storage and Processing
-- **File-Based Storage**: Certificate and configuration file management
-- **Audit Logging**: Comprehensive transaction and system audit trails
-- **Data Security**: Encrypted data storage and transmission
-- **Backup Solutions**: Automated backup and recovery procedures
-- **Benefits**: Production-ready implementation, simplified deployment
-
 ##### Azure Monitor and Application Insights
 - **Metrics Collection**: Real-time performance and health metrics
 - **Log Analytics**: Centralized logging and query capabilities
 - **Alerting**: Intelligent alerting based on metrics and logs
 - **Dashboards**: Custom dashboards for system monitoring
-- **Integration**: Native integration with Azure Functions and API Management
+- **Integration**: Native integration with Azure Functions
 - **Benefits**: Proactive monitoring, rapid issue detection and resolution
-
-##### Azure Active Directory Premium P1
-- **Authentication**: Single sign-on and multi-factor authentication
-- **Authorization**: Role-based access control (RBAC)
-- **Conditional Access**: Policy-based access controls
-- **Identity Protection**: Risk detection and automated responses
-- **Benefits**: Enhanced security, compliance with industry standards
 
 ### Digital Security Technologies
 
@@ -239,9 +217,10 @@ Security technologies ensure compliance with Malaysian regulations and protect s
 
 #### Digital Signature Infrastructure:
 - **JOTEX P12 Certificates**: Malaysian Digital Signature Standard (DSS) compliant
-- **Certificate Authority**: Integration with licensed Malaysian Certificate Authorities
-- **Key Management**: Hardware Security Modules (HSM) for private key protection
+- **Certificate Loading**: Environment-specific file-based certificate management
+- **XAdES Implementation**: Official LHDN 7-step signing process
 - **Signature Algorithm**: RSA 2048-bit with SHA-256 hashing
+- **Serial Number Handling**: Decimal format extraction for LHDN compliance
 - **Compliance**: Meets Malaysian Communications and Multimedia Commission (MCMC) requirements
 
 #### Data Protection:
@@ -257,10 +236,11 @@ Security technologies ensure compliance with Malaysian regulations and protect s
 - **Certificate-based Authentication**: Mutual TLS for high-security scenarios
 
 #### Security Monitoring:
-- **Azure Security Center**: Continuous security assessment and recommendations
-- **Threat Intelligence**: Integration with Microsoft Defender for Cloud
-- **Vulnerability Scanning**: Automated vulnerability detection and patching
-- **Compliance Monitoring**: Continuous compliance with ISO 27001 and GDPR
+- **Application Insights**: Real-time performance and security monitoring
+- **Certificate Validation**: Automated certificate expiry monitoring
+- **Request Validation**: Input validation and sanitization
+- **Error Logging**: Comprehensive security event logging
+- **Correlation Tracking**: Request correlation for security analysis
 
 ### LHDN MyInvois API Integration
 
@@ -356,7 +336,7 @@ This is the production signing service used by Business Central. It is implement
 1. **Business Central ↔ Azure Functions**: Secure document signing and payload preparation
 2. **Business Central ↔ LHDN API**: Direct API communication with authentication
 3. **Azure Functions ↔ Business Central**: Signed document and status callbacks
-4. **Monitoring Systems ↔ All Components**: Centralized monitoring and alerting
+4. **Application Insights ↔ All Components**: Centralized monitoring and logging
 5. **Certificate Management**: File-based certificate handling and validation
 
 #### Data Flow Architecture:
@@ -392,8 +372,7 @@ The architecture follows a secure, scalable cloud-native design:
 
 ### Azure Integration Layer:
 - Azure Functions for digital signing and payload preparation
-- Certificate management for secure authentication
-- File-based storage for certificates and configuration
+- File-based certificate management for secure authentication
 - Application Insights for monitoring and logging
 
 ### LHDN Integration Layer:
