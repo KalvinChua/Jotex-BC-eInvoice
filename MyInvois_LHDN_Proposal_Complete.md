@@ -84,7 +84,7 @@ As VENDOR understanding, CLIENT is looking for solutions which could address:
 - Comprehensive error handling and retry mechanisms for failed submissions.
 - Complete audit logging and compliance reporting capabilities.
 - Role-based access control ensuring appropriate security and data visibility.
-- Real-time status monitoring and notifications for invoice processing.
+- Real-time status monitoring and logging for invoice processing.
 - Bulk processing capabilities for high-volume invoice scenarios.
 - Web-responsive user interfaces for cross-device accessibility.
 - User-friendly interface optimized for English-speaking users.
@@ -145,7 +145,7 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 │   API Submission│    │   & Monitoring    │    │   & Logging     │
 │                 │    │                  │    │                 │
 │ • Document Submit│    │ • Real-time Status│    │ • Complete Log │
-│ • Status Polling │    │ • Notifications   │    │ • Compliance   │
+│ • Status Polling │    │ • Status Updates  │    │ • Compliance   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
@@ -162,7 +162,7 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 9. **📤 API Submission**: Submits signed document to LHDN MyInvois API
 10. **📊 Status Monitoring**: Tracks submission with real-time updates
 11. **📝 Audit Logging**: Complete transaction history with correlation IDs
-12. **🔔 User Notification**: Status updates and alerts via integrated dashboards
+12. **📊 Status Monitoring**: Real-time status updates via integrated dashboards
 
 The solution supports all LHDN document types and ensures complete compliance with current regulations.
 
@@ -247,7 +247,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 ##### Azure Monitor and Application Insights
 - **Metrics Collection**: Real-time performance and health metrics
 - **Log Analytics**: Centralized logging and query capabilities
-- **Alerting**: Intelligent alerting based on metrics and logs
+- **Monitoring**: Comprehensive performance and health monitoring
 - **Logging**: Comprehensive request/response logging
 - **Integration**: Native integration with Azure Functions
 - **Benefits**: Proactive monitoring, rapid issue detection and resolution
@@ -431,19 +431,19 @@ The proposed architecture follows a layered approach ensuring scalability, secur
 │                 │                        │                      │
 └─────────────────┘                        └──────────────────────┘
          │                                        │
-         │ Database Queries                       │
+         │ Data Operations                        │
          ▼                                        ▼
 ┌─────────────────┐                        ┌──────────────────────┐
-│ SQL Database    │◀──────────────────────▶│ Application Insights │
-│ (Business Data) │   Audit Logs           │ (Monitoring)         │
-│ & Audit Trail   │                        │                      │
+│ Business Central│◀──────────────────────▶│ Application Insights │
+│ Data & Audit    │   Audit Logs           │ (Monitoring)         │
+│ Trail           │                        │                      │
 └─────────────────┘                        └──────────────────────┘
          │                                        │
          │ UI Updates                             │
          ▼                                        ▼
 ┌─────────────────┐                        ┌──────────────────────┐
-│ User Interface  │◀──────────────────────▶│ Alert System          │
-│ (Web Portal)    │   Notifications        │ (Email/SMS)          │
+│ User Interface  │◀──────────────────────▶│ Monitoring Dashboard │
+│ (Web Portal)    │   Status Updates       │ & Reporting         │
 │ & Dashboards    │                        │                      │
 └─────────────────┘                        └──────────────────────┘
 ```
@@ -790,8 +790,8 @@ Tasks to be performed during preventive maintenance:
 - Validate LHDN API integration and certificates
 - Review security configurations and access controls
 - Update documentation and procedures
-- Perform database maintenance and cleanup
-- Review monitoring and alerting configurations
+- Perform system maintenance and cleanup
+- Review monitoring and logging configurations
 
 ### Annual Support & Maintenance Service – Level Agreement (SLA)
 
