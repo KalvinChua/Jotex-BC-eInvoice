@@ -28,14 +28,15 @@
 8. [Proposed Technologies](#proposed-technologies)
 9. [Proposed Architecture](#proposed-architecture)
 10. [Our Approach](#our-approach)
-11. [Project Plan and Estimation](#project-plan-and-estimation)
-12. [Estimated Project Timeline](#estimated-project-timeline)
-13. [Scope of Work](#scope-of-work)
-14. [Out Of Scope](#out-of-scope)
-15. [Assumptions](#assumptions)
-16. [Post Support](#post-support)
-17. [Standard Terms & Conditions](#standard-terms-conditions)
-18. [Support and Maintenance](#support-and-maintenance)
+11. [Project Milestones & Deliverables](#project-milestones-deliverables)
+12. [Project Plan and Estimation](#project-plan-and-estimation)
+13. [Estimated Project Timeline](#estimated-project-timeline)
+14. [Scope of Work](#scope-of-work)
+15. [Out Of Scope](#out-of-scope)
+16. [Assumptions](#assumptions)
+17. [Post Support](#post-support)
+18. [Standard Terms & Conditions](#standard-terms-conditions)
+19. [Support and Maintenance](#support-and-maintenance)
 
 ---
 
@@ -508,6 +509,71 @@ Below are estimated project plan and timeline.
 | **Project Closure** | • Conduct final project review and feedback session<br>• Prepare and hand over all documentation<br>• Conduct knowledge transfer and admin training<br>• Obtain final sign-off from CLIENT stakeholders | Project Closure (5 man-days) |
 
 ---
+
+## Project Milestones & Deliverables
+
+### Key Project Milestones
+
+The project is structured around six major milestones, each representing a critical phase completion and quality gate:
+
+| **Milestone** | **Description** | **Deliverables** | **Duration** | **Success Criteria** |
+|---------------|-----------------|------------------|--------------|---------------------|
+| **🏁 M1: Project Kickoff** | Project initiation and planning phase completion | • Project charter<br>• Initial requirements document<br>• Project plan<br>• Team assignments | 5 days | • All stakeholders aligned<br>• Requirements baseline established<br>• Project plan approved |
+| **📋 M2: Design Approval** | Technical design and architecture completion | • Functional specifications<br>• Technical design documents<br>• UI/UX mockups<br>• Security architecture | 12 days | • Design review completed<br>• CLIENT approval obtained<br>• Technical feasibility confirmed |
+| **⚙️ M3: Development Complete** | Core system development and integration finished | • Fully functional e-Invoice system<br>• Integration testing completed<br>• User documentation<br>• Test cases prepared | 60 days | • All features implemented<br>• System integration tested<br>• Code review completed<br>• SIT passed |
+| **🧪 M4: Testing Complete** | Quality assurance and validation finished | • UAT test results<br>• Performance test reports<br>• Security audit results<br>• Go-live readiness assessment | 18 days | • UAT sign-off obtained<br>• All critical defects resolved<br>• Performance benchmarks met<br>• Security compliance verified |
+| **🚀 M5: Go-Live** | Production deployment and handover | • Production system deployed<br>• User training completed<br>• Data migration finished<br>• Go-live support provided | 8 days | • System stable in production<br>• Users trained and confident<br>• Business processes validated<br>• Support handover completed |
+| **✅ M6: Project Closure** | Final deliverables and project sign-off | • Complete documentation set<br>• Knowledge transfer completed<br>• Final project review<br>• Maintenance procedures established | 5 days | • All deliverables accepted<br>• CLIENT satisfaction confirmed<br>• Support team fully trained<br>• Project closure report approved |
+
+### Milestone Dependencies & Critical Path
+
+```mermaid
+graph TD
+    A[Project Kickoff] --> B[Design Approval]
+    B --> C[Development Complete]
+    C --> D[Testing Complete]
+    D --> E[Go-Live]
+    E --> F[Project Closure]
+
+    G[CLIENT Requirements] --> A
+    H[Technical Design] --> B
+    I[System Integration] --> C
+    J[User Acceptance] --> D
+    K[Production Deployment] --> E
+    L[Documentation] --> F
+```
+
+### Milestone Review Process
+
+Each milestone includes a formal review process:
+
+1. **📋 Milestone Preparation** (2 days before)
+   - Deliverable completion verification
+   - Quality assurance review
+   - CLIENT stakeholder preparation
+
+2. **🏛️ Milestone Review Meeting** (1 day)
+   - Presentation of deliverables
+   - Demonstration of functionality
+   - Issue identification and resolution
+   - CLIENT feedback collection
+
+3. **✅ Milestone Sign-Off** (1 day)
+   - Formal approval documentation
+   - Issue resolution confirmation
+   - Next phase planning
+   - Risk assessment update
+
+### Milestone Success Metrics
+
+| **Milestone** | **Key Metrics** | **Target** |
+|---------------|-----------------|------------|
+| **M1: Kickoff** | • Requirements completeness<br>• Stakeholder alignment | 100% |
+| **M2: Design** | • Design review feedback<br>• Technical feasibility | >95% positive |
+| **M3: Development** | • Feature completion<br>• Code quality<br>• Integration test pass rate | 100% / A grade / >98% |
+| **M4: Testing** | • UAT pass rate<br>• Performance benchmarks<br>• Security compliance | >95% / Met / 100% |
+| **M5: Go-Live** | • System uptime<br>• User adoption<br>• Support ticket volume | >99.5% / >80% / <5/day |
+| **M6: Closure** | • Documentation completeness<br>• Knowledge transfer<br>• CLIENT satisfaction | 100% / Complete / >4/5 |
 
 ## Estimated Project Timeline
 
