@@ -224,7 +224,7 @@ Business Central → Azure Function → LHDN MyInvois API
 
 ### Planned Improvements
 - **Enhanced Analytics**: Advanced reporting and business intelligence
-- **Mobile Support**: Mobile app integration for field operations
+- **Web Access**: Responsive web interface for remote access
 - **AI Integration**: Intelligent document processing and validation
 - **Multi-Currency**: Enhanced multi-currency support
 - **API Expansion**: Additional integration capabilities
