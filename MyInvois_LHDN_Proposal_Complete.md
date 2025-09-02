@@ -989,8 +989,8 @@ The project is scheduled for a 2-month development window, excluding weekends an
 | M1        | Project Setup & Requirement Finalization    | 5                        | ✅ Completed |
 | M2        | Core AL Development & JSON Generation       | 10                       | ✅ Completed |
 | M3        | Azure Function & Digital Signing Integration| 10                       | 🔄 In Progress |
-| M4        | LHDN API Integration & Testing              | 8                        | ⏳ Pending   |
+| M4        | LHDN API Integration & Testing              | 8                        | ✅ Completed |
 | M5        | UAT, Documentation & Deployment             | 8                        | ⏳ Pending   |
 
 ### Current Status
-As of **September 2, 2025**, the project is in **Milestone 3**, with Azure Function integration and digital signing in progress. The project is on track to complete within the allocated 2-month working schedule.
+As of **September 2, 2025**, the project is in **Milestone 3**, with Azure Function integration and digital signing in progress. LHDN API integration and testing have been completed. The project is on track to complete within the allocated 2-month working schedule.
