@@ -900,3 +900,60 @@ Users' applications other than those specified in this proposal are not included
 **THE END**
 
 *This proposal is valid until December 31, 2025, unless otherwise agreed by both parties.*
+## Proposed System Architecture
+
+The MyInvois LHDN e-Invoice System is designed with a modular, scalable architecture that integrates Microsoft Dynamics 365 Business Central with Malaysia’s LHDN MyInvois API. The architecture ensures secure, compliant, and efficient e-Invoice processing.
+
+### High-Level Architecture Overview
+
+```
++-----------------------------+
+|  Business Central (AL App) |
+|----------------------------|
+| - eInvoice Extensions      |
+| - JSON Generator           |
+| - TIN Validator            |
+| - Submission Log           |
+| - QR Code Generator        |
++-------------+--------------+
+              |
+              | HTTPS (REST)
+              v
++-----------------------------+
+| Azure Function (C#)        |
+|----------------------------|
+| - Digital Signature (XAdES)|
+| - JOTEX P12 Cert Handling  |
+| - Retry & Error Handling   |
++-------------+--------------+
+              |
+              | HTTPS (REST)
+              v
++-----------------------------+
+| LHDN MyInvois API          |
+|----------------------------|
+| - TIN Validation           |
+| - Invoice Submission       |
+| - Status Query             |
++-----------------------------+
+
+Monitoring & Logging:
+- Application Insights (Azure)
+- eInvoiceSubmissionLog (BC Table)
+- TINValidationLog (BC Table)
+
+Security:
+- Role-based Access Control (BC PermissionSet)
+- Certificate-based Signing (Azure Function)
+```
+
+### Component Descriptions
+
+- **Business Central AL Extension**: Handles invoice preparation, JSON generation (UBL 2.1), TIN validation, and submission logging. It also provides user interfaces for setup, monitoring, and QR code display.
+- **Azure Function**: Performs digital signing using XAdES with a P12 certificate. It acts as a secure intermediary between Business Central and the LHDN API.
+- **LHDN MyInvois API**: Government endpoint for validating TINs, submitting invoices, and retrieving statuses.
+- **Application Insights**: Captures telemetry, logs, and exceptions from the Azure Function for monitoring and diagnostics.
+- **Audit Logs**: All submission attempts and TIN validations are logged in Business Central for traceability.
+- **Security**: Access is controlled via permission sets in Business Central. Digital signatures are securely handled in Azure using uploaded certificates.
+
+This architecture ensures compliance with LHDN requirements while maintaining extensibility, traceability, and operational resilience.
