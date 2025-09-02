@@ -957,3 +957,40 @@ Security:
 - **Security**: Access is controlled via permission sets in Business Central. Digital signatures are securely handled in Azure using uploaded certificates.
 
 This architecture ensures compliance with LHDN requirements while maintaining extensibility, traceability, and operational resilience.
+## Project Timeline
+
+The project is scheduled for a 2-month development window, excluding weekends and Malaysian public holidays. Development began in **July 2025** and is currently in progress.
+
+### Malaysian Public Holidays Considered (2025)
+- New Year’s Day – Jan 1
+- Chinese New Year – Jan 29–30
+- Hari Raya Aidilfitri – Mar 30–31
+- Labour Day – May 1
+- Wesak Day – May 12
+- Agong’s Birthday – Jun 2
+- Hari Raya Haji – Jun 6
+- Awal Muharram – Jun 26
+- National Day – Aug 31
+- Malaysia Day – Sep 16
+- Prophet Muhammad’s Birthday – Oct 6
+- Deepavali – Oct 20
+- Christmas – Dec 25
+
+### Working Days Calculation
+- Total calendar days in July–August: 62
+- Weekends (Sat–Sun): 18 days
+- Public holidays (Jul–Aug): 3 days
+- **Net working days: 41**
+
+### Milestone Timeline
+
+| Milestone | Description                                 | Duration (Working Days) | Status       |
+|-----------|---------------------------------------------|--------------------------|--------------|
+| M1        | Project Setup & Requirement Finalization    | 5                        | ✅ Completed |
+| M2        | Core AL Development & JSON Generation       | 10                       | ✅ Completed |
+| M3        | Azure Function & Digital Signing Integration| 10                       | 🔄 In Progress |
+| M4        | LHDN API Integration & Testing              | 8                        | ⏳ Pending   |
+| M5        | UAT, Documentation & Deployment             | 8                        | ⏳ Pending   |
+
+### Current Status
+As of **September 2, 2025**, the project is in **Milestone 3**, with Azure Function integration and digital signing in progress. The project is on track to complete within the allocated 2-month working schedule.
