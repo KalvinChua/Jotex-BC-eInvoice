@@ -32,6 +32,16 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the customer name for this invoice submission.';
                 }
+                field("Amount"; Rec."Amount")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the amount excluding VAT for this invoice.';
+                }
+                field("Amount Including VAT"; Rec."Amount Including VAT")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the amount including VAT for this invoice.';
+                }
                 field("Submission UID"; Rec."Submission UID")
                 {
                     ApplicationArea = All;
@@ -415,6 +425,8 @@ page 50316 "e-Invoice Submission Log"
                     ExcelBuf.AddColumn('Entry No.', false, '', true, false, false, '', ExcelBuf."Cell Type"::Number);
                     ExcelBuf.AddColumn('Invoice No.', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
                     ExcelBuf.AddColumn('Customer Name', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
+                    ExcelBuf.AddColumn('Amount', false, '', true, false, false, '', ExcelBuf."Cell Type"::Number);
+                    ExcelBuf.AddColumn('Amount Including VAT', false, '', true, false, false, '', ExcelBuf."Cell Type"::Number);
                     ExcelBuf.AddColumn('Submission UID', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
                     ExcelBuf.AddColumn('Document UUID', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
                     ExcelBuf.AddColumn('Status', false, '', true, false, false, '', ExcelBuf."Cell Type"::Text);
@@ -431,6 +443,8 @@ page 50316 "e-Invoice Submission Log"
                             ExcelBuf.AddColumn(Rec."Entry No.", false, '', false, false, false, '', ExcelBuf."Cell Type"::Number);
                             ExcelBuf.AddColumn(Rec."Invoice No.", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
                             ExcelBuf.AddColumn(Rec."Customer Name", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
+                            ExcelBuf.AddColumn(Rec."Amount", false, '', false, false, false, '', ExcelBuf."Cell Type"::Number);
+                            ExcelBuf.AddColumn(Rec."Amount Including VAT", false, '', false, false, false, '', ExcelBuf."Cell Type"::Number);
                             ExcelBuf.AddColumn(Rec."Submission UID", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
                             ExcelBuf.AddColumn(Rec."Document UUID", false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
                             ExcelBuf.AddColumn(Rec.Status, false, '', false, false, false, '', ExcelBuf."Cell Type"::Text);
@@ -609,6 +623,26 @@ page 50316 "e-Invoice Submission Log"
 
                     Message('Successfully deleted %1 old entries that met deletion criteria.', DeletableCount);
                     CurrPage.Update(false);
+                end;
+            }
+
+            action(UpdateSubmissionLogAmounts)
+            {
+                ApplicationArea = All;
+                Caption = 'Update Submission Log Amounts';
+                Image = UpdateDescription;
+                ToolTip = 'Update Amount and Amount Including VAT for existing submission log entries';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    eInvoiceJSONGenerator: Codeunit "eInvoice JSON Generator";
+                begin
+                    if Confirm('This will update the Amount and Amount Including VAT fields for all existing submission log entries. Do you want to continue?', false) then begin
+                        eInvoiceJSONGenerator.UpdateExistingSubmissionLogAmounts();
+                        Message('Submission log amounts have been updated successfully.');
+                        CurrPage.Update(false);
+                    end;
                 end;
             }
 

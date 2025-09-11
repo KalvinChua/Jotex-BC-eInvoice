@@ -159,6 +159,21 @@ page 50300 eInvoiceSetupCard
                 RunObject = Page "e-Invoice Submission Log";
             }
 
+            action(UpdateSubmissionLogAmounts)
+            {
+                Caption = 'Update Submission Log Amounts';
+                ApplicationArea = All;
+                Image = UpdateCurrencyExchangeRates;
+                ToolTip = 'Update existing submission log entries to show correct amounts calculated from invoice lines instead of 0.00';
+
+                trigger OnAction()
+                var
+                    eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+                begin
+                    eInvoiceGenerator.UpdateExistingSubmissionLogAmounts();
+                end;
+            }
+
             action(TestPayloadFormat)
             {
                 Caption = 'Test Payload Format';

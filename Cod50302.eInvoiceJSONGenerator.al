@@ -4853,17 +4853,32 @@ codeunit 50302 "eInvoice JSON Generator"
         CustomerName: Text;
         StartTime: DateTime;
         EndTime: DateTime;
+        SalesLine: Record "Sales Invoice Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
     begin
         // Get customer name
         CustomerName := '';
         if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
             CustomerName := Customer.Name;
 
+        // Calculate amounts from sales lines (same logic as JSON generation)
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesLine.SetRange("Document No.", SalesInvoiceHeader."No.");
+        if SalesLine.FindSet() then
+            repeat
+                TotalAmount += SalesLine.Amount;
+                TotalAmountInclVAT += SalesLine."Amount Including VAT";
+            until SalesLine.Next() = 0;
+
         // Create new log entry
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
         SubmissionLog."Customer Name" := CustomerName;
+        SubmissionLog."Amount" := TotalAmount;
+        SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
         SubmissionLog."Submission UID" := CleanQuotesFromText(SubmissionUid);
         SubmissionLog."Document UUID" := CleanQuotesFromText(DocumentUuid);
         SubmissionLog.Status := Status;
@@ -5016,6 +5031,8 @@ codeunit 50302 "eInvoice JSON Generator"
         // Log the submission attempt
         SubmissionLog.Init();
         SubmissionLog."Invoice No." := SalesCrMemoHeader."No.";
+        SubmissionLog."Amount" := SalesCrMemoHeader.Amount;
+        SubmissionLog."Amount Including VAT" := SalesCrMemoHeader."Amount Including VAT";
         SubmissionLog.Status := 'Submitted';
         SubmissionLog."Submission Date" := CurrentDateTime;
         SubmissionLog."Response Date" := CurrentDateTime;
@@ -5567,17 +5584,32 @@ codeunit 50302 "eInvoice JSON Generator"
         eInvoiceSetup: Record "eInvoiceSetup";
         Customer: Record Customer;
         CustomerName: Text;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
     begin
         // Get customer name
         CustomerName := '';
         if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then
             CustomerName := Customer.Name;
 
+        // Calculate amounts from sales credit memo lines (same logic as JSON generation)
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                TotalAmount += SalesCrMemoLine.Amount;
+                TotalAmountInclVAT += SalesCrMemoLine."Amount Including VAT";
+            until SalesCrMemoLine.Next() = 0;
+
         // Create new log entry
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesCrMemoHeader."No.";
         SubmissionLog."Customer Name" := CustomerName;
+        SubmissionLog."Amount" := TotalAmount;
+        SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
         SubmissionLog."Submission UID" := CleanQuotesFromText(SubmissionUid);
         SubmissionLog."Document UUID" := CleanQuotesFromText(DocumentUuid);
         SubmissionLog.Status := Status;
@@ -6865,5 +6897,66 @@ codeunit 50302 "eInvoice JSON Generator"
         ResultText += '\\To debug a specific credit memo, use: DebugCreditMemoPayload(''DOCUMENT_NO'')';
 
         exit(ResultText);
+    end;
+
+    /// <summary>
+    /// Updates existing submission log entries with correct amounts calculated from invoice lines
+    /// This fixes the issue where old entries show 0.00 amounts
+    /// </summary>
+    procedure UpdateExistingSubmissionLogAmounts()
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        SalesCrMemoHeader: Record "Sales Cr.Memo Header";
+        SalesLine: Record "Sales Invoice Line";
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
+        UpdateCount: Integer;
+        ConfirmMsg: Label 'This will update all existing submission log entries to calculate amounts from invoice lines instead of header amounts.\Do you want to continue?';
+    begin
+        if not Confirm(ConfirmMsg) then
+            exit;
+
+        UpdateCount := 0;
+
+        // Process all submission log entries
+        if SubmissionLog.FindSet(true) then
+            repeat
+                // Reset amounts
+                TotalAmount := 0;
+                TotalAmountInclVAT := 0;
+
+                // Try to find the invoice first
+                if SalesInvoiceHeader.Get(SubmissionLog."Invoice No.") then begin
+                    // Calculate from sales invoice lines
+                    SalesLine.SetRange("Document No.", SubmissionLog."Invoice No.");
+                    if SalesLine.FindSet() then
+                        repeat
+                            TotalAmount += SalesLine.Amount;
+                            TotalAmountInclVAT += SalesLine."Amount Including VAT";
+                        until SalesLine.Next() = 0;
+                end else if SalesCrMemoHeader.Get(SubmissionLog."Invoice No.") then begin
+                    // Calculate from sales credit memo lines
+                    SalesCrMemoLine.SetRange("Document No.", SubmissionLog."Invoice No.");
+                    if SalesCrMemoLine.FindSet() then
+                        repeat
+                            TotalAmount += SalesCrMemoLine.Amount;
+                            TotalAmountInclVAT += SalesCrMemoLine."Amount Including VAT";
+                        until SalesCrMemoLine.Next() = 0;
+                end;
+
+                // Update the submission log if amounts have changed
+                if (SubmissionLog."Amount" <> TotalAmount) or (SubmissionLog."Amount Including VAT" <> TotalAmountInclVAT) then begin
+                    SubmissionLog."Amount" := TotalAmount;
+                    SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
+                    SubmissionLog."Last Updated" := CurrentDateTime;
+                    if SubmissionLog.Modify() then
+                        UpdateCount += 1;
+                end;
+
+            until SubmissionLog.Next() = 0;
+
+        Message('%1 submission log entries have been updated with correct amounts.', UpdateCount);
     end;
 }

@@ -1016,6 +1016,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := CreditMemoNo;
+            SubmissionLog."Amount" := SalesCrMemoHeader.Amount;
+            SubmissionLog."Amount Including VAT" := SalesCrMemoHeader."Amount Including VAT";
             SubmissionLog."Submission UID" := SalesCrMemoHeader."eInvoice Submission UID";
             SubmissionLog."Document UUID" := SalesCrMemoHeader."eInvoice UUID";
             SubmissionLog.Status := NewStatus;
@@ -1408,7 +1410,20 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
     local procedure UpdateSubmissionLogWithResponse(DocNo: Code[20]; NewStatus: Text; LhdnResponse: Text; CustomerName: Text[100]; ErrorDetails: Text)
     var
         SubmissionLog: Record "eInvoice Submission Log";
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
     begin
+        // Calculate amounts from sales credit memo lines (consistent with JSON generation)
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesCrMemoLine.SetRange("Document No.", DocNo);
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                TotalAmount += SalesCrMemoLine.Amount;
+                TotalAmountInclVAT += SalesCrMemoLine."Amount Including VAT";
+            until SalesCrMemoLine.Next() = 0;
+
         // Try to find existing log entry for this credit memo and submission UID
         SubmissionLog.SetRange("Invoice No.", DocNo);
         SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
@@ -1420,6 +1435,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             SubmissionLog."Customer Name" := CustomerName;
             SubmissionLog."Error Message" := ErrorDetails;
             SubmissionLog."Document Type" := Rec."eInvoice Document Type";
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             if SubmissionLog.Modify() then begin
                 // Successfully updated log
             end;
@@ -1427,6 +1444,8 @@ pageextension 50314 eInvPostedSalesCrMemoExt extends "Posted Sales Credit Memo"
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := DocNo;
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
             SubmissionLog."Document UUID" := Rec."eInvoice UUID";
             SubmissionLog.Status := NewStatus;

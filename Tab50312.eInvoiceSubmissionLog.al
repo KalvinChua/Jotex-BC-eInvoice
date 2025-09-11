@@ -136,6 +136,18 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Validation Link';
             DataClassification = CustomerContent;
         }
+        field(27; "Amount"; Decimal)
+        {
+            Caption = 'Amount';
+            DataClassification = CustomerContent;
+            AutoFormatType = 1;
+        }
+        field(28; "Amount Including VAT"; Decimal)
+        {
+            Caption = 'Amount Including VAT';
+            DataClassification = CustomerContent;
+            AutoFormatType = 1;
+        }
     }
 
     keys

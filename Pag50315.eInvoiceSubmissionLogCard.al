@@ -35,6 +35,18 @@ page 50315 "e-Invoice Submission Log Card"
                     ToolTip = 'Specifies the customer name for this invoice submission.';
                     Editable = false; // System-populated from invoice - should not be modified
                 }
+                field("Amount"; Rec."Amount")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the amount excluding VAT for this invoice.';
+                    Editable = false; // System-populated from invoice - should not be modified
+                }
+                field("Amount Including VAT"; Rec."Amount Including VAT")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the amount including VAT for this invoice.';
+                    Editable = false; // System-populated from invoice - should not be modified
+                }
                 field("Status"; Rec.Status)
                 {
                     ApplicationArea = All;

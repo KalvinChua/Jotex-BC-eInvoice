@@ -1273,11 +1273,24 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         SubmissionLog: Record "eInvoice Submission Log";
         Customer: Record Customer;
         CustomerName: Text[100];
+        SalesLine: Record "Sales Invoice Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
     begin
         // Get customer name from the invoice
         CustomerName := '';
         if Customer.Get(Rec."Sell-to Customer No.") then
             CustomerName := Customer.Name;
+
+        // Calculate amounts from sales lines (consistent with JSON generation)
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesLine.SetRange("Document No.", Rec."No.");
+        if SalesLine.FindSet() then
+            repeat
+                TotalAmount += SalesLine.Amount;
+                TotalAmountInclVAT += SalesLine."Amount Including VAT";
+            until SalesLine.Next() = 0;
 
         // Try to find existing log entry for this invoice and submission UID
         SubmissionLog.SetRange("Invoice No.", Rec."No.");
@@ -1289,6 +1302,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             SubmissionLog."Last Updated" := CurrentDateTime;
             SubmissionLog."Customer Name" := CustomerName;
             SubmissionLog."Error Message" := StrSubstNo('Status updated via API check: %1', NewStatus);
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             if SubmissionLog.Modify() then begin
                 // Successfully updated log
             end;
@@ -1296,6 +1311,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := Rec."No.";
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
             SubmissionLog."Document UUID" := Rec."eInvoice UUID";
             SubmissionLog.Status := NewStatus;
@@ -1538,7 +1555,20 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
     local procedure UpdateSubmissionLogWithResponse(DocNo: Code[20]; NewStatus: Text; LhdnResponse: Text; CustomerName: Text[100]; ErrorDetails: Text)
     var
         SubmissionLog: Record "eInvoice Submission Log";
+        SalesLine: Record "Sales Invoice Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
     begin
+        // Calculate amounts from sales lines (consistent with JSON generation)
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesLine.SetRange("Document No.", DocNo);
+        if SalesLine.FindSet() then
+            repeat
+                TotalAmount += SalesLine.Amount;
+                TotalAmountInclVAT += SalesLine."Amount Including VAT";
+            until SalesLine.Next() = 0;
+
         // Try to find existing log entry for this invoice and submission UID
         SubmissionLog.SetRange("Invoice No.", DocNo);
         SubmissionLog.SetRange("Submission UID", Rec."eInvoice Submission UID");
@@ -1550,6 +1580,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             SubmissionLog."Customer Name" := CustomerName;
             SubmissionLog."Error Message" := ErrorDetails;
             SubmissionLog."Document Type" := Rec."eInvoice Document Type";
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             if SubmissionLog.Modify() then begin
                 // Successfully updated log
             end;
@@ -1557,6 +1589,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := DocNo;
+            SubmissionLog."Amount" := TotalAmount;
+            SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
             SubmissionLog."Document UUID" := Rec."eInvoice UUID";
             SubmissionLog.Status := NewStatus;
