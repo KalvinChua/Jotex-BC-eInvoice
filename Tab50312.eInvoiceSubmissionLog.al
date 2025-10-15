@@ -182,12 +182,12 @@ table 50312 "eInvoice Submission Log"
         // Allow deletion if Document UUID is empty or 'null'
         else if ("Document UUID" = '') or ("Document UUID" = 'null') then
             CanDelete := true
-        // Allow deletion if Status is Invalid
-        else if (Status = 'Invalid') then
+        // Allow deletion if Status is Invalid or Submitted
+        else if (Status = 'Invalid') or (Status = 'Submitted') then
             CanDelete := true;
 
         if not CanDelete then
-            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID, without Document UUID, or with Invalid status can be deleted.\Submission UID: %1\Document UUID: %2\Status: %3',
+            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID, without Document UUID, or with Invalid/Submitted status can be deleted.\Submission UID: %1\Document UUID: %2\Status: %3',
                   "Submission UID", "Document UUID", Status);
     end;
 }

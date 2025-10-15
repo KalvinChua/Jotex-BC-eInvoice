@@ -260,7 +260,7 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Delete Entry';
                 Image = Delete;
-                ToolTip = 'Delete this entry (allowed if Submission UID is empty/null OR Document UUID is empty/null OR Status is Invalid).';
+                ToolTip = 'Delete this entry (allowed if Submission UID is empty/null OR Document UUID is empty/null OR Status is Invalid/Submitted).';
                 Visible = true;
 
                 trigger OnAction()
@@ -282,10 +282,13 @@ page 50316 "e-Invoice Submission Log"
                     end else if (Rec.Status = 'Invalid') then begin
                         CanDelete := true;
                         DeleteReason := 'Invalid status';
+                    end else if (Rec.Status = 'Submitted') then begin
+                        CanDelete := true;
+                        DeleteReason := 'Submitted status';
                     end;
 
                     if not CanDelete then begin
-                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID, without Document UUID, or with Invalid status can be deleted.\Submission UID: %1\Document UUID: %2\Status: %3',
+                        Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID, without Document UUID, or with Invalid/Submitted status can be deleted.\Submission UID: %1\Document UUID: %2\Status: %3',
                               Rec."Submission UID", Rec."Document UUID", Rec.Status);
                     end;
 
@@ -304,7 +307,7 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Delete Selected Entries';
                 Image = Delete;
-                ToolTip = 'Delete selected entries that meet deletion criteria (no Submission UID, no Document UUID, or Invalid status).';
+                ToolTip = 'Delete selected entries that meet deletion criteria (no Submission UID, no Document UUID, or Invalid/Submitted status).';
                 Visible = true;
 
                 trigger OnAction()
@@ -314,7 +317,7 @@ page 50316 "e-Invoice Submission Log"
                     SkippedCount: Integer;
                     TotalSelected: Integer;
                     CanDelete: Boolean;
-                    ConfirmMsg: Label 'Delete selected entries that meet deletion criteria?\This will delete entries without Submission UID, without Document UUID, or with Invalid status.\Selected entries: %1';
+                    ConfirmMsg: Label 'Delete selected entries that meet deletion criteria?\This will delete entries without Submission UID, without Document UUID, or with Invalid/Submitted status.\Selected entries: %1';
                     ResultMsg: Label 'Deleted: %1 entries\Skipped: %2 entries (did not meet deletion criteria)';
                 begin
                     CurrPage.SetSelectionFilter(SelectedSubmissionLog);
@@ -334,13 +337,15 @@ page 50316 "e-Invoice Submission Log"
                     if SelectedSubmissionLog.FindSet() then
                         repeat
                             CanDelete := false;
-
+                            
                             // Check if entry can be deleted based on various criteria
                             if (SelectedSubmissionLog."Submission UID" = '') or (SelectedSubmissionLog."Submission UID" = 'null') then
                                 CanDelete := true
                             else if (SelectedSubmissionLog."Document UUID" = '') or (SelectedSubmissionLog."Document UUID" = 'null') then
                                 CanDelete := true
                             else if (SelectedSubmissionLog.Status = 'Invalid') then
+                                CanDelete := true
+                            else if (SelectedSubmissionLog.Status = 'Submitted') then
                                 CanDelete := true;
 
                             if CanDelete then begin
@@ -355,9 +360,7 @@ page 50316 "e-Invoice Submission Log"
                     Message(ResultMsg, DeletedCount, SkippedCount);
                     CurrPage.Update(false);
                 end;
-            }
-
-            action(RefreshByDateRange)
+            }            action(RefreshByDateRange)
             {
                 ApplicationArea = All;
                 Caption = 'Refresh by Date Range';
@@ -542,24 +545,24 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Show Deletable Entries';
                 Image = Filter;
-                ToolTip = 'Filter to show only entries that can be deleted (no Submission UID, no Document UUID, or Invalid status).';
+                ToolTip = 'Filter to show only entries that can be deleted (no Submission UID, no Document UUID, or Invalid/Submitted status).';
                 Visible = true;
 
                 trigger OnAction()
                 begin
                     // Clear existing filters
                     Rec.Reset();
-
+                    
                     // Filter for entries that can be deleted:
                     // 1. Entries where Submission UID is empty or 'null'
                     // 2. Entries where Document UUID is empty or 'null'  
-                    // 3. Entries with Invalid status
+                    // 3. Entries with Invalid or Submitted status
                     Rec.SetFilter("Submission UID", '%1|%2', '', 'null');
                     Rec.SetFilter("Document UUID", '%1|%2', '', 'null');
-                    Rec.SetFilter(Status, '%1', 'Invalid');
-
+                    Rec.SetFilter(Status, '%1|%2', 'Invalid', 'Submitted');
+                    
                     // Use OR logic: entries matching any of the above criteria
-                    Message('Filtered to show entries that can be deleted.\Entries without Submission UID, without Document UUID, or with Invalid status are now visible.');
+                    Message('Filtered to show entries that can be deleted.\Entries without Submission UID, without Document UUID, or with Invalid/Submitted status are now visible.');
                 end;
             }
 
@@ -579,12 +582,26 @@ page 50316 "e-Invoice Submission Log"
                 end;
             }
 
-            action(ShowDeletionSummary)
+            action(ShowSubmittedEntries)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Submitted Entries';
+                Image = Filter;
+                ToolTip = 'Filter to show only entries with Submitted status.';
+                Visible = true;
+
+                trigger OnAction()
+                begin
+                    Rec.Reset();
+                    Rec.SetRange(Status, 'Submitted');
+                    Message('Filtered to show only entries with Submitted status.');
+                end;
+            }            action(ShowDeletionSummary)
             {
                 ApplicationArea = All;
                 Caption = 'Show Deletion Summary';
                 Image = Statistics;
-                ToolTip = 'Show summary of how many entries can be deleted based on current criteria (no Submission UID, no Document UUID, or Invalid status).';
+                ToolTip = 'Show summary of how many entries can be deleted based on current criteria (no Submission UID, no Document UUID, or Invalid/Submitted status).';
                 Visible = true;
 
                 trigger OnAction()
@@ -595,7 +612,8 @@ page 50316 "e-Invoice Submission Log"
                     WithSubmissionUID: Integer;
                     WithDocumentUUID: Integer;
                     InvalidStatusCount: Integer;
-                    SummaryMsg: Label 'Total Entries: %1\Deletable Entries: %2\- Entries with Invalid Status: %3\- Entries without Submission UID: %4\- Entries without Document UUID: %5\Note: Entries can be deleted if they have Invalid status OR lack Submission UID OR lack Document UUID.';
+                    SubmittedStatusCount: Integer;
+                    SummaryMsg: Label 'Total Entries: %1\Deletable Entries: %2\- Entries with Invalid Status: %3\- Entries with Submitted Status: %4\- Entries without Submission UID: %5\- Entries without Document UUID: %6\Note: Entries can be deleted if they have Invalid/Submitted status OR lack Submission UID OR lack Document UUID.';
                 begin
                     // Count total entries
                     TotalEntries := SubmissionLog.Count();
@@ -604,6 +622,11 @@ page 50316 "e-Invoice Submission Log"
                     SubmissionLog.Reset();
                     SubmissionLog.SetRange(Status, 'Invalid');
                     InvalidStatusCount := SubmissionLog.Count();
+
+                    // Count entries with Submitted status
+                    SubmissionLog.Reset();
+                    SubmissionLog.SetRange(Status, 'Submitted');
+                    SubmittedStatusCount := SubmissionLog.Count();
 
                     // Count entries without Submission UID (empty OR literal 'null')
                     SubmissionLog.Reset();
@@ -620,12 +643,13 @@ page 50316 "e-Invoice Submission Log"
                     if SubmissionLog.FindSet() then
                         repeat
                             if (SubmissionLog.Status = 'Invalid') or
+                               (SubmissionLog.Status = 'Submitted') or
                                (SubmissionLog."Submission UID" = '') or (SubmissionLog."Submission UID" = 'null') or
                                (SubmissionLog."Document UUID" = '') or (SubmissionLog."Document UUID" = 'null') then
                                 DeletableEntries += 1;
                         until SubmissionLog.Next() = 0;
 
-                    Message(SummaryMsg, TotalEntries, DeletableEntries, InvalidStatusCount, WithSubmissionUID, WithDocumentUUID);
+                    Message(SummaryMsg, TotalEntries, DeletableEntries, InvalidStatusCount, SubmittedStatusCount, WithSubmissionUID, WithDocumentUUID);
                 end;
             }
 
@@ -649,7 +673,7 @@ page 50316 "e-Invoice Submission Log"
                 ApplicationArea = All;
                 Caption = 'Cleanup Old Deletable Entries';
                 Image = Delete;
-                ToolTip = 'Clean up old entries that can be deleted (no Submission UID, no Document UUID, or Invalid status).';
+                ToolTip = 'Clean up old entries that can be deleted (no Submission UID, no Document UUID, or Invalid/Submitted status).';
                 Visible = true;
 
                 trigger OnAction()
@@ -657,7 +681,7 @@ page 50316 "e-Invoice Submission Log"
                     SubmissionStatusCU: Codeunit "eInvoice Submission Status";
                     DaysOld: Integer;
                     DeletableCount: Integer;
-                    ConfirmMsg: Label 'Clean up old entries that can be deleted?\This will remove entries older than %1 days that have no Submission UID, no Document UUID, or Invalid status.\Note: This action cannot be undone.';
+                    ConfirmMsg: Label 'Clean up old entries that can be deleted?\This will remove entries older than %1 days that have no Submission UID, no Document UUID, or Invalid/Submitted status.\Note: This action cannot be undone.';
                     ResultMsg: Label 'Found %1 old entries that can be deleted.\Click OK to proceed with deletion.';
                 begin
                     // Get number of days from user

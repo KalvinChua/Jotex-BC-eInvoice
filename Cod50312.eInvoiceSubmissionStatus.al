@@ -2773,7 +2773,7 @@ codeunit 50312 "eInvoice Submission Status"
                     CanDelete := true
                 else if (SubmissionLog."Document UUID" = '') or (SubmissionLog."Document UUID" = 'null') then
                     CanDelete := true
-                else if (SubmissionLog.Status = 'Invalid') then
+                else if (SubmissionLog.Status = 'Invalid') or (SubmissionLog.Status = 'Submitted') then
                     CanDelete := true;
 
                 if CanDelete then begin
