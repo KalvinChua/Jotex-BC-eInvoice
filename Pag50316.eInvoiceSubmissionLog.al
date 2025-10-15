@@ -337,7 +337,7 @@ page 50316 "e-Invoice Submission Log"
                     if SelectedSubmissionLog.FindSet() then
                         repeat
                             CanDelete := false;
-                            
+
                             // Check if entry can be deleted based on various criteria
                             if (SelectedSubmissionLog."Submission UID" = '') or (SelectedSubmissionLog."Submission UID" = 'null') then
                                 CanDelete := true
@@ -360,7 +360,8 @@ page 50316 "e-Invoice Submission Log"
                     Message(ResultMsg, DeletedCount, SkippedCount);
                     CurrPage.Update(false);
                 end;
-            }            action(RefreshByDateRange)
+            }
+            action(RefreshByDateRange)
             {
                 ApplicationArea = All;
                 Caption = 'Refresh by Date Range';
@@ -552,7 +553,7 @@ page 50316 "e-Invoice Submission Log"
                 begin
                     // Clear existing filters
                     Rec.Reset();
-                    
+
                     // Filter for entries that can be deleted:
                     // 1. Entries where Submission UID is empty or 'null'
                     // 2. Entries where Document UUID is empty or 'null'  
@@ -560,7 +561,7 @@ page 50316 "e-Invoice Submission Log"
                     Rec.SetFilter("Submission UID", '%1|%2', '', 'null');
                     Rec.SetFilter("Document UUID", '%1|%2', '', 'null');
                     Rec.SetFilter(Status, '%1|%2', 'Invalid', 'Submitted');
-                    
+
                     // Use OR logic: entries matching any of the above criteria
                     Message('Filtered to show entries that can be deleted.\Entries without Submission UID, without Document UUID, or with Invalid/Submitted status are now visible.');
                 end;
@@ -596,7 +597,8 @@ page 50316 "e-Invoice Submission Log"
                     Rec.SetRange(Status, 'Submitted');
                     Message('Filtered to show only entries with Submitted status.');
                 end;
-            }            action(ShowDeletionSummary)
+            }
+            action(ShowDeletionSummary)
             {
                 ApplicationArea = All;
                 Caption = 'Show Deletion Summary';
