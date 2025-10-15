@@ -171,11 +171,23 @@ table 50312 "eInvoice Submission Log"
     }
 
     trigger OnDelete()
+    var
+        CanDelete: Boolean;
     begin
-        // Check if both fields have actual values (not empty AND not literal 'null')
-        if ("Submission UID" <> '') and ("Submission UID" <> 'null') and
-           ("Document UUID" <> '') and ("Document UUID" <> 'null') then
-            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID OR without Document UUID (including literal "null" values) can be deleted.\Submission UID: %1\Document UUID: %2',
-                  "Submission UID", "Document UUID");
+        CanDelete := false;
+
+        // Allow deletion if Submission UID is empty or 'null'
+        if ("Submission UID" = '') or ("Submission UID" = 'null') then
+            CanDelete := true
+        // Allow deletion if Document UUID is empty or 'null'
+        else if ("Document UUID" = '') or ("Document UUID" = 'null') then
+            CanDelete := true
+        // Allow deletion if Status is Invalid
+        else if (Status = 'Invalid') then
+            CanDelete := true;
+
+        if not CanDelete then
+            Error('Cannot delete e-invoice submission log entry. Only entries without Submission UID, without Document UUID, or with Invalid status can be deleted.\Submission UID: %1\Document UUID: %2\Status: %3',
+                  "Submission UID", "Document UUID", Status);
     end;
 }

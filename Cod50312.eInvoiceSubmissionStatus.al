@@ -2755,22 +2755,33 @@ codeunit 50312 "eInvoice Submission Status"
         SubmissionLog: Record "eInvoice Submission Log";
         CutoffDate: DateTime;
         DeletableCount: Integer;
+        CanDelete: Boolean;
     begin
         CutoffDate := CreateDateTime(CalcDate(StrSubstNo('-%1D', OlderThanDays), Today), 0T);
 
-        // Set filter for old entries without Submission UID OR without Document UUID (including literal 'null')
-        SubmissionLog.SetFilter("Submission UID", '%1|%2', '', 'null');
-        SubmissionLog.SetFilter("Document UUID", '%1|%2', '', 'null');
+        // Find all old entries and check deletion criteria
         SubmissionLog.SetFilter("Submission Date", '<%1', CutoffDate);
 
-        DeletableCount := SubmissionLog.Count();
+        DeletableCount := 0;
 
-        if DeleteEntries and (DeletableCount > 0) then begin
-            if SubmissionLog.FindSet() then
-                repeat
-                    SubmissionLog.Delete();
-                until SubmissionLog.Next() = 0;
-        end;
+        if SubmissionLog.FindSet() then
+            repeat
+                CanDelete := false;
+
+                // Check if entry can be deleted based on various criteria
+                if (SubmissionLog."Submission UID" = '') or (SubmissionLog."Submission UID" = 'null') then
+                    CanDelete := true
+                else if (SubmissionLog."Document UUID" = '') or (SubmissionLog."Document UUID" = 'null') then
+                    CanDelete := true
+                else if (SubmissionLog.Status = 'Invalid') then
+                    CanDelete := true;
+
+                if CanDelete then begin
+                    DeletableCount += 1;
+                    if DeleteEntries then
+                        SubmissionLog.Delete(true);
+                end;
+            until SubmissionLog.Next() = 0;
 
         exit(DeletableCount);
     end;
