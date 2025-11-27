@@ -163,7 +163,7 @@ page 50300 eInvoiceSetupCard
             {
                 Caption = 'Update Submission Log Amounts';
                 ApplicationArea = All;
-                Image = UpdateCurrencyExchangeRates;
+                Image = RefreshLines;
                 ToolTip = 'Update existing submission log entries to show correct amounts calculated from invoice lines instead of 0.00';
 
                 trigger OnAction()

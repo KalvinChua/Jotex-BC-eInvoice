@@ -2,16 +2,16 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
 {
     fields
     {
-        field(50300; "eInvoice UUID"; Text[100])
-        {
-            Caption = 'e-Invoice UUID';
-            DataClassification = CustomerContent;
-        }
-        field(50301; "eInvoice QR URL"; Text[250])
-        {
-            Caption = 'e-Invoice QR URL';
-            DataClassification = CustomerContent;
-        }
+        // field(50300; "eInvoice UUID"; Text[100])
+        // {
+        //     Caption = 'e-Invoice UUID';
+        //     DataClassification = CustomerContent;
+        // }
+        // field(50301; "eInvoice QR URL"; Text[250])
+        // {
+        //     Caption = 'e-Invoice QR URL';
+        //     DataClassification = CustomerContent;
+        // }
         field(50302; "eInvoice PDF URL"; Text[250])
         {
             Caption = 'e-Invoice PDF URL';
@@ -22,11 +22,11 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
             Caption = 'e-Invoice Submission UID';
             DataClassification = CustomerContent;
         }
-        field(50305; "eInvoice QR Image"; Media)
-        {
-            Caption = 'e-Invoice QR Image';
-            DataClassification = CustomerContent;
-        }
+        // field(50305; "eInvoice QR Image"; Media)
+        // {
+        //     Caption = 'e-Invoice QR Image';
+        //     DataClassification = CustomerContent;
+        // }
         field(50306; "eInvoice Document Type"; Code[2])
         {
             Caption = 'e-Invoice Document Type';
@@ -51,10 +51,10 @@ tableextension 50301 eInvSalesInvoiceExt extends "Sales Invoice Header"
             TableRelation = "eInvoice Version".Code;
             DataClassification = ToBeClassified;
         }
-        field(50310; "eInvoice Validation Status"; Text[50])
-        {
-            Caption = 'e-Invoice Validation Status';
-            DataClassification = ToBeClassified;
-        }
+        // field(50310; "eInvoice Validation Status"; Text[50])
+        // {
+        //     Caption = 'e-Invoice Validation Status';
+        //     DataClassification = ToBeClassified;
+        // }
     }
 }
