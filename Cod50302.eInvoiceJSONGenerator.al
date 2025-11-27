@@ -1,4 +1,4 @@
-/// <summary>
+﻿/// <summary>
 /// Business Central e-Invoice JSON Generator and Azure Function Integration
 /// 
 /// PURPOSE:
@@ -181,7 +181,7 @@ codeunit 50302 "eInvoice JSON Generator"
             exit(false);
 
         if SalesInvoiceHeader.Get(InvoiceNo) then begin
-            SalesInvoiceHeader."eInvoice QR URL" := CopyStr(Url, 1, MaxStrLen(SalesInvoiceHeader."eInvoice QR URL"));
+            SalesInvoiceHeader."eInv QR URL" := CopyStr(Url, 1, MaxStrLen(SalesInvoiceHeader."eInv QR URL"));
             exit(SalesInvoiceHeader.Modify());
         end;
         exit(false);
@@ -202,7 +202,7 @@ codeunit 50302 "eInvoice JSON Generator"
             exit(false);
 
         if SalesInvoiceHeader.Get(InvoiceNo) then begin
-            SalesInvoiceHeader."eInvoice QR Image".ImportStream(InS, FileName);
+            SalesInvoiceHeader."eInv QR Image".ImportStream(InS, FileName);
             exit(SalesInvoiceHeader.Modify());
         end;
         exit(false);
@@ -5532,7 +5532,7 @@ codeunit 50302 "eInvoice JSON Generator"
             exit(false);
 
         if SalesCrMemoHeader.Get(CreditMemoNo) then begin
-            SalesCrMemoHeader."eInvoice QR URL" := CopyStr(Url, 1, MaxStrLen(SalesCrMemoHeader."eInvoice QR URL"));
+            SalesCrMemoHeader."eInv QR URL" := CopyStr(Url, 1, MaxStrLen(SalesCrMemoHeader."eInv QR URL"));
             exit(SalesCrMemoHeader.Modify());
         end;
         exit(false);
@@ -5546,7 +5546,7 @@ codeunit 50302 "eInvoice JSON Generator"
             exit(false);
 
         if SalesCrMemoHeader.Get(CreditMemoNo) then begin
-            SalesCrMemoHeader."eInvoice QR Image".ImportStream(InS, FileName);
+            SalesCrMemoHeader."eInv QR Image".ImportStream(InS, FileName);
             exit(SalesCrMemoHeader.Modify());
         end;
         exit(false);

@@ -1,4 +1,4 @@
-codeunit 50330 "eInvoice QR Manager"
+﻿codeunit 50330 "eInvoice QR Manager"
 {
     Permissions = tabledata "Sales Cr.Memo Header" = M;
 
@@ -12,7 +12,7 @@ codeunit 50330 "eInvoice QR Manager"
         if not SalesCrMemoHeader.Get(CreditMemoNo) then
             exit(false);
 
-        SalesCrMemoHeader."eInvoice QR URL" := CopyStr(Url, 1, MaxStrLen(SalesCrMemoHeader."eInvoice QR URL"));
+        SalesCrMemoHeader."eInv QR URL" := CopyStr(Url, 1, MaxStrLen(SalesCrMemoHeader."eInv QR URL"));
         SalesCrMemoHeader.Modify();
         exit(true);
     end;
@@ -27,7 +27,7 @@ codeunit 50330 "eInvoice QR Manager"
         if not SalesCrMemoHeader.Get(CreditMemoNo) then
             exit(false);
 
-        SalesCrMemoHeader."eInvoice QR Image".ImportStream(InS, FileName);
+        SalesCrMemoHeader."eInv QR Image".ImportStream(InS, FileName);
         SalesCrMemoHeader.Modify();
         exit(true);
     end;

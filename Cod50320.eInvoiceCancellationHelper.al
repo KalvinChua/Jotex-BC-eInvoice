@@ -1,4 +1,4 @@
-codeunit 50320 "eInvoice Cancellation Helper"
+﻿codeunit 50320 "eInvoice Cancellation Helper"
 {
     TableNo = "eInvoice Submission Log";
     Permissions = tabledata "Sales Invoice Header" = RIMD,

@@ -1,4 +1,4 @@
-pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
+﻿pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 {
     layout
     {
@@ -56,7 +56,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Visible = IsJotexCompany;
                     Editable = false; // Read-only - populated by LHDN API response
                 }
-                field("eInvoice UUID"; Rec."eInvoice UUID")
+                field("KMAX eInvoice UUID"; Rec."eInvoice UUID")
                 {
                     ApplicationArea = All;
                     Caption = 'e-Invoice UUID';
@@ -72,7 +72,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     Visible = IsJotexCompany;
                     Editable = false; // Read-only - only updated from LHDN API
                 }
-                field("eInvoice QR URL"; Rec."eInvoice QR URL")
+                field("eInv QR URL"; Rec."eInv QR URL")
                 {
                     ApplicationArea = All;
                     Caption = 'Validation URL';
@@ -81,7 +81,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                     ExtendedDatatype = URL;
                     Editable = false;
                 }
-                field("eInvoice QR Image"; Rec."eInvoice QR Image")
+                field("eInv QR Image"; Rec."eInv QR Image")
                 {
                     ApplicationArea = All;
                     ShowCaption = false;
@@ -124,8 +124,8 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
 
                     trigger OnAction()
                     begin
-                        if Rec."eInvoice QR URL" <> '' then
-                            Hyperlink(Rec."eInvoice QR URL");
+                        if Rec."eInv QR URL" <> '' then
+                            Hyperlink(Rec."eInv QR URL");
                     end;
                 }
                 action(GenerateQrImage)
@@ -145,13 +145,13 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                         InS: InStream;
                         eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
                     begin
-                        if Rec."eInvoice QR URL" = '' then begin
+                        if Rec."eInv QR URL" = '' then begin
                             Message('No validation URL found.');
                             exit;
                         end;
 
                         // First, call the LHDN validation URL to obtain/prime the response
-                        if not HttpClient.Get(Rec."eInvoice QR URL", Response) then begin
+                        if not HttpClient.Get(Rec."eInv QR URL", Response) then begin
                             Message('Failed to reach the validation URL.');
                             exit;
                         end;
@@ -162,7 +162,7 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
                         end;
 
                         // Use a QR generation service to render the QR image from the validation URL
-                        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', Rec."eInvoice QR URL");
+                        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', Rec."eInv QR URL");
 
                         if not HttpClient.Get(QrServiceUrl, Response) then begin
                             Message('Failed to connect to QR service.');
@@ -618,13 +618,13 @@ pageextension 50306 eInvPostedSalesInvoiceExt extends "Posted Sales Invoice"
         // Check if this is EXACTLY JOTEX SDN BHD (case-sensitive exact match)
         IsJotexCompany := CompanyInfo.Get() and (CompanyInfo.Name = 'JOTEX SDN BHD');
         CanCancelEInvoice := IsCancellationAllowed();
-        eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
+        eInvHasQrUrl := Rec."eInv QR URL" <> '';
     end;
 
     trigger OnAfterGetCurrRecord()
     begin
         CanCancelEInvoice := IsCancellationAllowed();
-        eInvHasQrUrl := Rec."eInvoice QR URL" <> '';
+        eInvHasQrUrl := Rec."eInv QR URL" <> '';
     end;
 
     local procedure ExtractLongIdFromApiResponse(ResponseText: Text; DocumentUuid: Text): Text

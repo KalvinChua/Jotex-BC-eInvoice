@@ -1,4 +1,4 @@
-page 50327 "eInvoice QR CM FactBox"
+﻿page 50327 "eInvoice QR CM FactBox"
 {
     PageType = CardPart;
     SourceTable = "Sales Cr.Memo Header";
@@ -9,7 +9,7 @@ page 50327 "eInvoice QR CM FactBox"
     {
         area(content)
         {
-            field("eInvoice QR Image"; Rec."eInvoice QR Image")
+            field("eInv QR Image"; Rec."eInv QR Image")
             {
                 ApplicationArea = All;
                 ShowCaption = false;

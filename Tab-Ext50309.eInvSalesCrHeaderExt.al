@@ -27,31 +27,31 @@ tableextension 50309 eInvSalesCrHeaderExt extends "Sales Cr.Memo Header"
             DataClassification = ToBeClassified;
             InitValue = '1.1';  // Default value
         }
-        // field(50304; "eInvoice UUID"; Text[100])
-        // {
-        //     Caption = 'e-Invoice UUID';
-        //     DataClassification = CustomerContent;
-        // }
+        field(50304; "eInvoice UUID"; Text[100])
+        {
+            Caption = 'KMAX e-Invoice UUID';
+            DataClassification = CustomerContent;
+        }
         field(50305; "eInvoice Submission UID"; Text[100])
         {
             Caption = 'e-Invoice Submission UID';
             DataClassification = CustomerContent;
         }
-        // field(50310; "eInvoice Validation Status"; Text[50])
-        // {
-        //     Caption = 'e-Invoice Validation Status';
-        //     DataClassification = ToBeClassified;
-        // }
-        // field(50311; "eInvoice QR URL"; Text[250])
-        // {
-        //     Caption = 'e-Invoice QR URL';
-        //     DataClassification = CustomerContent;
-        // }
-        // field(50312; "eInvoice QR Image"; Media)
-        // {
-        //     Caption = 'e-Invoice QR Image';
-        //     DataClassification = CustomerContent;
-        // }
+        field(50310; "eInvoice Validation Status"; Text[50])
+        {
+            Caption = 'KMAX e-Invoice Validation Status';
+            DataClassification = ToBeClassified;
+        }
+        field(50311; "eInvoice QR URL"; Text[250])
+        {
+            Caption = 'KMAX e-Invoice QR URL';
+            DataClassification = CustomerContent;
+        }
+        field(50312; "eInvoice QR Image"; Media)
+        {
+            Caption = 'KMAX e-Invoice QR Image';
+            DataClassification = CustomerContent;
+        }
     }
     trigger OnInsert()
     begin
