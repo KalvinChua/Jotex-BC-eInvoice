@@ -56,6 +56,7 @@ This guide will help you understand and use the MyInvois LHDN e-Invoice system i
 ### What is an e-Invoice?
 
 An e-Invoice is a digital invoice that complies with Malaysian tax regulations. Instead of paper invoices, e-Invoices are:
+
 - Submitted electronically to LHDN
 - Digitally signed for authenticity
 - Automatically validated
@@ -88,6 +89,7 @@ An e-Invoice is a digital invoice that complies with Malaysian tax regulations. 
 Before using the system, ensure these are completed:
 
 #### ✅ Company Information Setup
+
 - [ ] TIN (Tax Identification Number)
 - [ ] Business Registration Number
 - [ ] Complete company address with state code
@@ -95,12 +97,14 @@ Before using the system, ensure these are completed:
 - [ ] Contact details
 
 #### ✅ System Configuration
+
 - [ ] Azure Function URL configured
 - [ ] Environment set (PREPROD for testing, PRODUCTION for live)
 - [ ] LHDN API credentials
 - [ ] Digital signature certificate
 
 #### ✅ Master Data Setup
+
 - [ ] State codes configured
 - [ ] Country codes configured
 - [ ] Currency codes set up
@@ -114,7 +118,8 @@ Before using the system, ensure these are completed:
    - Or navigate: Departments → Administration → Application Setup → eInvoice Setup
 
 2. **Key Settings to Configure**
-   ```
+
+   ```text
    General Tab:
    - Environment: Choose PREPROD or PRODUCTION
    - Azure Function URL: Your signing service endpoint
@@ -133,19 +138,23 @@ Before using the system, ensure these are completed:
 ### Creating e-Invoice Ready Documents
 
 #### Step 1: Create Sales Invoice/Order
+
 1. Go to **Sales & Marketing → Sales → Sales Orders** or **Sales Invoices**
 2. Create new document
 3. Select customer (must be e-Invoice enabled)
 4. Add lines with proper item classifications
 
 #### Step 2: Verify e-Invoice Fields
+
 Before posting, check these fields are populated:
+
 - **eInvoice Document Type**: Automatically set based on document type
 - **eInvoice Currency Code**: MYR or customer's currency
 - **eInvoice Version**: 1.1
 - **Customer TIN**: Must be validated
 
 #### Step 3: Post and Submit
+
 1. Click **Post** or **Post and Send**
 2. After posting, go to the posted document
 3. Click **Sign & Submit to LHDN**
@@ -154,6 +163,7 @@ Before posting, check these fields are populated:
 ### Processing Different Document Types
 
 #### Standard Invoice (Type 01)
+
 ```al
 // Automatic process
 1. Create sales invoice
@@ -165,6 +175,7 @@ Before posting, check these fields are populated:
 ```
 
 #### Credit Note (Type 02)
+
 ```al
 // For returns or adjustments
 1. Create credit memo
@@ -175,6 +186,7 @@ Before posting, check these fields are populated:
 ```
 
 #### Self-Billed Invoice (Type 11)
+
 ```al
 // When customer manages billing
 1. Customer creates and sends invoice data
@@ -191,12 +203,14 @@ Before posting, check these fields are populated:
 ### Setting Up Customers for e-Invoicing
 
 #### Enable e-Invoice for Customer
+
 1. Open **Customer Card**
 2. Go to **e-Invoice FastTab**
 3. Check **"Requires e-Invoice"**
 4. Fill required fields:
 
-**Required Information:**
+#### Required Information
+
 - **TIN Number**: Customer's tax ID (12 digits for companies)
 - **ID Type**: NRIC, BRN, PASSPORT, or ARMY
 - **Address**: Complete with state and country codes
@@ -204,6 +218,7 @@ Before posting, check these fields are populated:
 - **Country Code**: "MYS" for Malaysia
 
 #### TIN Validation Process
+
 1. Enter customer's TIN
 2. Click **"Validate TIN"** action
 3. System calls LHDN validation API
@@ -226,23 +241,27 @@ Before posting, check these fields are populated:
 ### Invoice Processing Workflow
 
 #### 1. Document Creation
-```
+
+```text
 Sales Order/Invoice → Add Lines → Verify Fields → Post Document
 ```
 
 #### 2. e-Invoice Generation
-```
+
+```text
 Posted Document → Generate UBL JSON → Digital Sign → Submit to LHDN
 ```
 
 #### 3. Status Monitoring
-```
+
+```text
 Submission → Processing → Accepted/Rejected → Status Update
 ```
 
 ### Batch Processing
 
 #### Export Multiple Documents
+
 1. Go to **Reports → eInvoice Reports → Export Posted Sales Batch eInv**
 2. Set filters:
    - Date range
@@ -253,7 +272,9 @@ Submission → Processing → Accepted/Rejected → Status Update
 5. Process through external tools if needed
 
 #### Bulk Status Updates
+
 Use these functions for bulk operations:
+
 - **Bulk TIN Validation**: Validate multiple customers
 - **Bulk Field Updates**: Update e-Invoice fields across documents
 - **Bulk Submissions**: Submit multiple documents at once
@@ -271,6 +292,7 @@ Use these functions for bulk operations:
 | "API Timeout" | Network/LHDN issue | Retry submission later |
 
 #### Recovery Steps
+
 1. **Check Error Details**: Review submission log
 2. **Verify Data**: Ensure all required fields complete
 3. **Retry Submission**: Use "Sign & Submit" again
@@ -283,6 +305,7 @@ Use these functions for bulk operations:
 ### Status Tracking
 
 #### Document Status Values
+
 - **"Not Submitted"**: Document created but not sent
 - **"Pending"**: Submitted, awaiting LHDN processing
 - **"Submitted"**: Successfully received by LHDN
@@ -291,6 +314,7 @@ Use these functions for bulk operations:
 - **"Cancelled"**: Document cancelled in LHDN
 
 #### How to Check Status
+
 1. Open posted document
 2. Look at **"eInvoice Validation Status"** field
 3. Click **"View Submission Log"** for details
@@ -299,6 +323,7 @@ Use these functions for bulk operations:
 ### Reporting and Analytics
 
 #### Available Reports
+
 1. **e-Invoice Submission Report**
    - Date range submissions
    - Success/failure rates
@@ -315,6 +340,7 @@ Use these functions for bulk operations:
    - System health check
 
 #### Key Metrics to Monitor
+
 - **Submission Success Rate**: Target > 95%
 - **Average Processing Time**: Should be < 5 minutes
 - **Error Rate by Type**: Track and reduce common errors
@@ -327,34 +353,43 @@ Use these functions for bulk operations:
 ### Quick Problem Solver
 
 #### Issue: "Sign & Submit" button not visible
-**Possible Causes:**
+
+#### Possible Causes
+
 - Customer not marked for e-Invoice
 - Missing required fields
 - User permissions issue
 
-**Solutions:**
+#### Solutions
+
 1. Check customer "Requires e-Invoice" flag
 2. Verify all mandatory fields are filled
 3. Confirm user has e-Invoice permissions
 
 #### Issue: Submission fails with "Invalid Structure"
-**Possible Causes:**
+
+#### Possible Causes
+
 - Missing UBL namespaces
 - Incorrect document type
 - Invalid JSON format
 
-**Solutions:**
+#### Solutions
+
 1. Check system version is current
 2. Verify document type codes
 3. Review submission log for details
 
 #### Issue: Azure Function connection failed
-**Possible Causes:**
+
+#### Possible Causes
+
 - Wrong Azure Function URL
 - Network connectivity issues
 - Authentication problems
 
-**Solutions:**
+#### Solutions
+
 1. Verify Azure Function URL in setup
 2. Check network connectivity
 3. Validate authentication tokens
@@ -362,12 +397,14 @@ Use these functions for bulk operations:
 ### Getting Help
 
 #### Self-Service Resources
+
 1. **Check Submission Logs**: Detailed error information
 2. **Review TIN Validation Logs**: Customer TIN issues
 3. **Test Environment**: Use PREPROD for testing
 4. **User Documentation**: This guide and developer docs
 
 #### When to Contact Support
+
 - System configuration issues
 - Certificate/signature problems
 - LHDN API connectivity issues
@@ -378,24 +415,28 @@ Use these functions for bulk operations:
 ## Best Practices
 
 ### Document Management
+
 - **Always link credit memos** to original invoices when possible
 - **Use correct document types** (01, 02, 03, 04, 11-14)
 - **Complete all fields** before posting
 - **Validate customer TIN** before creating documents
 
 ### System Maintenance
+
 - **Regular backups** of Business Central data
 - **Monitor submission logs** daily
 - **Update customer information** when it changes
 - **Test in PREPROD** before production changes
 
 ### Performance Optimization
+
 - **Batch process** multiple documents together
 - **Use background processing** for large volumes
 - **Monitor API timeouts** and adjust accordingly
 - **Cache frequently used data** (company info, setup)
 
 ### Compliance and Audit
+
 - **Maintain complete audit trail** of all submissions
 - **Regular compliance reviews** with LHDN requirements
 - **Document all processes** and procedures
@@ -406,21 +447,25 @@ Use these functions for bulk operations:
 ## Support and Resources
 
 ### Internal Support
+
 - **System Administrator**: For configuration issues
 - **IT Support**: For technical problems
 - **Business Central Support**: For platform issues
 
 ### External Resources
-- **LHDN MyInvois Portal**: https://myinvois.hasil.gov.my/
-- **LHDN SDK Documentation**: https://sdk.myinvois.hasil.gov.my/
+
+- **LHDN MyInvois Portal**: <https://myinvois.hasil.gov.my/>
+- **LHDN SDK Documentation**: <https://sdk.myinvois.hasil.gov.my/>
 - **Microsoft Learn**: Business Central e-Invoice documentation
 
 ### Emergency Contacts
+
 - **LHDN Support Hotline**: Contact for urgent LHDN issues
 - **Certificate Authority**: For digital signature problems
 - **Azure Support**: For Azure Function issues
 
 ### Training Resources
+
 - **This User Guide**: Complete reference manual
 - **Developer Guide**: Technical implementation details
 - **LHDN Training Materials**: Official government training
@@ -431,18 +476,21 @@ Use these functions for bulk operations:
 ## Quick Reference
 
 ### Keyboard Shortcuts
+
 - **Ctrl+F**: Search for customers/documents
 - **F5**: Refresh page
 - **Ctrl+Enter**: Save and close
 - **Alt+F2**: Open page inspection
 
 ### Important Field Names
+
 - **"eInvoice Validation Status"**: Current submission status
 - **"eInvoice Document Type"**: LHDN document type code
 - **"eInvoice Currency Code"**: Transaction currency
 - **"Requires e-Invoice"**: Customer e-Invoice flag
 
 ### Status Indicators
+
 - 🟢 **Green**: Successfully submitted
 - 🟡 **Yellow**: Pending processing
 - 🔴 **Red**: Failed or rejected

@@ -318,13 +318,13 @@ end;
 #### Reference Implementation
 
 **Note**: The following examples are based on the reference implementation available at:
-**GitHub Repository**: https://github.com/acutraaq/eInvAzureSign
+**GitHub Repository**: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 
 This repository contains the actual Azure Function code used for document signing in the MyInvois LHDN e-Invoice system. Please refer to this repository for the most up-to-date implementation details.
 
 #### Document Signing Function (Based on Reference Implementation)
 ```csharp
-// Based on: https://github.com/acutraaq/eInvAzureSign
+// Based on: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -388,7 +388,7 @@ public static class SignDocumentFunction
 
     private static async Task<string> SignDocumentWithCertificate(string unsignedJson)
     {
-        // Implementation based on: https://github.com/acutraaq/eInvAzureSign
+        // Implementation based on: https://github.com/KalvinChua/Jotex-eInvoice-Azure
         // Load certificate from secure storage or local environment
         var certificate = LoadCertificate();
 
@@ -408,7 +408,7 @@ public static class SignDocumentFunction
 
     private static X509Certificate2 LoadCertificate()
     {
-        // Refer to: https://github.com/acutraaq/eInvAzureSign
+        // Refer to: https://github.com/KalvinChua/Jotex-eInvoice-Azure
         // Load certificate from secure storage or environment
         var certPassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
         var certData = Convert.FromBase64String(Environment.GetEnvironmentVariable("CERTIFICATE_DATA"));
@@ -1512,3 +1512,4 @@ end;
 **Next Review**: March 2025
 
 *This API integration guide provides comprehensive examples and procedures for integrating with the MyInvois LHDN e-Invoice system. Use the testing procedures to validate your integrations before going live.*
+

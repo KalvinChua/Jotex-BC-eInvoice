@@ -324,7 +324,7 @@ end;
 #### Reference Implementation
 
 **Important**: For actual implementation details and working code examples, refer to the GitHub repository:
-**Repository**: https://github.com/acutraaq/eInvAzureSign
+**Repository**: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 
 This repository contains the production-ready Azure Function code for document signing and LHDN integration.
 
@@ -639,4 +639,5 @@ end;
 ## References
 - SDK samples and specs: [Document Types](https://sdk.myinvois.hasil.gov.my/codes/e-invoice-types/), [Invoice v1.1](https://sdk.myinvois.hasil.gov.my/documents/invoice-v1-1/), [Credit v1.1](https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/), [Debit v1.1](https://sdk.myinvois.hasil.gov.my/documents/debit-v1-1/)
  
+
 

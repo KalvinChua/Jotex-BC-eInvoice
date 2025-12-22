@@ -54,7 +54,7 @@ Complete these tasks in your first week:
 - [ ] **Source Code Access**
   - Clone repository: `git clone <repo-url>`
   - Verify you can build the project locally
-  - Request access to Azure DevOps (if applicable)
+  - Ensure you have access to the GitHub organization and required repositories
 
 - [ ] **Environment Access**
   - Business Central Sandbox environment credentials
@@ -241,7 +241,7 @@ ORDER BY [Submission Date] DESC;
 
 ### 4.1 System Architecture Diagram
 
-```
+```plaintext
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Business Central                             │
 │                                                                  │
@@ -269,7 +269,7 @@ ORDER BY [Submission Date] DESC;
 
 #### 4.2.1 Invoice Submission Flow
 
-```
+```text
 1. User Action
    └─▶ User posts Sales Invoice OR clicks "Sign & Submit to LHDN"
 
@@ -473,7 +473,7 @@ field(80; "Environment"; Enum "eInvoice Environment") { }
 
 #### User Workflow
 
-```
+```text
 1. Create Sales Invoice
    └─▶ Ensure customer has "Requires e-Invoice" = Yes
 
@@ -493,7 +493,7 @@ field(80; "Environment"; Enum "eInvoice Environment") { }
 
 #### System Workflow (Behind the Scenes)
 
-```
+```text
 1. Posting Trigger
    └─▶ Codeunit 80 "Sales-Post" (standard BC)
    └─▶ Event: OnAfterPostSalesDoc
@@ -524,7 +524,7 @@ field(80; "Environment"; Enum "eInvoice Environment") { }
 
 #### Workflow
 
-```
+```text
 1. Create Credit Memo
    └─▶ Link to original invoice via "Applies-to Doc. No." (recommended)
 
@@ -592,7 +592,7 @@ end;
 
 #### Scenario 1: Standard Invoice
 
-```
+```text
 Given: Customer with valid TIN and complete address
 When: Post sales invoice with 1 item line
 Then: 
@@ -605,7 +605,7 @@ Then:
 
 #### Scenario 2: Credit Note with Reference
 
-```
+```text
 Given: Posted invoice already submitted to LHDN
 When: Create credit memo with "Applies-to Doc. No." = invoice number
 Then:
@@ -615,7 +615,7 @@ Then:
 
 #### Scenario 3: Invalid Customer Data
 
-```
+```text
 Given: Customer with missing TIN
 When: Attempt to submit invoice
 Then:
@@ -626,7 +626,7 @@ Then:
 
 #### Scenario 4: Network Failure
 
-```
+```text
 Given: Azure Function is unreachable
 When: Attempt to submit invoice
 Then:
@@ -973,7 +973,7 @@ Check `Cod50302` for these debug procedures:
 
 #### Alerting Setup (Recommended)
 
-```
+```text
 Alert 1: Submission Failure Rate >5% (1 hour window)
   └─▶ Notify: Development team
   └─▶ Action: Investigate immediately
@@ -1014,7 +1014,7 @@ Alert 3: Certificate Expiry <30 days
 #### External Resources
 
 - **LHDN SDK**: <https://sdk.myinvois.hasil.gov.my/>
-- **Azure Function Reference**: <https://github.com/acutraaq/eInvAzureSign>
+- **Azure Function Reference**: <https://github.com/KalvinChua/Jotex-eInvoice-Azure>
 - **UBL 2.1 Specification**: <https://docs.oasis-open.org/ubl/UBL-2.1.html>
 
 ---
@@ -1023,7 +1023,7 @@ Alert 3: Certificate Expiry <30 days
 
 ### Key File Locations
 
-```
+```text
 Jotex-BC-eInvoice/
 ├── Cod50302.eInvoiceJSONGenerator.al    # Main logic
 ├── Cod50310.eInvoiceAzureFunctionClient.al
@@ -1073,6 +1073,7 @@ Cod50302.DownloadAzureFunctionPayloadForDebugging(DocType, DocNo, Setup)
 
 ---
 
-**End of Handover Documentation**
+### End of Handover Documentation
 
 > **Next Steps**: Complete the [Project Takeover Checklist](#2-project-takeover-checklist) and schedule knowledge transfer sessions with the previous developer.
+

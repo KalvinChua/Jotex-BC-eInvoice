@@ -26,17 +26,20 @@ This guide provides comprehensive instructions for installing, configuring, and 
 ### System Requirements
 
 #### Business Central Environment
+
 - **Version**: Microsoft Dynamics 365 Business Central 2022 Wave 2 or later
 - **License**: Valid Business Central license with development capabilities
 - **Permissions**: System Administrator access for installation and configuration
 - **Database**: SQL Server or Azure SQL Database
 
 #### Hardware Requirements
+
 - **Memory**: Minimum 8GB RAM (16GB recommended)
 - **Storage**: 10GB free space for extension and logs
 - **Network**: Stable internet connection for LHDN API communication
 
 #### Software Prerequisites
+
 - **Development Tools**: Visual Studio Code with AL Language extension
 - **Azure Tools**: Azure CLI, Azure PowerShell (for Azure Function deployment)
 - **SSL Certificate**: Valid SSL certificate for Azure Function HTTPS endpoints
@@ -45,16 +48,19 @@ This guide provides comprehensive instructions for installing, configuring, and 
 ### Required Accounts and Access
 
 #### LHDN MyInvois Portal
+
 - **LHDN Account**: Registered business account with MyInvois
 - **API Access**: Approved API access with client credentials
 - **Production Access**: Separate credentials for PREPROD and PRODUCTION environments
 
 #### Azure Subscription
+
 - **Azure Account**: Valid Azure subscription with sufficient credits
 - **Resource Group**: Dedicated resource group for e-Invoice components
 - **App Service Plan**: Basic or higher tier for Azure Functions
 
 #### Business Central Access
+
 - **Administrator Access**: Full system administrator permissions
 - **Development License**: For deploying and testing extensions
 - **Sandbox Environment**: For testing before production deployment
@@ -66,30 +72,35 @@ This guide provides comprehensive instructions for installing, configuring, and 
 ### Environment Preparation
 
 #### ✅ Development Environment
+
 - [ ] Business Central sandbox environment available
 - [ ] Development license activated
 - [ ] Visual Studio Code with AL extension installed
 - [ ] Git repository set up for version control
 
 #### ✅ Azure Environment
+
 - [ ] Azure subscription active and accessible
 - [ ] Resource group created for e-Invoice components
 - [ ] Azure Function App service plan provisioned
 - [ ] Storage account configured for Function App
 
 #### ✅ LHDN Preparation
+
 - [ ] LHDN MyInvois account registered and verified
 - [ ] API access requested and approved
 - [ ] PREPROD environment credentials obtained
 - [ ] PRODUCTION environment access planned
 
 #### ✅ Security and Certificates
+
 - [ ] Digital signature certificate (P12) obtained
 - [ ] Certificate password securely stored
 - [ ] SSL certificate for Azure Function procured
 - [ ] Secure key management solution identified
 
 #### ✅ Team Coordination
+
 - [ ] IT infrastructure team aligned
 - [ ] Business users identified for testing
 - [ ] Support team briefed on new system
@@ -98,12 +109,14 @@ This guide provides comprehensive instructions for installing, configuring, and 
 ### Risk Assessment
 
 #### Potential Risks
+
 1. **API Rate Limiting**: LHDN API has rate limits that could affect bulk processing
 2. **Certificate Expiry**: Digital certificates expire and need renewal
 3. **Network Connectivity**: Internet connectivity issues could disrupt submissions
 4. **Data Volume**: Large transaction volumes may require performance optimization
 
 #### Mitigation Strategies
+
 - Implement retry logic with exponential backoff
 - Set up certificate expiry monitoring and alerts
 - Configure redundant network connections
@@ -116,6 +129,7 @@ This guide provides comprehensive instructions for installing, configuring, and 
 ### Method 1: Manual Installation via Extension Management
 
 #### Step 1: Prepare Extension Package
+
 ```powershell
 # Create extension package
 # This would typically be done during development
@@ -123,6 +137,7 @@ Publish-NAVApp -ServerInstance $ServerInstance -Path ".\MyInvoisLHDN.app" -SkipV
 ```
 
 #### Step 2: Install via Business Central Web Client
+
 1. **Access Extension Management**
    - Open Business Central web client
    - Navigate to **Extension Management** (search for "Extensions")
@@ -146,6 +161,7 @@ Publish-NAVApp -ServerInstance $ServerInstance -Path ".\MyInvoisLHDN.app" -SkipV
 ### Method 2: PowerShell Installation
 
 #### Automated Installation Script
+
 ```powershell
 # PowerShell installation script
 param(
@@ -174,6 +190,7 @@ try {
 ```
 
 #### Batch Installation for Multiple Environments
+
 ```powershell
 # Install across multiple environments
 $environments = @("Sandbox", "Test", "Production")
@@ -185,54 +202,41 @@ foreach ($env in $environments) {
 }
 ```
 
-### Method 3: Azure DevOps Pipeline
+### Method 3: GitHub Actions Pipeline
 
-#### CI/CD Pipeline Configuration
+#### CI/CD Workflow Configuration
+
 ```yaml
-# azure-pipelines.yml
-trigger:
-  branches:
-    include:
-    - main
+# .github/workflows/build-deploy.yml
+name: Build and Deploy Extension
 
-stages:
-- stage: Build
-  jobs:
-  - job: BuildExtension
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
     steps:
-    - task: PowerShell@2
-      inputs:
-        targetType: 'inline'
-        script: |
-          # Build extension
-          # Compile AL code
-          # Create .app package
-
-- stage: Test
-  jobs:
-  - job: TestExtension
+      - uses: actions/checkout@v3
+      
+      - name: Build AL Extension
+        # Use appropriate AL build actions or scripts
+        run: |
+          # Build logic here
+          # Generate .app package
+          
+  deploy-sandbox:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    environment: Sandbox
     steps:
-    - task: PowerShell@2
-      inputs:
-        targetType: 'inline'
-        script: |
-          # Run automated tests
-          # Validate extension package
-
-- stage: Deploy
-  jobs:
-  - deployment: DeployToSandbox
-    environment: 'Sandbox'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: PowerShell@2
-            inputs:
-              targetType: 'inline'
-              script: |
-                # Deploy to sandbox
-                # Run smoke tests
+      - name: Deploy to BC Sandbox
+        run: |
+          # Deployment scripts to BC
 ```
 
 ---
@@ -244,6 +248,7 @@ stages:
 The Azure Function serves as the secure bridge between Business Central and LHDN, handling digital signing and API communication.
 
 #### Required Components
+
 - **Function App**: Hosts the signing service
 - **Storage Solutions**: For function logs and temporary files
 - **Certificate Management**: For secure certificate storage and access
@@ -252,12 +257,14 @@ The Azure Function serves as the secure bridge between Business Central and LHDN
 ### Step-by-Step Azure Setup
 
 #### 1. Create Resource Group
+
 ```azurecli
 # Create dedicated resource group
 az group create --name "rg-myinvois-prod" --location "Southeast Asia"
 ```
 
 #### 2. Create Storage Account
+
 ```azurecli
 # Create storage account for Function App
 az storage account create \
@@ -269,6 +276,7 @@ az storage account create \
 ```
 
 #### 3. Create Function App
+
 ```azurecli
 # Create Function App
 az functionapp create \
@@ -283,6 +291,7 @@ az functionapp create \
 ```
 
 #### 4. Configure Application Settings
+
 ```azurecli
 # Set environment variables
 az functionapp config appsettings set \
@@ -296,17 +305,19 @@ az functionapp config appsettings set \
 ```
 
 #### 5. Configure Digital Certificate
+
 ```bash
 # Configure certificate access for Azure Function
 # Certificate should be securely stored and accessible to the function
-# Implementation details based on: https://github.com/acutraaq/eInvAzureSign
+# Implementation details based on: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 # Follow your organization's certificate management procedures
 ```
 
 ### Azure Function Code Deployment
 
 #### Function Structure
-```
+
+```text
 MyInvoisAzureFunction/
 ├── host.json
 ├── local.settings.json
@@ -319,6 +330,7 @@ MyInvoisAzureFunction/
 ```
 
 #### Sample Function Implementation
+
 ```csharp
 // run.csx - Document Signing Function
 #r "Newtonsoft.Json"
@@ -368,6 +380,7 @@ public static async Task<IActionResult> Run(HttpRequest req, ILogger log)
 ### Security Configuration
 
 #### Network Security
+
 ```azurecli
 # Configure VNet integration
 az functionapp vnet-integration add \
@@ -378,6 +391,7 @@ az functionapp vnet-integration add \
 ```
 
 #### Access Restrictions
+
 ```azurecli
 # Restrict access to specific IP ranges
 az functionapp config access-restriction add \
@@ -396,8 +410,9 @@ az functionapp config access-restriction add \
 ### LHDN Portal Registration
 
 #### Step 1: Register for MyInvois
+
 1. **Visit LHDN Portal**
-   - Go to https://myinvois.hasil.gov.my/
+   - Go to <https://myinvois.hasil.gov.my/>
    - Click **"Register"** for new account
 
 2. **Company Registration**
@@ -412,6 +427,7 @@ az functionapp config access-restriction add \
    - Submit business justification
 
 #### Step 2: Obtain API Credentials
+
 ```json
 // Sample API credentials structure
 {
@@ -425,6 +441,7 @@ az functionapp config access-restriction add \
 ### Environment Configuration
 
 #### PREPROD Environment Setup
+
 ```json
 // PREPROD configuration
 {
@@ -437,6 +454,7 @@ az functionapp config access-restriction add \
 ```
 
 #### PRODUCTION Environment Setup
+
 ```json
 // PRODUCTION configuration
 {
@@ -451,6 +469,7 @@ az functionapp config access-restriction add \
 ### API Testing
 
 #### Test API Connectivity
+
 ```bash
 # Test LHDN API connectivity
 curl -X GET "https://preprod-api.myinvois.hasil.gov.my/api/v1.0/ping" \
@@ -459,6 +478,7 @@ curl -X GET "https://preprod-api.myinvois.hasil.gov.my/api/v1.0/ping" \
 ```
 
 #### Validate API Credentials
+
 ```bash
 # Test authentication
 curl -X POST "https://preprod-api.myinvois.hasil.gov.my/connect/token" \
@@ -473,11 +493,13 @@ curl -X POST "https://preprod-api.myinvois.hasil.gov.my/connect/token" \
 ### Business Central Configuration
 
 #### 1. Access eInvoice Setup
+
 1. **Open Business Central**
 2. **Search for "eInvoice Setup Card"**
 3. **Configure General Settings**
 
 #### 2. General Configuration
+
 ```al
 // Required settings in eInvoice Setup
 General Tab:
@@ -496,6 +518,7 @@ API Configuration Tab:
 ```
 
 #### 3. Advanced Settings
+
 ```al
 // Advanced configuration options
 Processing Tab:
@@ -514,6 +537,7 @@ Security Tab:
 ### Permission Setup
 
 #### User Permissions
+
 ```al
 // Permission set for e-Invoice users
 Permission Set: "EINVOICE-USER"
@@ -526,6 +550,7 @@ Permissions:
 ```
 
 #### Administrator Permissions
+
 ```al
 // Permission set for administrators
 Permission Set: "EINVOICE-ADMIN"
@@ -544,6 +569,7 @@ Permissions:
 ### Company Information Setup
 
 #### Required Company Fields
+
 1. **Open Company Information Card**
 2. **Fill e-Invoice Fields**:
    - TIN Number: Company tax identification
@@ -553,6 +579,7 @@ Permissions:
    - Contact Information: Email and phone
 
 #### Address Validation
+
 ```al
 // Address validation checklist
 - Address Line 1: Required, max 100 characters
@@ -565,6 +592,7 @@ Permissions:
 ### Customer Setup
 
 #### Bulk Customer Setup
+
 ```al
 // Codeunit for bulk customer e-Invoice setup
 procedure SetupCustomersForEInvoice()
@@ -594,6 +622,7 @@ end;
 ```
 
 #### Customer Validation
+
 ```al
 // Validate customer e-Invoice readiness
 procedure ValidateCustomerEInvoiceReadiness(CustomerNo: Code[20]): Boolean
@@ -629,6 +658,7 @@ end;
 ### Item Classification Setup
 
 #### MSIC Code Setup
+
 ```al
 // Setup Malaysian Standard Industrial Classification codes
 procedure ImportMSICCodes()
@@ -648,6 +678,7 @@ end;
 ```
 
 #### Item Classification Process
+
 1. **Review Item List**
 2. **Assign PTC Codes** (Product Tax Category)
 3. **Assign CLASS Codes** (Classification)
@@ -661,6 +692,7 @@ end;
 ### Test Environment Setup
 
 #### Create Test Data
+
 ```al
 // Create comprehensive test data
 procedure CreateTestScenario()
@@ -684,6 +716,7 @@ end;
 ```
 
 #### Test Scenarios
+
 1. **Basic Invoice Submission**
 2. **Credit Note Processing**
 3. **Bulk Document Processing**
@@ -693,6 +726,7 @@ end;
 ### Validation Procedures
 
 #### Pre-Production Checklist
+
 - [ ] All test scenarios pass
 - [ ] Performance benchmarks met
 - [ ] Error handling validated
@@ -700,6 +734,7 @@ end;
 - [ ] User acceptance testing passed
 
 #### Automated Testing
+
 ```al
 // Automated test runner
 [Test]
@@ -727,6 +762,7 @@ end;
 ### Performance Testing
 
 #### Load Testing Setup
+
 ```powershell
 # Load testing with PowerShell
 $testCases = 1..100
@@ -740,6 +776,7 @@ $testCases | ForEach-Object -Parallel {
 ```
 
 #### Performance Benchmarks
+
 - **Single Document**: < 5 seconds
 - **Batch Processing**: < 30 seconds for 50 documents
 - **API Response Time**: < 2 seconds average
@@ -752,6 +789,7 @@ $testCases | ForEach-Object -Parallel {
 ### Production Readiness Checklist
 
 #### ✅ System Readiness
+
 - [ ] All configurations validated
 - [ ] Test environment fully tested
 - [ ] Performance benchmarks achieved
@@ -759,18 +797,21 @@ $testCases | ForEach-Object -Parallel {
 - [ ] Backup procedures documented
 
 #### ✅ Data Readiness
+
 - [ ] All customers configured for e-Invoice
 - [ ] Item classifications complete
 - [ ] Master data validated
 - [ ] Historical data migration tested
 
 #### ✅ Team Readiness
+
 - [ ] Users trained on new processes
 - [ ] Support team briefed
 - [ ] Documentation distributed
 - [ ] Communication plan ready
 
 #### ✅ Infrastructure Readiness
+
 - [ ] Production Azure Function deployed
 - [ ] LHDN PRODUCTION credentials configured
 - [ ] Network connectivity verified
@@ -779,18 +820,21 @@ $testCases | ForEach-Object -Parallel {
 ### Go-Live Execution Plan
 
 #### Phase 1: Soft Launch (Week 1)
+
 - Deploy to production environment
 - Process low-volume test transactions
 - Monitor system performance
 - Train additional users
 
 #### Phase 2: Gradual Rollout (Week 2)
+
 - Increase transaction volume gradually
 - Process real customer invoices
 - Monitor error rates and performance
 - Fine-tune configurations
 
 #### Phase 3: Full Production (Week 3+)
+
 - Full production go-live
 - Monitor system health continuously
 - Handle support requests
@@ -799,6 +843,7 @@ $testCases | ForEach-Object -Parallel {
 ### Rollback Plan
 
 #### Emergency Rollback Procedures
+
 1. **Stop Processing**: Disable auto-submission
 2. **Switch Environment**: Point to backup system if available
 3. **Manual Processing**: Process critical documents manually
@@ -806,6 +851,7 @@ $testCases | ForEach-Object -Parallel {
 5. **Communication**: Notify stakeholders of rollback
 
 #### Rollback Checklist
+
 - [ ] Identify rollback trigger conditions
 - [ ] Document rollback procedures
 - [ ] Test rollback process
@@ -819,12 +865,14 @@ $testCases | ForEach-Object -Parallel {
 ### Monitoring and Maintenance
 
 #### Key Metrics to Monitor
+
 - **Submission Success Rate**: Target > 98%
 - **Average Processing Time**: Track trends
 - **Error Rate by Type**: Monitor and address
 - **System Availability**: 99.9% uptime target
 
 #### Regular Maintenance Tasks
+
 - **Daily**: Check submission logs and error rates
 - **Weekly**: Review system performance and capacity
 - **Monthly**: Update certificates and security patches
@@ -833,18 +881,21 @@ $testCases | ForEach-Object -Parallel {
 ### Support Procedures
 
 #### Tier 1 Support (Help Desk)
+
 - Basic user questions and guidance
 - Password resets and access issues
 - Simple configuration changes
 - Log analysis and basic troubleshooting
 
 #### Tier 2 Support (Technical Team)
+
 - Complex technical issues
 - System configuration changes
 - Integration troubleshooting
 - Performance optimization
 
 #### Tier 3 Support (Development Team)
+
 - Code fixes and patches
 - System upgrades and enhancements
 - Root cause analysis
@@ -853,12 +904,14 @@ $testCases | ForEach-Object -Parallel {
 ### Training and Documentation
 
 #### User Training Materials
+
 - **Quick Start Guide**: 30-minute overview
 - **Detailed User Guide**: Comprehensive reference
 - **Video Tutorials**: Step-by-step process videos
 - **FAQ Document**: Common questions and answers
 
 #### Administrator Training
+
 - **System Administration Guide**: Configuration and maintenance
 - **Troubleshooting Guide**: Problem resolution procedures
 - **API Documentation**: Integration and customization
@@ -867,12 +920,14 @@ $testCases | ForEach-Object -Parallel {
 ### Continuous Improvement
 
 #### Feedback Collection
+
 - Regular user surveys
 - Support ticket analysis
 - Performance monitoring
 - Feature request tracking
 
 #### System Enhancement
+
 - Quarterly feature releases
 - Performance optimization
 - Security updates
@@ -883,16 +938,19 @@ $testCases | ForEach-Object -Parallel {
 ## Emergency Contacts
 
 ### Technical Support
-- **Primary Support**: IT Help Desk - support@company.com
-- **Escalation**: System Administrator - admin@company.com
-- **Development Team**: dev-team@company.com
+
+- **Primary Support**: IT Help Desk - <support@company.com>
+- **Escalation**: System Administrator - <admin@company.com>
+- **Development Team**: <dev-team@company.com>
 
 ### External Support
-- **LHDN Support**: https://myinvois.hasil.gov.my/support
+
+- **LHDN Support**: <https://myinvois.hasil.gov.my/support>
 - **Microsoft Support**: Business Central support portal
 - **Azure Support**: Azure portal support
 
 ### After-Hours Support
+
 - **Emergency Hotline**: +60-XXX-XXXXXXX
 - **On-Call Engineer**: Available 24/7 for critical issues
 
@@ -903,3 +961,4 @@ $testCases | ForEach-Object -Parallel {
 **Next Review**: March 2025
 
 *This installation guide provides comprehensive instructions for deploying the MyInvois LHDN e-Invoice system. Ensure all prerequisites are met before beginning installation. Contact your system administrator if you need assistance.*
+

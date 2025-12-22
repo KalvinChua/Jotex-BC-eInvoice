@@ -77,7 +77,7 @@ This comprehensive documentation suite provides complete coverage of the MyInvoi
 ## System Architecture Overview
 
 ### Integration Flow
-```
+```text
 Business Central → Azure Function → LHDN MyInvois API
       ↓                ↓                  ↓
 1. Generate UBL    2. Digital         3. Official
@@ -129,7 +129,7 @@ Business Central → Azure Function → LHDN MyInvois API
 - **Best Practices**: Proven implementation and operational practices
 
 ### Reference Implementation
-- **GitHub Repository**: https://github.com/acutraaq/eInvAzureSign
+- **GitHub Repository**: https://github.com/KalvinChua/Jotex-eInvoice-Azure
   - Production-ready Azure Function code for document signing
   - JOTEX P12 certificate integration examples
   - LHDN API communication patterns
@@ -242,3 +242,4 @@ Business Central → Azure Function → LHDN MyInvois API
 **Next Review**: March 2025
 
 *This documentation suite provides comprehensive coverage of the MyInvois LHDN e-Invoice system. Each document is designed to serve specific audiences and use cases, ensuring all stakeholders have the information they need for successful implementation and operation.*
+

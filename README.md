@@ -51,3 +51,4 @@ The solution uses a **Sidecar Architecture**:
 3. **Business Central**: Submits signed JSON to LHDN API and tracks status.
 
 See [System Documentation](MyInvois_LHDN_eInvoice_System_Documentation.md) for deeper architectural details.
+

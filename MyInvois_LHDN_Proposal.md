@@ -298,7 +298,7 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 
 #### Complete End-to-End Workflow:
 
-```
+```text
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Business      │    │     AL Extension │    │   Azure Function │
 │   Central User  │────│   Processing     │────│   Digital Signing│
@@ -397,7 +397,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 
 ##### Azure Functions v4
 - **Runtime**: .NET 8.0 Isolated Process Model
-- **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
+- **Reference Implementation**: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
 - **Security**: Integrated with Azure Active Directory and secure certificate management
@@ -735,7 +735,7 @@ This comprehensive AL extension provides the complete Business Central integrati
 
 #### Complete Data Flow Architecture:
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                          MyInvois LHDN e-Invoice System                     ║
 ║                           Complete Data Flow Architecture                   ║
@@ -830,7 +830,7 @@ This comprehensive technology stack ensures a robust, secure, and scalable e-Inv
 
 The architecture follows a secure, scalable cloud-native design with clear separation of concerns:
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                        SYSTEM ARCHITECTURE OVERVIEW                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -964,7 +964,7 @@ ARCHITECTURAL PRINCIPLES:
 
 ### Component Interaction Diagram:
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                        COMPONENT INTERACTION FLOW                           ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -1363,3 +1363,4 @@ Users' applications other than those specified in this proposal are not included
 **THE END**
 
 *This proposal is valid until December 31, 2025, unless otherwise agreed by both parties.*
+

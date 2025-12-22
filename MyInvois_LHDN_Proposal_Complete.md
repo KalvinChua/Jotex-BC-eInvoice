@@ -129,7 +129,7 @@ The proposed solution will leverage Microsoft Dynamics 365 Business Central exte
 
 #### Complete End-to-End Workflow:
 
-```
+```text
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Business      │    │   e-Invoice       │    │   Azure Function │
 │   Central User  │────│   Processing      │────│   Digital Signing│
@@ -228,7 +228,7 @@ Azure provides enterprise-grade cloud infrastructure and services for secure, sc
 
 ##### Azure Functions v4
 - **Runtime**: .NET 8.0 Isolated Process Model
-- **Reference Implementation**: https://github.com/acutraaq/eInvAzureSign
+- **Reference Implementation**: https://github.com/KalvinChua/Jotex-eInvoice-Azure
 - **Trigger Types**: HTTP triggers for API endpoints, Timer triggers for scheduled tasks
 - **Scaling**: Consumption plan with automatic scaling (1-200 instances)
 - **Security**: Integrated with Azure Active Directory and secure certificate management
@@ -334,7 +334,7 @@ Direct integration with the official LHDN MyInvois platform ensures regulatory c
 
 The proposed architecture follows a layered approach ensuring scalability, security, and maintainability:
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                         BUSINESS CENTRAL LAYER                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
@@ -417,7 +417,7 @@ The proposed architecture follows a layered approach ensuring scalability, secur
 
 ### Component Interaction Flow
 
-```
+```text
 ┌─────────────────┐ HTTPS/JSON   ┌──────────────────────┐
 │ Business Central│──────────────▶│ Azure Functions     │
 │ e-Invoice System│               │ (Digital Signing)   │
@@ -906,7 +906,7 @@ The MyInvois LHDN e-Invoice System is designed with a modular, scalable architec
 
 ### High-Level Architecture Overview
 
-```
+```text
 +-----------------------------+
 |  Business Central (AL App) |
 |----------------------------|
@@ -994,3 +994,4 @@ The project is scheduled for a 2-month development window, excluding weekends an
 
 ### Current Status
 As of **September 2, 2025**, the project is in **Milestone 3**, with Azure Function integration and digital signing in progress. LHDN API integration and testing have been completed. The project is on track to complete within the allocated 2-month working schedule.
+

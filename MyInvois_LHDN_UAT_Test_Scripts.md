@@ -161,7 +161,7 @@ This comprehensive User Acceptance Testing (UAT) script validates all functional
 - ✅ No configuration errors
 
 **Test Data**:
-```
+```text
 Environment: PREPROD
 Azure Function URL: https://func-myinvois-test.azurewebsites.net
 LHDN API URL: https://preprod-api.myinvois.hasil.gov.my
@@ -245,7 +245,7 @@ Client Secret: [test-client-secret]
 - ✅ No validation errors
 
 **Test Data**:
-```
+```text
 Customer Name: ABC Manufacturing Sdn Bhd
 TIN: 123456789012
 ID Type: BRN
@@ -331,7 +331,7 @@ Country Code: MYS
 - ✅ LHDN confirmation received
 
 **Test Data**:
-```
+```text
 Customer: ABC Manufacturing Sdn Bhd
 Items: 5 different items with classifications
 Invoice Total: RM 5,000
@@ -416,7 +416,7 @@ Expected Document Type: 01 (Invoice)
 - ✅ Status shows "Submitted"
 
 **Test Data**:
-```
+```text
 Original Invoice: INV-001 (RM 5,000)
 Credit Amount: RM 1,000
 Reason: Price adjustment
@@ -790,7 +790,7 @@ Applies-to Doc: INV-001
 #### Sign-Off Documentation
 **UAT Sign-Off Form**
 
-```
+```text
 Project: MyInvois LHDN e-Invoice System Implementation
 Date: ____________________
 
@@ -872,7 +872,7 @@ ________________________________________________________________________
 ### Test Case Execution Tracking
 
 #### Daily Test Execution Log
-```
+```text
 Date: ________
 Tester: ________
 Test Cases Executed: ________
@@ -895,7 +895,7 @@ Next Steps:
 ```
 
 #### Defect Tracking Template
-```
+```text
 Defect ID: UAT-___
 Title: ________
 Description: ________
@@ -920,3 +920,4 @@ Resolution: ________
 **Estimated Execution Time**: 49 hours across 14 days
 
 *These UAT test scripts provide comprehensive validation of the MyInvois LHDN e-Invoice system. Execute all test cases systematically and document results for production readiness assessment.*
+

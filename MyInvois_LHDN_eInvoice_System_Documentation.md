@@ -43,7 +43,7 @@ Based on [LHDN Official Specification](https://sdk.myinvois.hasil.gov.my/codes/e
 ## System Architecture
 
 ### Integration Flow
-```
+```text
 Business Central → Azure Function → LHDN MyInvois API
      ↓                ↓                  ↓
 1. Generate UBL    2. Digital         3. Official
@@ -913,3 +913,4 @@ OptimizeSystemPerformance();
 **Next Review**: March 2025
 
 This documentation covers the complete MyInvois LHDN e-Invoice system implementation. For additional technical details or specific implementation questions, refer to the inline code documentation or contact the development team.
+
