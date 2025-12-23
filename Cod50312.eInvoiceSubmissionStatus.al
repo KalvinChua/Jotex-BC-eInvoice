@@ -2201,10 +2201,20 @@ codeunit 50312 "eInvoice Submission Status"
                 SubmissionLogRec.Status := LhdnStatus;
                 SubmissionLogRec."Response Date" := CurrentDateTime;
                 SubmissionLogRec."Last Updated" := CurrentDateTime;
-                SubmissionLogRec."Error Message" := CopyStr(StrSubstNo('Status refreshed from LHDN via direct API. UUID: %1, Method: %2',
-                                                                     SubmissionLogRec."Document UUID",
-                                                                     SubmissionLogRec."Document UUID" <> '' ? 'Document-level' : 'Submission-level'),
-                                                           1, MaxStrLen(SubmissionLogRec."Error Message"));
+
+                // Clear error fields only if status is Valid/Accepted (not Invalid/Rejected)
+                if (LhdnStatus = 'Valid') or (LhdnStatus = 'Accepted') then begin
+                    SubmissionLogRec."Error Message" := '';
+                    SubmissionLogRec."Error Code" := '';
+                    SubmissionLogRec."Error English" := '';
+                    SubmissionLogRec."Error Malay" := '';
+                    SubmissionLogRec."Error Property Name" := '';
+                    SubmissionLogRec."Error Property Path" := '';
+                    SubmissionLogRec."Error Target" := '';
+                    Clear(SubmissionLogRec."Inner Errors");
+                    SubmissionLogRec."HTTP Status Code" := 0;
+                end;
+                // For Invalid/Rejected status, preserve error details from initial submission
 
                 if SubmissionLogRec.Modify() then begin
                     // Synchronize the Posted Sales Invoice status

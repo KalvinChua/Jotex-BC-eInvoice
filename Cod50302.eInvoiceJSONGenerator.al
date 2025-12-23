@@ -5776,9 +5776,9 @@ codeunit 50302 "eInvoice JSON Generator"
                 exit(true);
             end else begin
                 // Format error response with HTTP status code and correlation ID for better tracking
-                LhdnResponse := StrSubstNo('HTTP %1: %2|CORRELATIONID:%3', 
-                    HttpResponseMessage.HttpStatusCode(), 
-                    ResponseText, 
+                LhdnResponse := StrSubstNo('HTTP %1: %2|CORRELATIONID:%3',
+                    HttpResponseMessage.HttpStatusCode(),
+                    ResponseText,
                     CorrelationId);
                 exit(false);
             end;
