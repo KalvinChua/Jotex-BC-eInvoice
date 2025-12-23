@@ -27,6 +27,11 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies the invoice number that was submitted.';
                 }
+                field("Customer No."; Rec."Customer No.")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the customer number for this invoice submission.';
+                }
                 field("Customer Name"; Rec."Customer Name")
                 {
                     ApplicationArea = All;
@@ -98,7 +103,6 @@ page 50316 "e-Invoice Submission Log"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies any error message received from LHDN.';
-                    Visible = false;
                 }
                 field("Cancellation Reason"; Rec."Cancellation Reason")
                 {

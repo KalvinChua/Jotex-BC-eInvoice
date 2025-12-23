@@ -1066,7 +1066,7 @@ codeunit 50302 "eInvoice JSON Generator"
 
         // Party identification
         AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice TIN No.", 'TIN');
-        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", 'BRN');
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", GetCustomerIDType(Customer));
         AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice SST No.", 'SST');
         AddPartyIdentification(PartyIdentificationArray, '', 'TTX');
         PartyObject.Add('PartyIdentification', PartyIdentificationArray);
@@ -1117,9 +1117,9 @@ codeunit 50302 "eInvoice JSON Generator"
         PostalAddressArray.Add(PostalAddressObject);
         DeliveryPartyObject.Add('PostalAddress', PostalAddressArray);
 
-        // Delivery party identification - use customer TIN/BRN
+        // Delivery party identification - use customer TIN/ID Type
         AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice TIN No.", 'TIN');
-        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", 'BRN');
+        AddPartyIdentification(PartyIdentificationArray, Customer."e-Invoice ID No.", GetCustomerIDType(Customer));
         DeliveryPartyObject.Add('PartyIdentification', PartyIdentificationArray);
 
         DeliveryPartyArray.Add(DeliveryPartyObject);
@@ -2171,6 +2171,24 @@ codeunit 50302 "eInvoice JSON Generator"
                 exit('AUS');
             else
                 exit('MYS'); // Default to Malaysia
+        end;
+    end;
+
+    local procedure GetCustomerIDType(Customer: Record Customer): Text
+    begin
+        // Convert customer's e-Invoice ID Type option to LHDN expected text
+        // Option: 0=NRIC, 1=BRN, 2=PASSPORT, 3=ARMY
+        case Customer."e-Invoice ID Type" of
+            Customer."e-Invoice ID Type"::NRIC:
+                exit('NRIC');
+            Customer."e-Invoice ID Type"::BRN:
+                exit('BRN');
+            Customer."e-Invoice ID Type"::PASSPORT:
+                exit('PASSPORT');
+            Customer."e-Invoice ID Type"::ARMY:
+                exit('ARMY');
+            else
+                exit('BRN'); // Default to BRN if not set
         end;
     end;
 

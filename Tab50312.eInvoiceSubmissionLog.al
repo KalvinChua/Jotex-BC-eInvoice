@@ -148,6 +148,12 @@ table 50312 "eInvoice Submission Log"
             DataClassification = CustomerContent;
             AutoFormatType = 1;
         }
+        field(29; "Customer No."; Code[20])
+        {
+            Caption = 'Customer No.';
+            DataClassification = CustomerContent;
+            TableRelation = Customer."No.";
+        }
     }
 
     keys
