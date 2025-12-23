@@ -104,6 +104,38 @@ page 50316 "e-Invoice Submission Log"
                     ApplicationArea = All;
                     ToolTip = 'Specifies any error message received from LHDN.';
                 }
+                field("Error Code"; Rec."Error Code")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the MyInvois error code (e.g., Error03, DS302).';
+                    Visible = Rec."Error Code" <> '';
+                    Style = Attention;
+                    StyleExpr = Rec."Error Code" <> '';
+                }
+                field("Error English"; Rec."Error English")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the error message in English from MyInvois API.';
+                    Visible = Rec."Error English" <> '';
+                }
+                field("Error Property Path"; Rec."Error Property Path")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the path to the field that caused the error (e.g., $.InvoiceLineItem[*].InvoicedQuantity.unitCode).';
+                    Visible = Rec."Error Property Path" <> '';
+                }
+                field("HTTP Status Code"; Rec."HTTP Status Code")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the HTTP status code from MyInvois API (e.g., 400, 401, 429, 500).';
+                    Visible = Rec."HTTP Status Code" <> 0;
+                }
+                field("Correlation ID"; Rec."Correlation ID")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the correlation ID for tracking the request with LHDN support team.';
+                    Visible = Rec."Correlation ID" <> '';
+                }
                 field("Cancellation Reason"; Rec."Cancellation Reason")
                 {
                     ApplicationArea = All;
@@ -125,6 +157,31 @@ page 50316 "e-Invoice Submission Log"
     {
         area(processing)
         {
+            action(ViewErrorDetails)
+            {
+                ApplicationArea = All;
+                Caption = 'View Error Details';
+                Image = ErrorLog;
+                ToolTip = 'View complete error details including inner errors from MyInvois API.';
+
+                trigger OnAction()
+                var
+                    SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+                    ErrorDetails: Text;
+                begin
+                    // Check if there are any error details to display
+                    if (Rec."Error Code" = '') and (Rec."HTTP Status Code" = 0) and (Rec."Error Message" = '') then begin
+                        Message('No error details available for this submission.');
+                        exit;
+                    end;
+
+                    ErrorDetails := SubmissionStatusCU.GetFormattedErrorDetails(Rec);
+                    if ErrorDetails = '' then
+                        Message('No detailed error information available for this submission.')
+                    else
+                        Message(ErrorDetails);
+                end;
+            }
 
             action(RefreshStatus)
             {

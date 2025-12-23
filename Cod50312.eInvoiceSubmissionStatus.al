@@ -2805,4 +2805,175 @@ codeunit 50312 "eInvoice Submission Status"
         exit(TryHttpClientSend(TestHttpClient, TestHttpRequestMessage, TestHttpResponseMessage));
     end;
 
+    /// <summary>
+    /// Parse MyInvois standard error response and store details in submission log
+    /// According to https://sdk.myinvois.hasil.gov.my/standard-error-response/
+    /// </summary>
+    procedure ParseAndStoreErrorResponse(var SubmissionLog: Record "eInvoice Submission Log"; ResponseText: Text; HttpStatusCode: Integer; CorrelationId: Text)
+    var
+        JsonObject: JsonObject;
+        ErrorObject: JsonObject;
+        JsonToken: JsonToken;
+        InnerErrorArray: JsonArray;
+        InnerErrorsOutStream: OutStream;
+        InnerErrorsText: Text;
+        i: Integer;
+        InnerErrorObject: JsonObject;
+        ErrorSummary: Text;
+    begin
+        // Store HTTP status code and correlation ID
+        SubmissionLog."HTTP Status Code" := HttpStatusCode;
+        SubmissionLog."Correlation ID" := CopyStr(CorrelationId, 1, 100);
+
+        // Try to parse JSON response
+        if not JsonObject.ReadFrom(ResponseText) then begin
+            SubmissionLog."Error Message" := CopyStr('Failed to parse error response: ' + ResponseText, 1, 2048);
+            SubmissionLog.Modify(true);
+            exit;
+        end;
+
+        // Parse main error object according to LHDN standard structure
+        if JsonObject.Get('error', JsonToken) and JsonToken.IsObject() then begin
+            ErrorObject := JsonToken.AsObject();
+
+            // Extract errorCode
+            if ErrorObject.Get('errorCode', JsonToken) then
+                SubmissionLog."Error Code" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 50);
+
+            // Extract propertyName
+            if ErrorObject.Get('propertyName', JsonToken) then
+                SubmissionLog."Error Property Name" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 250);
+
+            // Extract propertyPath
+            if ErrorObject.Get('propertyPath', JsonToken) then
+                SubmissionLog."Error Property Path" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 250);
+
+            // Extract error (English message)
+            if ErrorObject.Get('error', JsonToken) then
+                SubmissionLog."Error English" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 2048);
+
+            // Extract errorMS (Malay message)
+            if ErrorObject.Get('errorMS', JsonToken) then
+                SubmissionLog."Error Malay" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 2048);
+
+            // Extract target
+            if ErrorObject.Get('target', JsonToken) then
+                SubmissionLog."Error Target" := CopyStr(CleanQuotesFromText(SafeJsonValueToText(JsonToken)), 1, 250);
+
+            // Handle inner errors
+            if ErrorObject.Get('innerError', JsonToken) and JsonToken.IsArray() then begin
+                InnerErrorArray := JsonToken.AsArray();
+
+                // Store inner errors as JSON in blob field
+                Clear(SubmissionLog."Inner Errors");
+                SubmissionLog."Inner Errors".CreateOutStream(InnerErrorsOutStream);
+                InnerErrorArray.WriteTo(InnerErrorsText);
+                InnerErrorsOutStream.WriteText(InnerErrorsText);
+            end;
+
+            // Build summary error message for display
+            ErrorSummary := '';
+            if SubmissionLog."Error Code" <> '' then
+                ErrorSummary += SubmissionLog."Error Code" + ': ';
+            if SubmissionLog."Error English" <> '' then
+                ErrorSummary += SubmissionLog."Error English"
+            else if SubmissionLog."Error Malay" <> '' then
+                ErrorSummary += SubmissionLog."Error Malay";
+
+            if ErrorSummary <> '' then
+                SubmissionLog."Error Message" := CopyStr(ErrorSummary, 1, 2048);
+        end else begin
+            // No standard error object found, store raw response
+            SubmissionLog."Error Message" := CopyStr('Non-standard error response: ' + ResponseText, 1, 2048);
+        end;
+
+        SubmissionLog.Modify(true);
+    end;
+
+    /// <summary>
+    /// Get formatted error details for display (with inner errors)
+    /// </summary>
+    procedure GetFormattedErrorDetails(var SubmissionLog: Record "eInvoice Submission Log"): Text
+    var
+        InnerErrorsInStream: InStream;
+        InnerErrorsText: Text;
+        InnerErrorArray: JsonArray;
+        JsonToken: JsonToken;
+        InnerErrorObject: JsonObject;
+        FormattedDetails: Text;
+        i: Integer;
+    begin
+        FormattedDetails := '';
+
+        // Build formatted error details
+        if SubmissionLog."HTTP Status Code" <> 0 then
+            FormattedDetails += StrSubstNo('HTTP Status: %1\\', SubmissionLog."HTTP Status Code");
+
+        if SubmissionLog."Correlation ID" <> '' then
+            FormattedDetails += StrSubstNo('Correlation ID: %1\\', SubmissionLog."Correlation ID");
+
+        if (SubmissionLog."HTTP Status Code" <> 0) or (SubmissionLog."Correlation ID" <> '') then
+            FormattedDetails += '\\';
+
+        if SubmissionLog."Error Code" <> '' then
+            FormattedDetails += StrSubstNo('Error Code: %1\\', SubmissionLog."Error Code");
+
+        if SubmissionLog."Error English" <> '' then
+            FormattedDetails += StrSubstNo('Error: %1\\', SubmissionLog."Error English");
+
+        if SubmissionLog."Error Malay" <> '' then
+            FormattedDetails += StrSubstNo('Error (Malay): %1\\', SubmissionLog."Error Malay");
+
+        if SubmissionLog."Error Property Name" <> '' then
+            FormattedDetails += StrSubstNo('Property: %1\\', SubmissionLog."Error Property Name");
+
+        if SubmissionLog."Error Property Path" <> '' then
+            FormattedDetails += StrSubstNo('Path: %1\\', SubmissionLog."Error Property Path");
+
+        if SubmissionLog."Error Target" <> '' then
+            FormattedDetails += StrSubstNo('Target: %1\\', SubmissionLog."Error Target");
+
+        // Parse and display inner errors
+        if SubmissionLog."Inner Errors".HasValue then begin
+            SubmissionLog."Inner Errors".CreateInStream(InnerErrorsInStream);
+            InnerErrorsInStream.ReadText(InnerErrorsText);
+
+            if InnerErrorArray.ReadFrom(InnerErrorsText) then begin
+                FormattedDetails += '\\Inner Errors:\\';
+
+                for i := 0 to InnerErrorArray.Count() - 1 do begin
+                    InnerErrorArray.Get(i, JsonToken);
+                    if JsonToken.IsObject() then begin
+                        InnerErrorObject := JsonToken.AsObject();
+
+                        FormattedDetails += StrSubstNo('  %1. ', i + 1);
+
+                        if InnerErrorObject.Get('errorCode', JsonToken) then
+                            FormattedDetails += StrSubstNo('Code: %1 | ', CleanQuotesFromText(SafeJsonValueToText(JsonToken)));
+
+                        if InnerErrorObject.Get('error', JsonToken) then
+                            FormattedDetails += CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                        if InnerErrorObject.Get('propertyPath', JsonToken) then
+                            FormattedDetails += StrSubstNo(' [%1]', CleanQuotesFromText(SafeJsonValueToText(JsonToken)));
+
+                        FormattedDetails += '\\';
+                    end;
+                end;
+            end;
+        end;
+
+        // If no structured error fields found, show the raw error message
+        if FormattedDetails = '' then begin
+            if SubmissionLog."Error Message" <> '' then
+                FormattedDetails := 'Error Message:\\' + SubmissionLog."Error Message" + '\\'
+            else
+                FormattedDetails := 'No detailed error information available.\\';
+        end;
+
+        FormattedDetails += '\\Reference: https://sdk.myinvois.hasil.gov.my/standard-error-response/';
+
+        exit(FormattedDetails);
+    end;
+
 }

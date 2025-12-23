@@ -58,6 +58,51 @@ table 50312 "eInvoice Submission Log"
             Caption = 'Last Updated';
             DataClassification = CustomerContent;
         }
+        field(30; "Error Code"; Code[50])
+        {
+            Caption = 'Error Code';
+            DataClassification = CustomerContent;
+        }
+        field(31; "Error Property Name"; Text[250])
+        {
+            Caption = 'Error Property Name';
+            DataClassification = CustomerContent;
+        }
+        field(32; "Error Property Path"; Text[250])
+        {
+            Caption = 'Error Property Path';
+            DataClassification = CustomerContent;
+        }
+        field(33; "Error English"; Text[2048])
+        {
+            Caption = 'Error (English)';
+            DataClassification = CustomerContent;
+        }
+        field(34; "Error Malay"; Text[2048])
+        {
+            Caption = 'Error (Malay)';
+            DataClassification = CustomerContent;
+        }
+        field(35; "Error Target"; Text[250])
+        {
+            Caption = 'Error Target';
+            DataClassification = CustomerContent;
+        }
+        field(36; "Inner Errors"; Blob)
+        {
+            Caption = 'Inner Errors';
+            DataClassification = CustomerContent;
+        }
+        field(37; "HTTP Status Code"; Integer)
+        {
+            Caption = 'HTTP Status Code';
+            DataClassification = CustomerContent;
+        }
+        field(38; "Correlation ID"; Text[100])
+        {
+            Caption = 'Correlation ID';
+            DataClassification = CustomerContent;
+        }
         field(11; "Response Details"; Blob)
         {
             Caption = 'Response Details';

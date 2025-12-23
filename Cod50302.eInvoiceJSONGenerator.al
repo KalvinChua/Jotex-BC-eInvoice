@@ -4852,6 +4852,7 @@ codeunit 50302 "eInvoice JSON Generator"
     local procedure LogSubmissionToTable(SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; DocumentUuid: Text; Status: Text; ErrorMessage: Text; DocumentType: Text)
     var
         SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
         eInvoiceSetup: Record "eInvoiceSetup";
         Customer: Record Customer;
         CustomerName: Text;
@@ -4860,6 +4861,10 @@ codeunit 50302 "eInvoice JSON Generator"
         SalesLine: Record "Sales Invoice Line";
         TotalAmount: Decimal;
         TotalAmountInclVAT: Decimal;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
+        ErrorResponseText: Text;
+        PipePos: Integer;
     begin
         // Get customer name
         CustomerName := '';
@@ -4891,16 +4896,8 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog."Last Updated" := CurrentDateTime;
         SubmissionLog."User ID" := UserId;
         SubmissionLog."Company Name" := CompanyName;
-        SubmissionLog."Error Message" := ErrorMessage;
         SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
         SubmissionLog."Document Type" := DocumentType;
-        // Removed Submission Type field from log
-        // Optionally populate correlation ID and response summary if available in context
-        // SubmissionLog."Correlation ID" := <set from Azure request if tracked>;
-        // SubmissionLog."Accepted Count" := <parsed value>;
-        // SubmissionLog."Rejected Count" := <parsed value>;
-        // SubmissionLog."Invoice Code Number" := <parsed value>;
-        // SubmissionLog."Elapsed (ms)" := 0;
 
         // Set environment based on setup
         if eInvoiceSetup.Get('SETUP') then
@@ -4908,14 +4905,40 @@ codeunit 50302 "eInvoice JSON Generator"
         else
             SubmissionLog.Environment := SubmissionLog.Environment::Preprod;
 
-        // Insert the log entry
-        if SubmissionLog.Insert() then begin
-            // Successfully logged
-        end else begin
+        // Insert the log entry first
+        if not SubmissionLog.Insert() then begin
             // Log error silently to avoid disrupting the main flow
             LogDebugInfo('Submission Log Error',
                 StrSubstNo('Failed to insert log entry for invoice %1. Error: %2',
                     SalesInvoiceHeader."No.", GetLastErrorText()));
+            exit;
+        end;
+
+        // Parse and store error details if present
+        if ErrorMessage <> '' then begin
+            // Extract HTTP status code and correlation ID if present in format: HTTP 400: {...}|CORRELATIONID:xxx
+            if ErrorMessage.Contains('HTTP ') then begin
+                // Extract status code
+                PipePos := ErrorMessage.IndexOf(':');
+                if PipePos > 0 then
+                    Evaluate(HttpStatusCode, CopyStr(ErrorMessage, 6, PipePos - 6));
+
+                // Extract error response JSON
+                PipePos := ErrorMessage.IndexOf('|CORRELATIONID:');
+                if PipePos > 0 then begin
+                    ErrorResponseText := CopyStr(ErrorMessage, ErrorMessage.IndexOf(':') + 2, PipePos - ErrorMessage.IndexOf(':') - 2);
+                    CorrelationId := CopyStr(ErrorMessage, PipePos + 15);
+                end else begin
+                    ErrorResponseText := CopyStr(ErrorMessage, ErrorMessage.IndexOf(':') + 2);
+                end;
+
+                // Parse and store MyInvois error structure
+                SubmissionStatusCU.ParseAndStoreErrorResponse(SubmissionLog, ErrorResponseText, HttpStatusCode, CorrelationId);
+            end else begin
+                // Store generic error message
+                SubmissionLog."Error Message" := CopyStr(ErrorMessage, 1, MaxStrLen(SubmissionLog."Error Message"));
+                SubmissionLog.Modify(true);
+            end;
         end;
     end;
 
@@ -5581,16 +5604,22 @@ codeunit 50302 "eInvoice JSON Generator"
 
     /// <summary>
     /// Logs credit memo submission details to the submission log table
+    /// ENHANCED: Now parses MyInvois standard error responses
     /// </summary>
     local procedure LogCreditMemoSubmissionToTable(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; SubmissionUid: Text; DocumentUuid: Text; Status: Text; ErrorMessage: Text; DocumentType: Text)
     var
         SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
         eInvoiceSetup: Record "eInvoiceSetup";
         Customer: Record Customer;
         CustomerName: Text;
         SalesCrMemoLine: Record "Sales Cr.Memo Line";
         TotalAmount: Decimal;
         TotalAmountInclVAT: Decimal;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
+        ErrorResponseText: Text;
+        PipePos: Integer;
     begin
         // Get customer name
         CustomerName := '';
@@ -5622,7 +5651,6 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog."Last Updated" := CurrentDateTime;
         SubmissionLog."User ID" := UserId;
         SubmissionLog."Company Name" := CompanyName;
-        SubmissionLog."Error Message" := ErrorMessage;
         SubmissionLog."Posting Date" := SalesCrMemoHeader."Posting Date";
         SubmissionLog."Document Type" := DocumentType;
 
@@ -5632,14 +5660,40 @@ codeunit 50302 "eInvoice JSON Generator"
         else
             SubmissionLog.Environment := SubmissionLog.Environment::Preprod;
 
-        // Insert the log entry
-        if SubmissionLog.Insert() then begin
-            // Successfully logged
-        end else begin
+        // Insert the log entry first
+        if not SubmissionLog.Insert() then begin
             // Log error silently to avoid disrupting the main flow
             LogDebugInfo('Credit Memo Submission Log Error',
                 StrSubstNo('Failed to insert log entry for credit memo %1. Error: %2',
                     SalesCrMemoHeader."No.", GetLastErrorText()));
+            exit;
+        end;
+
+        // Parse and store error details if present
+        if ErrorMessage <> '' then begin
+            // Extract HTTP status code and correlation ID if present in format: HTTP 400: {...}|CORRELATIONID:xxx
+            if ErrorMessage.Contains('HTTP ') then begin
+                // Extract status code
+                PipePos := ErrorMessage.IndexOf(':');
+                if PipePos > 0 then
+                    Evaluate(HttpStatusCode, CopyStr(ErrorMessage, 6, PipePos - 6));
+
+                // Extract error response JSON
+                PipePos := ErrorMessage.IndexOf('|CORRELATIONID:');
+                if PipePos > 0 then begin
+                    ErrorResponseText := CopyStr(ErrorMessage, ErrorMessage.IndexOf(':') + 2, PipePos - ErrorMessage.IndexOf(':') - 2);
+                    CorrelationId := CopyStr(ErrorMessage, PipePos + 15);
+                end else begin
+                    ErrorResponseText := CopyStr(ErrorMessage, ErrorMessage.IndexOf(':') + 2);
+                end;
+
+                // Parse and store MyInvois error structure
+                SubmissionStatusCU.ParseAndStoreErrorResponse(SubmissionLog, ErrorResponseText, HttpStatusCode, CorrelationId);
+            end else begin
+                // Store generic error message
+                SubmissionLog."Error Message" := CopyStr(ErrorMessage, 1, MaxStrLen(SubmissionLog."Error Message"));
+                SubmissionLog.Modify(true);
+            end;
         end;
     end;
 
@@ -5721,11 +5775,15 @@ codeunit 50302 "eInvoice JSON Generator"
                 LhdnResponse := ResponseText;
                 exit(true);
             end else begin
-                LhdnResponse := StrSubstNo('HTTP %1: %2', HttpResponseMessage.HttpStatusCode(), ResponseText);
+                // Format error response with HTTP status code and correlation ID for better tracking
+                LhdnResponse := StrSubstNo('HTTP %1: %2|CORRELATIONID:%3', 
+                    HttpResponseMessage.HttpStatusCode(), 
+                    ResponseText, 
+                    CorrelationId);
                 exit(false);
             end;
         end else begin
-            LhdnResponse := 'Failed to communicate with LHDN API';
+            LhdnResponse := StrSubstNo('Failed to communicate with LHDN API|CORRELATIONID:%1', CorrelationId);
             exit(false);
         end;
     end;
