@@ -920,31 +920,17 @@ codeunit 50302 "eInvoice JSON Generator"
         BillingRefObject: JsonObject;
         InvoiceDocumentReferenceArray: JsonArray;
         InvoiceDocumentReferenceObject: JsonObject;
-        OriginalInvoiceNo: Code[50];
-        SalesInvoiceHeader: Record "Sales Invoice Header";
     begin
-        // Credit Note must reference the original invoice via BillingReference/InvoiceDocumentReference
-        OriginalInvoiceNo := SalesCrMemoHeader."Applies-to Doc. No.";
+        // LHDN COMPLIANCE: For credit notes adjusting invoices issued prior to e-Invoice implementation,
+        // use "NA" as the Original e-Invoice Reference Number since no IRBM Unique Identifier Number exists.
+        // Reference: LHDN e-Invoice Guidelines - Credit/Debit Note Adjustments
+        // "If adjustments are to be made to original invoices that were issued prior to the implementation
+        // of e-Invoice (i.e., no IRBM Unique Identifier Number has been assigned), taxpayers are then
+        // allowed to input "NA" in the 'Original e-Invoice Reference Number' data field."
+        //
+        // BUSINESS DECISION: Always use "NA" for all credit notes regardless of reference availability
 
-        if (OriginalInvoiceNo = '') and (SalesCrMemoHeader."External Document No." <> '') then
-            OriginalInvoiceNo := SalesCrMemoHeader."External Document No.";
-
-        if OriginalInvoiceNo = '' then
-            exit; // Nothing to reference
-
-        // LHDN MyInvois API enforces 26-character limit for BillingReference ID fields
-        // Reference: https://sdk.myinvois.hasil.gov.my/documents/credit-v1-1/
-        // Truncate if longer than 26 characters to comply with regulatory requirements
-        if StrLen(OriginalInvoiceNo) > 26 then
-            OriginalInvoiceNo := CopyStr(OriginalInvoiceNo, 1, 26);
-
-        AddBasicField(InvoiceDocumentReferenceObject, 'ID', OriginalInvoiceNo);
-
-        // If original invoice exists and has an LHDN UUID, include it
-        // Note: Sales Invoice Header No. field is Code[20], so truncate for lookup
-        if SalesInvoiceHeader.Get(CopyStr(OriginalInvoiceNo, 1, 20)) then
-            if SalesInvoiceHeader."eInvoice UUID" <> '' then
-                AddBasicField(InvoiceDocumentReferenceObject, 'UUID', SalesInvoiceHeader."eInvoice UUID");
+        AddBasicField(InvoiceDocumentReferenceObject, 'ID', 'NA');
 
         InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
         BillingRefObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
