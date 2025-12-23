@@ -2901,7 +2901,7 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
-    /// Get formatted error details for display (with inner errors)
+    /// Get formatted error details for display (with inner errors) - Simple version
     /// </summary>
     procedure GetFormattedErrorDetails(var SubmissionLog: Record "eInvoice Submission Log"): Text
     var
@@ -2912,78 +2912,167 @@ codeunit 50312 "eInvoice Submission Status"
         InnerErrorObject: JsonObject;
         FormattedDetails: Text;
         i: Integer;
+        InnerErrorCode: Text;
+        InnerError: Text;
+        InnerErrorMS: Text;
     begin
         FormattedDetails := '';
 
-        // Build formatted error details
-        if SubmissionLog."HTTP Status Code" <> 0 then
-            FormattedDetails += StrSubstNo('HTTP Status: %1\\', SubmissionLog."HTTP Status Code");
+        // Status
+        FormattedDetails := 'Status: ' + Format(SubmissionLog.Status) + '\\\\';
 
-        if SubmissionLog."Correlation ID" <> '' then
-            FormattedDetails += StrSubstNo('Correlation ID: %1\\', SubmissionLog."Correlation ID");
-
-        if (SubmissionLog."HTTP Status Code" <> 0) or (SubmissionLog."Correlation ID" <> '') then
-            FormattedDetails += '\\';
-
+        // Main error
         if SubmissionLog."Error Code" <> '' then
-            FormattedDetails += StrSubstNo('Error Code: %1\\', SubmissionLog."Error Code");
+            FormattedDetails += 'Error Code: ' + SubmissionLog."Error Code" + '\\';
 
         if SubmissionLog."Error English" <> '' then
-            FormattedDetails += StrSubstNo('Error: %1\\', SubmissionLog."Error English");
+            FormattedDetails += 'Error: ' + SubmissionLog."Error English" + '\\';
 
         if SubmissionLog."Error Malay" <> '' then
-            FormattedDetails += StrSubstNo('Error (Malay): %1\\', SubmissionLog."Error Malay");
+            FormattedDetails += 'Error MS: ' + SubmissionLog."Error Malay" + '\\';
 
-        if SubmissionLog."Error Property Name" <> '' then
-            FormattedDetails += StrSubstNo('Property: %1\\', SubmissionLog."Error Property Name");
-
-        if SubmissionLog."Error Property Path" <> '' then
-            FormattedDetails += StrSubstNo('Path: %1\\', SubmissionLog."Error Property Path");
-
-        if SubmissionLog."Error Target" <> '' then
-            FormattedDetails += StrSubstNo('Target: %1\\', SubmissionLog."Error Target");
-
-        // Parse and display inner errors
+        // Inner errors
         if SubmissionLog."Inner Errors".HasValue then begin
             SubmissionLog."Inner Errors".CreateInStream(InnerErrorsInStream);
             InnerErrorsInStream.ReadText(InnerErrorsText);
 
             if InnerErrorArray.ReadFrom(InnerErrorsText) then begin
-                FormattedDetails += '\\Inner Errors:\\';
+                if InnerErrorArray.Count() > 0 then begin
+                    FormattedDetails += '\\Inner Errors:\\';
 
-                for i := 0 to InnerErrorArray.Count() - 1 do begin
-                    InnerErrorArray.Get(i, JsonToken);
-                    if JsonToken.IsObject() then begin
-                        InnerErrorObject := JsonToken.AsObject();
+                    for i := 0 to InnerErrorArray.Count() - 1 do begin
+                        InnerErrorArray.Get(i, JsonToken);
+                        if JsonToken.IsObject() then begin
+                            InnerErrorObject := JsonToken.AsObject();
+                            InnerErrorCode := '';
+                            InnerError := '';
+                            InnerErrorMS := '';
 
-                        FormattedDetails += StrSubstNo('  %1. ', i + 1);
+                            if InnerErrorObject.Get('errorCode', JsonToken) then
+                                InnerErrorCode := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                        if InnerErrorObject.Get('errorCode', JsonToken) then
-                            FormattedDetails += StrSubstNo('Code: %1 | ', CleanQuotesFromText(SafeJsonValueToText(JsonToken)));
+                            if InnerErrorObject.Get('error', JsonToken) then
+                                InnerError := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                        if InnerErrorObject.Get('error', JsonToken) then
-                            FormattedDetails += CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+                            if InnerErrorObject.Get('errorMS', JsonToken) then
+                                InnerErrorMS := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
 
-                        if InnerErrorObject.Get('propertyPath', JsonToken) then
-                            FormattedDetails += StrSubstNo(' [%1]', CleanQuotesFromText(SafeJsonValueToText(JsonToken)));
-
-                        FormattedDetails += '\\';
+                            FormattedDetails += StrSubstNo('  %1) ', i + 1);
+                            if InnerErrorCode <> '' then
+                                FormattedDetails += 'Code: ' + InnerErrorCode + ' - ';
+                            FormattedDetails += InnerError + '\\';
+                            if InnerErrorMS <> '' then
+                                FormattedDetails += '     MS: ' + InnerErrorMS + '\\';
+                        end;
                     end;
                 end;
             end;
         end;
 
-        // If no structured error fields found, show the raw error message
-        if FormattedDetails = '' then begin
+        // If no structured error found, show raw message
+        if (SubmissionLog."Error Code" = '') and (SubmissionLog."Error English" = '') then begin
             if SubmissionLog."Error Message" <> '' then
-                FormattedDetails := 'Error Message:\\' + SubmissionLog."Error Message" + '\\'
+                FormattedDetails := SubmissionLog."Error Message"
             else
-                FormattedDetails := 'No detailed error information available.\\';
+                FormattedDetails := 'No error details available for this submission.';
         end;
 
-        FormattedDetails += '\\Reference: https://sdk.myinvois.hasil.gov.my/standard-error-response/';
-
         exit(FormattedDetails);
+    end;
+
+    /// <summary>
+    /// Translate error codes to user-friendly explanations
+    /// </summary>
+    local procedure GetUserFriendlyErrorExplanation(ErrorCode: Text): Text
+    begin
+        case ErrorCode of
+            'Error03', 'DS302':
+                exit('This invoice has already been submitted to LHDN. You cannot submit the same invoice twice.');
+            'Error01':
+                exit('Some required information is missing or incorrect in the invoice.');
+            'Error02':
+                exit('The invoice format does not meet LHDN requirements.');
+            'IV001':
+                exit('The invoice number or date is invalid.');
+            'IV002':
+                exit('Customer details (TIN/ID) are invalid or missing.');
+            'IV003':
+                exit('The invoice total amount does not match the line items.');
+            'IV004':
+                exit('Tax calculation is incorrect.');
+            'Auth01', 'Auth02':
+                exit('Authentication failed. Your LHDN credentials may be invalid.');
+            else
+                exit('');
+        end;
+    end;
+
+    /// <summary>
+    /// Convert technical field paths to user-friendly names
+    /// </summary>
+    local procedure GetUserFriendlyFieldName(PropertyPath: Text): Text
+    begin
+        if PropertyPath.Contains('TIN') or PropertyPath.Contains('tin') then
+            exit('Tax Identification Number (TIN)');
+        if PropertyPath.Contains('Invoice') and PropertyPath.Contains('Number') then
+            exit('Invoice Number');
+        if PropertyPath.Contains('Date') then
+            exit('Invoice Date');
+        if PropertyPath.Contains('Customer') then
+            exit('Customer Information');
+        if PropertyPath.Contains('Amount') or PropertyPath.Contains('Total') then
+            exit('Invoice Amount/Total');
+        if PropertyPath.Contains('Tax') then
+            exit('Tax Information');
+        if PropertyPath.Contains('Item') or PropertyPath.Contains('Line') then
+            exit('Invoice Line Items');
+
+        // Return original if no match found
+        exit(PropertyPath);
+    end;
+
+    /// <summary>
+    /// Provide user-friendly action steps based on error
+    /// </summary>
+    local procedure GetUserFriendlyActionSteps(ErrorCode: Text; ErrorMessage: Text): Text
+    var
+        ActionSteps: Text;
+    begin
+        ActionSteps := '';
+
+        case ErrorCode of
+            'Error03', 'DS302':
+                begin
+                    ActionSteps += '1. This invoice was already submitted successfully\\';
+                    ActionSteps += '2. Check the e-Invoice Submission Log for the original submission\\';
+                    ActionSteps += '3. If you need to make changes, cancel the original and resubmit\\';
+                end;
+            'Error01':
+                begin
+                    ActionSteps += '1. Review all invoice fields for missing or incorrect data\\';
+                    ActionSteps += '2. Verify customer TIN and registration details\\';
+                    ActionSteps += '3. Check that all required fields are filled in\\';
+                end;
+            'Error02':
+                begin
+                    ActionSteps += '1. Ensure the invoice format meets LHDN requirements\\';
+                    ActionSteps += '2. Contact IT support to review the invoice structure\\';
+                end;
+            'Auth01', 'Auth02':
+                begin
+                    ActionSteps += '1. Check your LHDN API credentials in e-Invoice Setup\\';
+                    ActionSteps += '2. Verify that your credentials are active in LHDN portal\\';
+                    ActionSteps += '3. Contact your system administrator\\';
+                end;
+            else begin
+                ActionSteps += '1. Review the error message details above\\';
+                ActionSteps += '2. Correct any identified issues in the invoice\\';
+                ActionSteps += '3. Try submitting again\\';
+                ActionSteps += '4. Contact IT support if the problem continues\\';
+            end;
+        end;
+
+        exit(ActionSteps);
     end;
 
 }

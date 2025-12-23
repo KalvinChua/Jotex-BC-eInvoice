@@ -2968,8 +2968,8 @@ codeunit 50302 "eInvoice JSON Generator"
                 SalesInvoiceHeader."eInvoice Validation Status" := 'Submission Failed';
                 SalesInvoiceHeader.Modify();
 
-                // Log the failed submission
-                LogSubmissionToTable(SalesInvoiceHeader, '', '', 'Submission Failed', LhdnResponse, SalesInvoiceHeader."eInvoice Document Type");
+                // Log the failed submission with HTTP status code and error response for proper parsing
+                LogSubmissionWithError(SalesInvoiceHeader, LhdnResponse, HttpResponseMessage.HttpStatusCode, CreateGuid());
             end;
         end else begin
             Error('Failed to send HTTP request to LHDN API at %1', LhdnApiUrl);
@@ -4943,6 +4943,66 @@ codeunit 50302 "eInvoice JSON Generator"
     end;
 
     /// <summary>
+    /// Logs failed submission with proper error parsing
+    /// </summary>
+    local procedure LogSubmissionWithError(SalesInvoiceHeader: Record "Sales Invoice Header"; ErrorResponse: Text; HttpStatusCode: Integer; CorrelationId: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+        eInvoiceSetup: Record "eInvoiceSetup";
+        Customer: Record Customer;
+        CustomerName: Text;
+        SalesLine: Record "Sales Invoice Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
+    begin
+        // Get customer name
+        CustomerName := '';
+        if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
+        // Calculate amounts from sales lines
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesLine.SetRange("Document No.", SalesInvoiceHeader."No.");
+        if SalesLine.FindSet() then
+            repeat
+                TotalAmount += SalesLine.Amount;
+                TotalAmountInclVAT += SalesLine."Amount Including VAT";
+            until SalesLine.Next() = 0;
+
+        // Create new log entry
+        SubmissionLog.Init();
+        SubmissionLog."Entry No." := 0;
+        SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
+        SubmissionLog."Customer No." := SalesInvoiceHeader."Sell-to Customer No.";
+        SubmissionLog."Customer Name" := CustomerName;
+        SubmissionLog."Amount" := TotalAmount;
+        SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
+        SubmissionLog."Submission UID" := '';
+        SubmissionLog."Document UUID" := '';
+        SubmissionLog.Status := 'Invalid';
+        SubmissionLog."Submission Date" := CurrentDateTime;
+        SubmissionLog."Response Date" := CurrentDateTime;
+        SubmissionLog."Last Updated" := CurrentDateTime;
+        SubmissionLog."User ID" := UserId;
+        SubmissionLog."Company Name" := CompanyName;
+        SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
+        SubmissionLog."Document Type" := SalesInvoiceHeader."eInvoice Document Type";
+
+        // Set environment
+        if eInvoiceSetup.Get('SETUP') then
+            SubmissionLog.Environment := eInvoiceSetup.Environment
+        else
+            SubmissionLog.Environment := SubmissionLog.Environment::Preprod;
+
+        // Insert first
+        if SubmissionLog.Insert() then
+            // Parse and store the error details using the enhanced error parser
+            SubmissionStatusCU.ParseAndStoreErrorResponse(SubmissionLog, ErrorResponse, HttpStatusCode, CorrelationId);
+    end;
+
+    /// <summary>
     /// Removes surrounding quotes from text values
     /// </summary>
     /// <param name="InputText">Text that may contain surrounding quotes</param>
@@ -5345,8 +5405,8 @@ codeunit 50302 "eInvoice JSON Generator"
                 SalesCrMemoHeader."eInvoice Validation Status" := 'Submission Failed';
                 SalesCrMemoHeader.Modify();
 
-                // Log the failed submission
-                LogCreditMemoSubmissionToTable(SalesCrMemoHeader, '', '', 'Submission Failed', LhdnResponse, SalesCrMemoHeader."eInvoice Document Type");
+                // Log the failed submission with proper error parsing
+                LogCreditMemoWithError(SalesCrMemoHeader, LhdnResponse, HttpResponseMessage.HttpStatusCode, CreateGuid());
             end;
         end else begin
             Error('Failed to send HTTP request to LHDN API at %1', LhdnApiUrl);
@@ -5695,6 +5755,66 @@ codeunit 50302 "eInvoice JSON Generator"
                 SubmissionLog.Modify(true);
             end;
         end;
+    end;
+
+    /// <summary>
+    /// Logs failed credit memo submission with proper error parsing
+    /// </summary>
+    local procedure LogCreditMemoWithError(SalesCrMemoHeader: Record "Sales Cr.Memo Header"; ErrorResponse: Text; HttpStatusCode: Integer; CorrelationId: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+        eInvoiceSetup: Record "eInvoiceSetup";
+        Customer: Record Customer;
+        CustomerName: Text;
+        SalesCrMemoLine: Record "Sales Cr.Memo Line";
+        TotalAmount: Decimal;
+        TotalAmountInclVAT: Decimal;
+    begin
+        // Get customer name
+        CustomerName := '';
+        if Customer.Get(SalesCrMemoHeader."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
+        // Calculate amounts from credit memo lines
+        TotalAmount := 0;
+        TotalAmountInclVAT := 0;
+        SalesCrMemoLine.SetRange("Document No.", SalesCrMemoHeader."No.");
+        if SalesCrMemoLine.FindSet() then
+            repeat
+                TotalAmount += SalesCrMemoLine.Amount;
+                TotalAmountInclVAT += SalesCrMemoLine."Amount Including VAT";
+            until SalesCrMemoLine.Next() = 0;
+
+        // Create new log entry
+        SubmissionLog.Init();
+        SubmissionLog."Entry No." := 0;
+        SubmissionLog."Invoice No." := SalesCrMemoHeader."No.";
+        SubmissionLog."Customer No." := SalesCrMemoHeader."Sell-to Customer No.";
+        SubmissionLog."Customer Name" := CustomerName;
+        SubmissionLog."Amount" := TotalAmount;
+        SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
+        SubmissionLog."Submission UID" := '';
+        SubmissionLog."Document UUID" := '';
+        SubmissionLog.Status := 'Invalid';
+        SubmissionLog."Submission Date" := CurrentDateTime;
+        SubmissionLog."Response Date" := CurrentDateTime;
+        SubmissionLog."Last Updated" := CurrentDateTime;
+        SubmissionLog."User ID" := UserId;
+        SubmissionLog."Company Name" := CompanyName;
+        SubmissionLog."Posting Date" := SalesCrMemoHeader."Posting Date";
+        SubmissionLog."Document Type" := SalesCrMemoHeader."eInvoice Document Type";
+
+        // Set environment
+        if eInvoiceSetup.Get('SETUP') then
+            SubmissionLog.Environment := eInvoiceSetup.Environment
+        else
+            SubmissionLog.Environment := SubmissionLog.Environment::Preprod;
+
+        // Insert first
+        if SubmissionLog.Insert() then
+            // Parse and store the error details
+            SubmissionStatusCU.ParseAndStoreErrorResponse(SubmissionLog, ErrorResponse, HttpStatusCode, CorrelationId);
     end;
 
     // Helper procedure to generate credit memo JSON
