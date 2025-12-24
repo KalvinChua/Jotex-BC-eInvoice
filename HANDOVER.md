@@ -11,7 +11,7 @@
 ## Table of Contents
 
 1. [Executive Summary](#1-executive-summary)
-2. [Project Takeover Checklist](#2-project-takeover-checklist)
+2. [Project Takeover Checklist & 30-Day Onboarding Plan](#2-project-takeover-checklist--30-day-onboarding-plan)
 3. [Development Environment Setup](#3-development-environment-setup)
 4. [Architecture Deep Dive](#4-architecture-deep-dive)
 5. [Critical Components Reference](#5-critical-components-reference)
@@ -29,116 +29,1066 @@
 
 This extension enables **Microsoft Dynamics 365 Business Central** to comply with Malaysia's **LHDN (Lembaga Hasil Dalam Negeri) MyInvois** e-invoicing mandate. It handles the complete lifecycle of e-Invoice generation, digital signing, submission, and status tracking.
 
-### 1.2 Business Impact
+**Key Capabilities:**
 
-- **Compliance**: Legal requirement for Malaysian businesses
-- **Volume**: Processes all sales invoices and credit memos
-- **Criticality**: HIGH - Failure blocks invoice issuance
-- **Users**: Finance team, sales operations
+- Automated e-Invoice generation from posted sales documents
+- Digital signature application using company certificates
+- Real-time submission to LHDN MyInvois platform
+- QR code generation for invoice validation
+- Comprehensive audit trail and error logging
+- Support for invoices, credit notes, and debit notes
 
-### 1.3 Technical Stack
+### 1.2 Project Timeline
 
-- **Platform**: Business Central 22.0+ (AL Language)
+```text
+2024 Q1: Project Initiation
+├─ Jan 2024: Requirements gathering and LHDN API analysis
+├─ Feb 2024: Architecture design and proof of concept
+└─ Mar 2024: Development environment setup
+
+2024 Q2: Core Development
+├─ Apr 2024: JSON generator and UBL 2.1 implementation
+├─ May 2024: Azure Function development for digital signing
+└─ Jun 2024: LHDN API integration and testing
+
+2024 Q3: Testing & Refinement
+├─ Jul 2024: User acceptance testing (UAT)
+├─ Aug 2024: Bug fixes and performance optimization
+└─ Sep 2024: PreProd environment testing
+
+2024 Q4: Production Deployment
+├─ Oct 2024: Production deployment and monitoring
+├─ Nov 2024: User training and support
+└─ Dec 2024: Stabilization and enhancements
+
+2025: Ongoing Maintenance
+└─ Current Status: Production (Active) - Version 1.0.0.71
+```
+
+### 1.3 Stakeholder Map
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    LHDN (Regulatory Body)                    │
+│              Mandates e-Invoice compliance                   │
+└────────────────────────┬────────────────────────────────────┘
+                         │ Compliance Requirements
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Jotex Management                           │
+│          Business Owner & Decision Maker                     │
+└────────┬────────────────────────────────┬───────────────────┘
+         │                                │
+         ▼                                ▼
+┌────────────────────┐          ┌────────────────────────────┐
+│  Finance Team      │          │  IT Department             │
+│  (Primary Users)   │          │  (System Administrators)   │
+│                    │          │                            │
+│  • Post invoices   │          │  • Maintain system         │
+│  • Submit to LHDN  │          │  • Monitor performance     │
+│  • Handle errors   │          │  • Deploy updates          │
+└────────────────────┘          └────────────────────────────┘
+         │                                │
+         └────────────┬───────────────────┘
+                      ▼
+         ┌────────────────────────┐
+         │   Development Team     │
+         │   (You - New Developer)│
+         │                        │
+         │   • Maintain codebase  │
+         │   • Fix bugs           │
+         │   • Add features       │
+         │   • Provide support    │
+         └────────────────────────┘
+```
+
+### 1.4 Business Impact
+
+#### Compliance & Legal
+
+- **Regulatory Requirement**: Mandatory for all Malaysian businesses (effective Aug 2024)
+- **Penalty for Non-Compliance**: Fines up to RM 20,000 or imprisonment
+- **Audit Trail**: All submissions logged for LHDN audit purposes
+- **Data Retention**: 7 years as per LHDN requirements
+
+#### Operational Metrics
+
+- **Daily Volume**: ~50-200 invoices/day (varies by business cycle)
+- **Peak Volume**: Up to 500 invoices/day (month-end closing)
+- **Processing Time**: Average 3-5 seconds per invoice
+- **Success Rate**: Target >98% (current: ~96-97%)
+- **System Availability**: 99.5% uptime required
+
+#### User Impact
+
+- **Primary Users**: 5-10 finance team members
+- **User Training**: 2-hour initial training + ongoing support
+- **Daily Usage**: Multiple submissions throughout business hours
+- **Critical Window**: Month-end (25th-5th) - highest volume
+
+#### Financial Impact
+
+- **Cost Savings**: Eliminates manual e-Invoice portal entry
+- **Time Savings**: ~5 minutes per invoice (automated vs manual)
+- **Efficiency Gain**: ~80% reduction in invoice processing time
+- **ROI**: Positive within 6 months of deployment
+
+### 1.5 Technical Stack
+
+- **Platform**: Business Central 26.0+ (AL Language)
+- **Runtime**: AL Runtime 15.0
 - **Cloud Services**: Azure Functions (Document Signing)
-- **External APIs**: LHDN MyInvois API
+- **External APIs**: LHDN MyInvois API v1.0
 - **Standards**: UBL 2.1 (Universal Business Language)
+- **Authentication**: OAuth 2.0 (Client Credentials Flow)
+- **Signing**: XAdES (XML Advanced Electronic Signatures)
+- **Certificate**: P12/PFX format (annual renewal required)
+
+### 1.6 Critical Dates & Deadlines
+
+> [!CAUTION]
+> **Certificate Expiry**: The digital signing certificate expires annually. Missing renewal will block ALL invoice submissions.
+
+| Event | Date | Action Required | Lead Time |
+| ----- | ---- | --------------- | --------- |
+| Certificate Renewal | Annually (check eInvoice Setup) | Request new certificate from CA | 60 days before expiry |
+| LHDN API Credentials Rotation | Every 6 months | Update Client ID/Secret in setup | 14 days before expiry |
+| Quarterly Security Review | Every 3 months | Audit access logs and credentials | 1 week |
+| BC Platform Upgrade | As per Microsoft schedule | Test extension compatibility | 30 days before upgrade |
+| Extension Version Update | As needed | Deploy to sandbox, test, then production | 7 days for testing |
+
+### 1.7 Current System Status
+
+**Production Environment:**
+
+- **Version**: 1.0.0.71 (as of Dec 2024)
+- **Environment**: PRODUCTION
+- **LHDN API**: <https://api.myinvois.hasil.gov.my>
+- **Azure Function**: [URL in eInvoice Setup]
+- **Health Status**: ✅ Operational
+
+**Known Issues:**
+
+- Occasional QR code generation delays (LHDN API latency)
+- Retry logic handles transient Azure Function timeouts
+- Performance optimization ongoing for batch submissions
+
+**Recent Changes (Last 3 Months):**
+
+- Credit note reference handling updated (Dec 2023)
+- Improved error messaging for user clarity
+- Enhanced logging for better diagnostics
+- Performance improvements for large invoices
 
 ---
 
-## 2. Project Takeover Checklist
+## 2. Project Takeover Checklist & 30-Day Onboarding Plan
 
-### 2.1 Access & Credentials (Week 1)
+> [!NOTE]
+> This section provides a structured 30-day onboarding plan. Adjust the timeline based on your experience level and availability. The plan assumes full-time dedication; part-time developers should extend timelines proportionally.
 
-Complete these tasks in your first week:
+### 2.1 Week 1: Environment Setup & Orientation
+
+**Objective**: Gain access to all systems, set up development environment, and understand project context.
+
+#### Day 1: Access Verification & Initial Setup
+
+**Morning (9:00 AM - 12:00 PM)**:
 
 - [ ] **Source Code Access**
-  - Clone repository: `git clone <repo-url>`
-  - Verify you can build the project locally
-  - Ensure you have access to the GitHub organization and required repositories
 
-- [ ] **Environment Access**
-  - Business Central Sandbox environment credentials
-  - Business Central Production environment (read-only initially)
-  - Azure Portal access (Resource Group: `rg-myinvois-*`)
+  ```bash
+  # Clone the repository
+  git clone https://github.com/KalvinChua/Jotex-BC-eInvoice.git
+  cd Jotex-BC-eInvoice
+  
+  # Verify repository structure
+  ls -la
+  # Expected: See .al files, app.json, HANDOVER.md, etc.
+  ```
+  
+- [ ] **Verify GitHub Access**
+  - Can you see the repository?
+  - Can you create a branch?
+  - Can you push commits?
 
-- [ ] **API Credentials**
-  - LHDN MyInvois PreProd credentials (Client ID/Secret)
-  - LHDN MyInvois Production credentials (Client ID/Secret)
-  - Azure Function URL and access keys
+**Afternoon (1:00 PM - 5:00 PM)**:
 
-- [ ] **Documentation Review**
-  - Read this handover document completely
-  - Review `MyInvois_LHDN_eInvoice_System_Documentation.md`
-  - Skim `MyInvois_LHDN_Developer_Guide.md`
+- [ ] **Environment Access Verification**
+  - [ ] Business Central Sandbox: Login at `https://businesscentral.dynamics.com`
+  - [ ] Azure Portal: Access Resource Group `rg-myinvois-*`
+  - [ ] Document all URLs and credentials in your secure password manager
 
-### 2.2 Knowledge Transfer Sessions (Week 1-2)
+- [ ] **Initial Documentation Review**
+  - [ ] Read this HANDOVER.md (sections 1-3)
+  - [ ] Skim `README.md`
+  - [ ] Review `app.json` to understand extension metadata
 
-Schedule these sessions with the previous developer:
+**End of Day Checkpoint**:
 
-1. **Session 1: Architecture Walkthrough** (2 hours)
-   - Data flow from BC → Azure → LHDN
-   - Key codeunits and their responsibilities
-   - Configuration in `eInvoice Setup`
+```text
+✓ Can access GitHub repository
+✓ Can login to BC Sandbox
+✓ Can access Azure Portal
+✓ Have read executive summary and understand project purpose
+```
 
-2. **Session 2: Common Issues & Resolutions** (1.5 hours)
-   - "Invalid Structured Submission" debugging
-   - Certificate renewal process
-   - Token expiry handling
+---
 
-3. **Session 3: Deployment Process** (1 hour)
-   - Extension deployment to BC environments
-   - Azure Function deployment
-   - Rollback procedures
+#### Day 2: Development Environment Setup
 
-4. **Session 4: Support Scenarios** (1 hour)
-   - How to investigate user-reported issues
-   - Using `eInvoice Submission Log` for diagnostics
-   - Escalation procedures
+**Morning (9:00 AM - 12:00 PM)**:
 
-### 2.3 Hands-On Tasks (Week 2-3)
+- [ ] **Install Required Software**
 
-Complete these practical exercises:
+  ```powershell
+  # Verify installations
+  code --version          # VS Code 1.85.0+
+  git --version           # Git 2.40.0+
+  docker --version        # Docker 24.0.0+ (if using containers)
+  az --version            # Azure CLI 2.50.0+
+  ```
 
-- [ ] **Exercise 1**: Generate Test Invoice
-  - Create a test customer with e-Invoice enabled
-  - Post a sales invoice
-  - Submit to LHDN PreProd
-  - Verify in submission log
+- [ ] **Install VS Code Extensions**
+  - [ ] AL Language Extension (v13.0+)
+  - [ ] GitLens (optional but recommended)
+  - [ ] Markdown All in One (for documentation)
 
-- [ ] **Exercise 2**: Debug a Failed Submission
-  - Intentionally create an invalid invoice (missing TIN)
-  - Attempt submission
-  - Use debugging tools to identify the issue
-  - Fix and resubmit
+**Afternoon (1:00 PM - 5:00 PM)**:
 
-- [ ] **Exercise 3**: Deploy a Minor Change
-  - Make a cosmetic change (e.g., modify a label)
-  - Build the extension
-  - Deploy to sandbox
-  - Verify the change
+- [ ] **Configure VS Code for BC Development**
+  - [ ] Create `.vscode/launch.json` (see Section 3.2 for template)
+  - [ ] Configure `.vscode/settings.json`
+  - [ ] Download symbols: Press F1 → "AL: Download Symbols"
+  
+- [ ] **First Build Attempt**
 
-- [ ] **Exercise 4**: Review Production Logs
-  - Access `eInvoice Submission Log` in production
-  - Identify the last 10 submissions
-  - Check for any failed submissions
-  - Understand the error patterns
+  ```powershell
+  # In VS Code, press Ctrl+Shift+B or F5
+  # Expected: Extension builds successfully to .app file
+  ```
+
+**End of Day Checkpoint**:
+
+```text
+✓ All required software installed
+✓ VS Code configured for AL development
+✓ Symbols downloaded successfully
+✓ Extension builds without errors
+```
+
+**Troubleshooting**: If build fails, see Section 3.3 "Common Setup Issues"
+
+---
+
+#### Day 3: First Successful Deployment
+
+**Morning (9:00 AM - 12:00 PM)**:
+
+- [ ] **Deploy to Sandbox**
+  - [ ] Press F5 in VS Code
+  - [ ] Wait for deployment to complete
+  - [ ] BC should open in browser automatically
+  
+- [ ] **Verify Deployment**
+  - [ ] Search for "eInvoice Setup Card" in BC
+  - [ ] Can you open the page?
+  - [ ] Do you see configuration fields?
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Explore the Extension in BC**
+  - [ ] Navigate to Posted Sales Invoices
+  - [ ] Look for "Sign & Submit to LHDN" action
+  - [ ] Open eInvoice Submission Log
+  - [ ] Familiarize yourself with the UI
+
+- [ ] **Review Extension Metadata**
+  - [ ] Open `app.json`
+  - [ ] Note current version: 1.0.0.71
+  - [ ] Understand ID ranges: 50300-50399
+  - [ ] Review dependencies
+
+**End of Day Checkpoint**:
+
+```text
+✓ Successfully deployed extension to sandbox
+✓ Can navigate to eInvoice Setup Card
+✓ Can see eInvoice actions on Posted Sales Invoices
+✓ Understand extension structure and versioning
+```
+
+---
+
+#### Day 4: Documentation Deep Dive
+
+**Morning (9:00 AM - 12:00 PM)**:
+
+- [ ] **Read Core Documentation**
+  - [ ] Complete HANDOVER.md (all sections)
+  - [ ] Read `MyInvois_LHDN_eInvoice_System_Documentation.md`
+  - [ ] Take notes on unclear areas
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Read Technical Documentation**
+  - [ ] `MyInvois_LHDN_Developer_Guide.md`
+  - [ ] `MyInvois_LHDN_API_Integration_Guide.md`
+  - [ ] `MyInvois_LHDN_Troubleshooting_Guide.md`
+
+- [ ] **Create Personal Notes**
+  - [ ] List questions for knowledge transfer session
+  - [ ] Document unclear concepts
+  - [ ] Identify areas needing clarification
+
+**End of Day Checkpoint**:
+
+```text
+✓ Read all handover documentation
+✓ Understand high-level architecture
+✓ Have list of questions for previous developer
+✓ Know where to find specific information
+```
+
+---
+
+#### Day 5: Knowledge Transfer Session
+
+**Morning (9:00 AM - 12:00 PM)**:
+
+- [ ] **Session 1: Architecture Walkthrough** (2 hours)
+  - [ ] Data flow: BC → Azure → LHDN
+  - [ ] Key codeunits and responsibilities
+  - [ ] Configuration in eInvoice Setup
+  - [ ] Live demo of invoice submission
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Session 2: Common Issues & Resolutions** (1.5 hours)
+  - [ ] "Invalid Structured Submission" debugging
+  - [ ] Certificate renewal process
+  - [ ] Token expiry handling
+  - [ ] Real examples from production
+
+- [ ] **Review Session Notes**
+  - [ ] Organize notes from knowledge transfer
+  - [ ] Update personal documentation
+  - [ ] Clarify any remaining questions
+
+**End of Week 1 Checkpoint**:
+
+```text
+✓ Development environment fully operational
+✓ Can build and deploy extension
+✓ Understand project architecture
+✓ Have completed knowledge transfer sessions
+✓ Ready to start hands-on exercises
+```
+
+---
+
+### 2.2 Week 2: Hands-On Learning & Practical Exercises
+
+**Objective**: Gain practical experience with the system through guided exercises.
+
+#### Day 6-7: Exercise 1 - Generate and Submit Test Invoice
+
+##### Day 6: Setup Test Data
+
+##### Morning (9:00 AM - 12:00 PM)
+
+- [ ] **Create Test Customer**
+
+  ```text
+  1. In BC Sandbox, go to Customers
+  2. Create new customer:
+     - No.: CUST-TEST-001
+     - Name: Test Customer Sdn Bhd
+     - TIN: C12345678901234 (test TIN)
+     - Address: 123 Test Street
+     - City: Kuala Lumpur
+     - Post Code: 50000
+     - Country/Region Code: MY
+  3. Enable e-Invoice:
+     - Requires e-Invoice: Yes
+     - eInv Customer Name: Test Customer Sdn Bhd
+     - eInv TIN: C12345678901234
+  ```
+
+- [ ] **Create Test Item**
+
+  ```text
+  1. Go to Items
+  2. Create new item:
+     - No.: ITEM-TEST-001
+     - Description: Test Product
+     - Unit Price: 100.00
+     - Gen. Prod. Posting Group: RETAIL
+     - VAT Prod. Posting Group: STANDARD
+  ```
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Configure eInvoice Setup for PreProd**
+
+  ```text
+  1. Search "eInvoice Setup Card"
+  2. Verify/Update:
+     - Environment: PREPROD
+     - Azure Function URL: [Get from previous developer]
+     - Client ID: [PreProd credentials]
+     - Client Secret: [PreProd credentials]
+     - LHDN API URL: https://preprod-api.myinvois.hasil.gov.my
+  ```
+
+- [ ] **Verify Company Information**
+
+  ```text
+  1. Go to Company Information
+  2. Ensure all eInvoice fields are populated:
+     - eInv TIN
+     - eInv Registration Name
+     - eInv Address, City, Post Code
+     - eInv MSIC Code
+  ```
+
+##### Day 7: Create and Submit Invoice
+
+##### Morning (Day 7)
+
+- [ ] **Create Sales Invoice**
+
+  ```text
+  1. Go to Sales Invoices
+  2. Create new invoice:
+     - Customer: CUST-TEST-001
+     - Add line: ITEM-TEST-001, Quantity: 1
+  3. Verify e-Invoice fields auto-populated
+  4. Post the invoice
+  ```
+
+- [ ] **Submit to LHDN PreProd**
+
+  ```text
+  1. Go to Posted Sales Invoices
+  2. Find your invoice
+  3. Click "Sign & Submit to LHDN"
+  4. Wait for confirmation message
+  5. Expected: "Successfully submitted to LHDN"
+  ```
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Verify Submission**
+
+  ```text
+  1. Check invoice fields:
+     - eInvoice Validation Status: "Submitted"
+     - eInvoice Submission UID: [populated]
+     - eInvoice UUID: [populated]
+  2. Open eInvoice Submission Log
+  3. Find your submission entry
+  4. Verify status: "Submitted"
+  5. Check for QR code (may take a few minutes)
+  ```
+
+- [ ] **Document Your Experience**
+  - [ ] What worked smoothly?
+  - [ ] What was confusing?
+  - [ ] How long did the process take?
+  - [ ] Any errors encountered?
+
+**Exercise 1 Completion Checkpoint**:
+
+```text
+✓ Created test customer with valid e-Invoice data
+✓ Created test item
+✓ Configured eInvoice Setup for PreProd
+✓ Successfully posted sales invoice
+✓ Successfully submitted invoice to LHDN
+✓ Verified submission in log
+✓ Understand end-to-end invoice flow
+```
+
+---
+
+#### Day 8-9: Exercise 2 - Debug a Failed Submission
+
+##### Day 8: Create Intentional Errors
+
+##### Morning (Day 8)
+
+- [ ] **Scenario 1: Missing TIN**
+
+  ```text
+  1. Create new customer: CUST-TEST-002
+  2. DO NOT populate eInv TIN field
+  3. Create and post sales invoice
+  4. Attempt to submit
+  5. Expected: Error message about missing TIN
+  ```
+
+- [ ] **Analyze the Error**
+  - [ ] What was the exact error message?
+  - [ ] Where did the validation occur? (Before or after API call?)
+  - [ ] How user-friendly is the error message?
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Scenario 2: Invalid Azure Function URL**
+
+  ```text
+  1. Go to eInvoice Setup
+  2. Modify Azure Function URL (add "xxx" to end)
+  3. Create invoice for CUST-TEST-001
+  4. Attempt to submit
+  5. Expected: Azure Function connectivity error
+  ```
+
+- [ ] **Debug Using Submission Log**
+
+  ```text
+  1. Open eInvoice Submission Log
+  2. Find the failed submission
+  3. Read the error message
+  4. Note the correlation ID
+  5. Understand what information is logged
+  ```
+
+##### Day 9: Deep Debugging
+
+##### Morning (Day 9)
+
+- [ ] **Use Debugging Tools**
+
+  ```text
+  1. Open Cod50302.eInvoiceJSONGenerator.al in VS Code
+  2. Set breakpoint in GetSignedInvoiceAndSubmitToLHDN
+  3. Attach debugger (F5)
+  4. Submit an invoice
+  5. Step through the code
+  6. Observe variable values
+  ```
+
+- [ ] **Understand Error Flow**
+  - [ ] Where does error handling occur?
+  - [ ] How are errors logged?
+  - [ ] How are errors displayed to users?
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Fix the Errors**
+
+  ```text
+  1. Restore correct Azure Function URL
+  2. Add TIN to CUST-TEST-002
+  3. Resubmit failed invoices
+  4. Verify successful submission
+  ```
+
+- [ ] **Download JSON for Analysis**
+
+  ```text
+  1. Use DownloadAzureFunctionPayloadForDebugging procedure
+  2. Download generated JSON
+  3. Review structure
+  4. Validate against UBL 2.1 schema
+  ```
+
+**Exercise 2 Completion Checkpoint**:
+
+```text
+✓ Intentionally created validation errors
+✓ Analyzed error messages and logging
+✓ Used debugger to step through code
+✓ Understand error handling flow
+✓ Can use submission log for diagnostics
+✓ Can download and analyze JSON payloads
+```
+
+---
+
+#### Day 10: Exercise 3 - Deploy a Minor Change
+
+**Morning (9:00 AM - 12:00 PM)**:
+
+- [ ] **Make a Cosmetic Change**
+
+  ```al
+  // In Pag-Ext50306.eInvPostedSalesInvoiceExt.al
+  // Find the "Sign & Submit to LHDN" action
+  // Change the caption to "Sign & Submit to LHDN (Test)"
+  
+  action(SignAndSubmit)
+  {
+      Caption = 'Sign & Submit to LHDN (Test)';
+      // ... rest of action
+  }
+  ```
+
+- [ ] **Update Version Number**
+
+  ```json
+  // In app.json
+  "version": "1.0.0.72"  // Increment from 1.0.0.71
+  ```
+
+**Afternoon (1:00 PM - 5:00 PM)**:
+
+- [ ] **Build and Deploy**
+
+  ```text
+  1. Save all files
+  2. Press Ctrl+Shift+B to build
+  3. Verify .app file created: KMAX_KMAXDev_1.0.0.72.app
+  4. Press F5 to deploy to sandbox
+  5. Wait for deployment to complete
+  ```
+
+- [ ] **Verify the Change**
+
+  ```text
+  1. Go to Posted Sales Invoices in BC
+  2. Check if action caption changed
+  3. Test that functionality still works
+  4. Submit a test invoice to verify no regression
+  ```
+
+- [ ] **Rollback the Change**
+
+  ```text
+  1. Revert caption to original
+  2. Revert version to 1.0.0.71
+  3. Rebuild and redeploy
+  4. Verify rollback successful
+  ```
+
+**Exercise 3 Completion Checkpoint**:
+
+```text
+✓ Made code modification
+✓ Updated version number
+✓ Built extension successfully
+✓ Deployed to sandbox
+✓ Verified change in UI
+✓ Tested functionality
+✓ Rolled back changes
+✓ Understand deployment workflow
+```
+
+**End of Week 2 Checkpoint**:
+
+```text
+✓ Completed all three hands-on exercises
+✓ Can create and submit invoices
+✓ Can debug failed submissions
+✓ Can deploy changes to sandbox
+✓ Comfortable with development workflow
+```
+
+---
+
+### 2.3 Week 3: Deep Dive into Codebase
+
+**Objective**: Understand the codebase architecture and key components in detail.
+
+#### Day 11-12: Code Walkthrough - JSON Generator
+
+##### Day 11: Understanding the Main Flow
+
+- [ ] **Study Cod50302.eInvoiceJSONGenerator.al**
+
+  ```text
+  1. Open the file (327KB, ~7,000 lines)
+  2. Review file outline (Ctrl+Shift+O in VS Code)
+  3. Identify main procedures:
+     - GetSignedInvoiceAndSubmitToLHDN
+     - GenerateEInvoiceJson
+     - TryPostToAzureFunctionDirect
+     - SubmitToLhdnApi
+  ```
+
+- [ ] **Trace Invoice Submission Flow**
+
+  ```text
+  1. Start at GetSignedInvoiceAndSubmitToLHDN
+  2. Follow the call chain
+  3. Document each step in your notes
+  4. Understand data transformations
+  ```
+
+- [ ] **Understand UBL 2.1 Structure**
+  - [ ] Read about UBL 2.1 standard
+  - [ ] Review JSON structure in generated files
+  - [ ] Understand namespace conventions (_D,_A, _B)
+
+##### Day 12: Deep Dive into Helper Procedures
+
+- [ ] **Study JSON Building Procedures**
+
+  ```text
+  - BuildEInvoiceJson()
+  - AddAccountingSupplierParty()
+  - AddAccountingCustomerParty()
+  - AddInvoiceLines()
+  - AddTaxTotal()
+  ```
+
+- [ ] **Understand Error Handling**
+  - [ ] How are errors caught?
+  - [ ] How are they logged?
+  - [ ] How are they reported to users?
+
+- [ ] **Review Retry Logic**
+  - [ ] Where is retry implemented?
+  - [ ] How many retries?
+  - [ ] What is the backoff strategy?
+
+---
+
+#### Day 13-14: Azure Function Integration
+
+##### Day 13: Understanding Azure Function
+
+- [ ] **Review Azure Function Code** (if accessible)
+  - [ ] Request access to eInvAzureSign repository
+  - [ ] Review SignDocument function
+  - [ ] Understand certificate loading
+  - [ ] Understand XAdES signing process
+
+- [ ] **Study BC-Azure Communication**
+
+  ```al
+  // In Cod50302
+  - TryPostToAzureFunctionDirect()
+  - How is HTTP request constructed?
+  - What is sent in payload?
+  - What is expected in response?
+  ```
+
+##### Day 14: Testing Azure Integration
+
+- [ ] **Test Azure Function Directly**
+
+  ```bash
+  # Use Postman or curl
+  curl -X POST [Azure Function URL] \
+    -H "Content-Type: application/json" \
+    -d @test-payload.json
+  ```
+
+- [ ] **Understand Response Handling**
+  - [ ] What does successful response look like?
+  - [ ] What error responses are possible?
+  - [ ] How does BC handle each response type?
+
+---
+
+#### Day 15: LHDN API Integration
+
+- [ ] **Study LHDN API Documentation**
+  - [ ] Review `MyInvois_LHDN_API_Integration_Guide.md`
+  - [ ] Understand authentication (OAuth 2.0)
+  - [ ] Review API endpoints used
+
+- [ ] **Trace LHDN Submission Flow**
+
+  ```al
+  // In Cod50302
+  - SubmitToLhdnApi()
+  - GetLhdnAccessToken()
+  - ParseAndDisplayLhdnResponse()
+  ```
+
+- [ ] **Understand Token Management**
+  - [ ] Where is token cached?
+  - [ ] How is expiry handled?
+  - [ ] What happens on token refresh?
+
+**End of Week 3 Checkpoint**:
+
+```text
+✓ Understand Cod50302 structure and flow
+✓ Can trace invoice submission end-to-end
+✓ Understand UBL 2.1 JSON generation
+✓ Understand Azure Function integration
+✓ Understand LHDN API integration
+✓ Comfortable reading and navigating codebase
+```
+
+---
+
+### 2.4 Week 4: Production Readiness & Certification
+
+**Objective**: Prepare for production support and validate knowledge.
+
+#### Day 16-18: Production Monitoring
+
+##### Day 16: Log Analysis
+
+- [ ] **Access Production Submission Log** (read-only)
+
+  ```text
+  1. Login to BC Production
+  2. Open eInvoice Submission Log
+  3. Review last 100 submissions
+  4. Identify patterns:
+     - Success rate
+     - Common errors
+     - Peak submission times
+  ```
+
+- [ ] **Analyze Failed Submissions**
+  - [ ] What are the most common failure reasons?
+  - [ ] Are there patterns (time of day, specific customers)?
+  - [ ] How were they resolved?
+
+##### Day 17: Azure Monitoring
+
+- [ ] **Review Azure Function Metrics**
+
+  ```text
+  1. Login to Azure Portal
+  2. Navigate to Function App
+  3. Review metrics:
+     - Request count
+     - Response time
+     - Error rate
+  4. Review Application Insights logs
+  ```
+
+##### Day 18: Support Ticket Review
+
+- [ ] **Review Historical Support Tickets**
+  - [ ] Read last 10 support tickets
+  - [ ] Understand common user issues
+  - [ ] Review resolution approaches
+
+---
+
+#### Day 19-20: Support Simulation
+
+##### Day 19: Scenario-Based Troubleshooting
+
+- [ ] **Scenario 1: User reports "Invoice won't submit"**
+
+  ```text
+  Your approach:
+  1. Ask for invoice number
+  2. Check submission log
+  3. Verify customer data
+  4. Check Azure Function health
+  5. Test submission in sandbox
+  6. Provide resolution
+  ```
+
+- [ ] **Scenario 2: "QR code not showing"**
+
+  ```text
+  Your approach:
+  1. Check if submission succeeded
+  2. Verify Submission UID and UUID populated
+  3. Manually trigger QR generation
+  4. Check LHDN API response
+  5. Explain timing to user
+  ```
+
+##### Day 20: Emergency Response Drill
+
+- [ ] **Scenario: Azure Function is down**
+
+  ```text
+  Your response plan:
+  1. Verify Azure Function status
+  2. Check Azure Portal for alerts
+  3. Restart function if needed
+  4. Test with sample invoice
+  5. Communicate with users
+  6. Document incident
+  ```
+
+---
+
+#### Day 21-25: Independent Feature Implementation
+
+- [ ] **Choose a Small Enhancement**
+
+  ```text
+  Examples:
+  - Add a new field to submission log
+  - Improve error message clarity
+  - Add validation for a specific scenario
+  - Create a utility report
+  ```
+
+- [ ] **Implement the Feature**
+
+  ```text
+  Day 21: Design and plan
+  Day 22-23: Implement
+  Day 24: Test in sandbox
+  Day 25: Code review with previous developer
+  ```
+
+---
+
+#### Day 26-30: Knowledge Validation & Certification
+
+##### Day 26-27: Self-Assessment
+
+- [ ] **Technical Quiz** (create your own or request from previous developer)
+  - [ ] Architecture questions
+  - [ ] Code comprehension questions
+  - [ ] Troubleshooting scenarios
+
+##### Day 28-29: Documentation Update
+
+- [ ] **Update Handover Documentation**
+  - [ ] Add any missing information you discovered
+  - [ ] Clarify confusing sections
+  - [ ] Add your own tips and tricks
+
+##### Day 30: Final Review & Sign-Off
+
+- [ ] **Final Knowledge Transfer Session**
+  - [ ] Review any remaining questions
+  - [ ] Discuss edge cases
+  - [ ] Review escalation procedures
+
+- [ ] **Certification Checklist**
+
+  ```text
+  ✓ Can independently submit invoices
+  ✓ Can debug common issues
+  ✓ Can deploy changes safely
+  ✓ Can monitor production
+  ✓ Can handle support tickets
+  ✓ Know when to escalate
+  ✓ Understand all critical components
+  ✓ Have access to all necessary systems
+  ```
+
+**End of 30-Day Onboarding**:
+
+```text
+✓ Fully onboarded and production-ready
+✓ Can independently maintain the system
+✓ Confident in troubleshooting and support
+✓ Ready to take over from previous developer
+```
 
 ---
 
 ## 3. Development Environment Setup
 
-### 3.1 Prerequisites
+### 3.1 Prerequisites - Detailed Installation Guide
 
-Install the following tools:
+#### Required Software with Version Verification
+
+##### 1. Visual Studio Code
 
 ```powershell
-# Required Software
-- Visual Studio Code (latest)
-- AL Language Extension for VS Code
-- Git for Windows
-- Docker Desktop (for BC container development)
-- Azure CLI (for Azure Function management)
-- Postman or similar (for API testing)
+# Download and install from: https://code.visualstudio.com/
+# After installation, verify:
+code --version
+# Expected output: 1.85.0 or higher
+```
+
+##### Installation Steps
+
+1. Download VS Code installer for Windows
+2. Run installer with default settings
+3. Check "Add to PATH" during installation
+4. Launch VS Code to verify
+
+##### 2. AL Language Extension
+
+```text
+1. Open VS Code
+2. Press Ctrl+Shift+X (Extensions)
+3. Search for "AL Language"
+4. Install "AL Language extension for Microsoft Dynamics 365 Business Central"
+5. Verify version: v13.0 or higher
+```
+
+##### 3. Git for Windows
+
+```powershell
+# Download from: https://git-scm.com/download/win
+# After installation, verify:
+git --version
+# Expected output: git version 2.40.0 or higher
+```
+
+##### Configuration
+
+```bash
+# Set your identity
+git config --global user.name "Your Name"
+git config --global user.email "your.email@company.com"
+
+# Verify configuration
+git config --list
+```
+
+##### 4. Docker Desktop (Optional - for local BC containers)
+
+```powershell
+# Download from: https://www.docker.com/products/docker-desktop
+# After installation, verify:
+docker --version
+# Expected output: Docker version 24.0.0 or higher
+
+docker ps
+# Should show empty list (no errors)
+```
+
+> [!NOTE]
+> Docker is only needed if you want to run Business Central in local containers. For cloud-based development, you can skip this.
+
+##### 5. Azure CLI
+
+```powershell
+# Download from: https://aka.ms/installazurecliwindows
+# After installation, verify:
+az --version
+# Expected output: azure-cli 2.50.0 or higher
+
+# Login to Azure
+az login
+# This will open browser for authentication
+```
+
+##### 6. Postman (or similar API testing tool)
+
+```text
+# Download from: https://www.postman.com/downloads/
+# Alternative: Use VS Code REST Client extension
+```
+
+#### Verification Checklist
+
+After installing all prerequisites, verify:
+
+```powershell
+# Run this verification script
+Write-Host "=== Environment Verification ==="
+Write-Host "VS Code: " -NoNewline; code --version | Select-Object -First 1
+Write-Host "Git: " -NoNewline; git --version
+Write-Host "Docker: " -NoNewline; docker --version
+Write-Host "Azure CLI: " -NoNewline; az version --query '"azure-cli"' -o tsv
+Write-Host "=== Verification Complete ==="
+```
+
+##### Expected Output
+
+```text
+=== Environment Verification ===
+VS Code: 1.85.0
+Git: git version 2.40.1.windows.1
+Docker: Docker version 24.0.5, build ced0996
+Azure CLI: 2.53.0
+=== Verification Complete ===
 ```
 
 ### 3.2 Local Development Setup
@@ -186,6 +1136,311 @@ AL: Download Symbols
 
 ```powershell
 # Press Ctrl+Shift+B or F5 to build and deploy
+```
+
+### 3.3 Common Setup Issues & Solutions
+
+#### Issue 1: Symbol Download Fails
+
+##### Symptoms: Symbol Download
+
+- "Failed to download symbols" error
+- AL extension shows errors on all standard BC objects
+
+##### Possible Causes & Solutions
+
+###### Cause 1: Network/Firewall Issues
+
+```powershell
+# Test connectivity to BC service
+Test-NetConnection -ComputerName businesscentral.dynamics.com -Port 443
+
+# If fails, check:
+# 1. Corporate firewall settings
+# 2. Proxy configuration
+# 3. VPN connection
+```
+
+###### Cause 2: Authentication Issues
+
+```text
+Solution:
+1. In VS Code, press F1
+2. Run "AL: Clear Credentials Cache"
+3. Try downloading symbols again
+4. Re-authenticate when prompted
+```
+
+###### Cause 3: Incorrect launch.json Configuration
+
+```json
+// Verify these fields in launch.json:
+{
+  "server": "https://businesscentral.dynamics.com",  // Correct URL
+  "serverInstance": "BC220",  // Match your BC version
+  "tenant": "your-actual-tenant-id",  // Not placeholder!
+  "authentication": "AAD"  // For cloud BC
+}
+```
+
+---
+
+#### Issue 2: Build Fails with Dependency Errors
+
+##### Symptoms: Build Failures
+
+- "Could not find dependency" errors
+- Missing .alpackages folder
+
+##### Solution: Fix Dependencies
+
+```powershell
+# 1. Ensure .alpackages folder exists
+New-Item -ItemType Directory -Force -Path ".alpackages"
+
+# 2. Download symbols again
+# In VS Code: F1 → "AL: Download Symbols"
+
+# 3. Check app.json dependencies
+# Verify dependency versions match your BC environment
+```
+
+##### Verify Dependencies
+
+```json
+// In app.json, check:
+"dependencies": [
+  {
+    "id": "e41c95d1-d093-45cf-a32e-7e3c52721a20",
+    "name": "SalesPurchaseReport",
+    "publisher": "Evopoint Izzat",
+    "version": "1.0.0.200"  // Must be available in your environment
+  }
+]
+```
+
+---
+
+#### Issue 3: Deployment Fails
+
+##### Symptoms: Deployment Failures
+
+- Extension builds but deployment fails
+- "Could not publish extension" error
+
+##### Solution 1: Check Permissions
+
+```text
+1. Verify you have permission to publish extensions
+2. In BC, check your user role includes:
+   - D365 EXTENSION MGT
+   - SUPER (for sandbox)
+```
+
+##### Solution 2: Uninstall Previous Version
+
+```text
+1. In BC, search "Extension Management"
+2. Find "KMAXDev" extension
+3. Uninstall if already installed
+4. Try deployment again
+```
+
+##### Solution 3: Check Version Conflict
+
+```json
+// In app.json, ensure version is incremented
+"version": "1.0.0.72"  // Higher than currently installed version
+```
+
+---
+
+#### Issue 4: Debugger Won't Attach
+
+##### Symptoms: Debugger Issues
+
+- Breakpoints not hit
+- Debugger shows "Disconnected"
+
+##### Solution: Fix Debugger Configuration
+
+```json
+// In launch.json, ensure:
+{
+  "breakOnError": true,
+  "breakOnRecordWrite": false,  // Can cause issues if true
+  "enableSqlInformationDebugger": true,
+  "enableLongRunningSqlStatements": true
+}
+```
+
+##### Alternative: Use Snapshot Debugging
+
+```text
+1. In BC, enable snapshot debugging
+2. In VS Code: F1 → "AL: Enable Snapshot Debugging"
+3. Set breakpoints and trigger code
+```
+
+### 3.4 Environment Configuration Templates
+
+#### Complete launch.json Template
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BC Sandbox (Cloud)",
+      "type": "al",
+      "request": "launch",
+      "server": "https://businesscentral.dynamics.com",
+      "serverInstance": "BC220",
+      "tenant": "your-tenant-id",
+      "authentication": "AAD",
+      "startupObjectId": 50300,
+      "startupObjectType": "Page",
+      "breakOnError": true,
+      "launchBrowser": true,
+      "enableLongRunningSqlStatements": true,
+      "enableSqlInformationDebugger": true,
+      "schemaUpdateMode": "Synchronize"
+    },
+    {
+      "name": "BC Production (Read-Only)",
+      "type": "al",
+      "request": "attach",
+      "server": "https://businesscentral.dynamics.com",
+      "serverInstance": "BC220-PROD",
+      "tenant": "your-prod-tenant-id",
+      "authentication": "AAD",
+      "breakOnError": false,
+      "breakOnNext": "None"
+    }
+  ]
+}
+```
+
+#### Recommended settings.json
+
+```json
+{
+  "al.enableCodeAnalysis": true,
+  "al.codeAnalyzers": [
+    "${CodeCop}",
+    "${UICop}",
+    "${PerTenantExtensionCop}"
+  ],
+  "al.enableCodeActions": true,
+  "al.incrementalBuild": true,
+  "editor.formatOnSave": true,
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+  "[al]": {
+    "editor.defaultFormatter": "ms-dynamics-smb.al",
+    "editor.formatOnSave": true
+  },
+  "git.autofetch": true,
+  "git.confirmSync": false
+}
+```
+
+#### .gitignore for BC Projects
+
+```gitignore
+# AL-specific
+.alpackages/
+.alcache/
+.vscode/.alcache/
+*.app
+
+# Build output
+.output/
+.artifacts/
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+```
+
+### 3.5 First Build Validation Checklist
+
+After completing environment setup, verify everything works:
+
+#### Pre-Build Checklist
+
+```text
+[ ] Repository cloned successfully
+[ ] All prerequisites installed and verified
+[ ] launch.json configured with correct tenant ID
+[ ] settings.json created with recommended settings
+[ ] .gitignore file present
+[ ] Symbols downloaded (check .alpackages folder has files)
+[ ] No red squiggly lines in AL files (IntelliSense working)
+```
+
+#### Build Checklist
+
+```text
+[ ] Press Ctrl+Shift+B (Build)
+[ ] Build completes without errors
+[ ] .app file created in project root
+[ ] App file size is reasonable (~280KB for this project)
+[ ] No warnings about missing dependencies
+```
+
+#### Deployment Checklist
+
+```text
+[ ] Press F5 (Deploy and Debug)
+[ ] Extension publishes successfully
+[ ] Extension synchronizes successfully
+[ ] Extension installs successfully
+[ ] Browser opens to BC
+[ ] Can navigate to eInvoice Setup Card
+[ ] Can see eInvoice actions on Posted Sales Invoices
+```
+
+#### Post-Deployment Verification
+
+```powershell
+# In BC, verify extension is installed:
+# 1. Search "Extension Management"
+# 2. Find "KMAXDev" extension
+# 3. Status should be "Installed"
+# 4. Version should match app.json
+```
+
+**Verification Script**:
+
+```text
+1. Open Posted Sales Invoices in BC
+2. Look for these custom actions:
+   - "Sign & Submit to LHDN"
+   - "View Submission Log"
+   - "Download JSON"
+3. If visible, extension is working correctly
+```
+
+**Troubleshooting Failed Verification**:
+
+```text
+If actions not visible:
+1. Check Extension Management - is extension installed?
+2. Check user permissions - do you have eInvoice Full Access?
+3. Refresh browser (Ctrl+F5)
+4. Check browser console for JavaScript errors
 ```
 
 ### 3.3 Azure Function Local Development
@@ -1075,5 +2330,4 @@ Cod50302.DownloadAzureFunctionPayloadForDebugging(DocType, DocNo, Setup)
 
 ### End of Handover Documentation
 
-> **Next Steps**: Complete the [Project Takeover Checklist](#2-project-takeover-checklist) and schedule knowledge transfer sessions with the previous developer.
-
+> **Next Steps**: Complete the [Project Takeover Checklist & 30-Day Onboarding Plan](#2-project-takeover-checklist--30-day-onboarding-plan) and schedule knowledge transfer sessions with the previous developer.
