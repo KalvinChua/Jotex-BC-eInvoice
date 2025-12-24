@@ -248,6 +248,83 @@ codeunit 50312 "eInvoice Submission Status"
     end;
 
     /// <summary>
+    /// Parse validation errors from LHDN Get Submission API response
+    /// Extracts error details from documentSummary for documents with Invalid/Rejected status
+    /// Returns error object as JSON text for storage via ParseAndStoreErrorResponse
+    /// </summary>
+    /// <param name="ResponseText">Raw JSON response from LHDN Get Submission API</param>
+    /// <param name="DocumentUuid">UUID of the document to find errors for</param>
+    /// <param name="ErrorJsonText">Output: Error object as JSON text</param>
+    /// <param name="HttpStatusCode">Output: HTTP status code (400 for validation errors)</param>
+    /// <returns>True if errors were found and parsed successfully</returns>
+    procedure ParseSubmissionResponseForErrors(ResponseText: Text; DocumentUuid: Text; var ErrorJsonText: Text; var HttpStatusCode: Integer): Boolean
+    var
+        JsonObject: JsonObject;
+        JsonToken: JsonToken;
+        DocumentSummaryArray: JsonArray;
+        DocumentObject: JsonObject;
+        ErrorObject: JsonObject;
+        UuidValue: Text;
+        StatusValue: Text;
+        i: Integer;
+    begin
+        ErrorJsonText := '';
+        HttpStatusCode := 0;
+
+        // Parse the response JSON
+        if not JsonObject.ReadFrom(ResponseText) then
+            exit(false);
+
+        // Get documentSummary array
+        if not JsonObject.Get('documentSummary', JsonToken) then
+            exit(false);
+
+        if not JsonToken.IsArray() then
+            exit(false);
+
+        DocumentSummaryArray := JsonToken.AsArray();
+
+        // Find the document matching the UUID
+        for i := 0 to DocumentSummaryArray.Count() - 1 do begin
+            DocumentSummaryArray.Get(i, JsonToken);
+            if JsonToken.IsObject() then begin
+                DocumentObject := JsonToken.AsObject();
+
+                // Get UUID
+                if DocumentObject.Get('uuid', JsonToken) then
+                    UuidValue := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                // Check if this is the document we're looking for
+                if UuidValue = DocumentUuid then begin
+                    // Get status
+                    if DocumentObject.Get('status', JsonToken) then
+                        StatusValue := CleanQuotesFromText(SafeJsonValueToText(JsonToken));
+
+                    // Check if status is Invalid or Rejected
+                    if (StatusValue = 'Invalid') or (StatusValue = 'Rejected') then begin
+                        // Get error object
+                        if DocumentObject.Get('error', JsonToken) and JsonToken.IsObject() then begin
+                            ErrorObject := JsonToken.AsObject();
+                            // Convert error object to JSON text
+                            ErrorObject.WriteTo(ErrorJsonText);
+                            // Set HTTP status code to 400 (Bad Request) for validation errors
+                            HttpStatusCode := 400;
+                            exit(true);
+                        end;
+                    end;
+
+                    // Document found but no errors or status is not Invalid/Rejected
+                    exit(false);
+                end;
+            end;
+        end;
+
+        // Document UUID not found in response
+        exit(false);
+    end;
+
+
+    /// <summary>
     /// Get complete submission details with pagination support
     /// Retrieves all pages of document summary for large submissions
     /// Uses LHDN recommended 3-5 second intervals between requests
@@ -1638,6 +1715,10 @@ codeunit 50312 "eInvoice Submission Status"
         SecondPipe2: Integer;
         FromDate2: Date;
         ToDate2: Date;
+        // Variables for error parsing
+        ErrorJsonText: Text;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
     begin
         if not IsJotexCompany() then
             exit;
@@ -1668,8 +1749,28 @@ codeunit 50312 "eInvoice Submission Status"
                             SubmissionLogRec.Status := LhdnStatus;
                             SubmissionLogRec."Response Date" := CurrentDateTime;
                             SubmissionLogRec."Last Updated" := CurrentDateTime;
-                            SubmissionLogRec."Error Message" := StrSubstNo('Background refresh completed at %1',
-                                                                          Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
+
+                            // Parse and store validation errors if status is Invalid or Rejected
+                            if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                                if SubmissionLogRec."Document UUID" <> '' then begin
+                                    CorrelationId := CreateGuid();
+                                    if ParseSubmissionResponseForErrors(SubmissionDetails, SubmissionLogRec."Document UUID", ErrorJsonText, HttpStatusCode) then begin
+                                        // Store the error details using the same method as initial submission
+                                        ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
+                                    end else begin
+                                        // If no errors found in response, set generic message
+                                        SubmissionLogRec."Error Message" := 'Background refresh: Invalid - No detailed error information available';
+                                    end;
+                                end else begin
+                                    // No Document UUID to match errors
+                                    SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Document UUID missing';
+                                end;
+                            end else begin
+                                // For Valid, Accepted, or other statuses, set generic success message
+                                SubmissionLogRec."Error Message" := StrSubstNo('Background refresh completed at %1',
+                                                                              Format(CurrentDateTime, 0, '<Day,2>/<Month,2>/<Year4> <Hours24,2>:<Minutes,2>'));
+                            end;
+
                             SubmissionLogRec.Modify();
 
                             // Synchronize the Posted Sales Invoice status
@@ -1722,6 +1823,9 @@ codeunit 50312 "eInvoice Submission Status"
         FromDT: DateTime;
         ToDT: DateTime;
         TrimmedUid: Text;
+        ErrorJsonText: Text;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
     begin
         if (FromDate = 0D) or (ToDate = 0D) then
             exit;
@@ -1760,6 +1864,18 @@ codeunit 50312 "eInvoice Submission Status"
                     SubmissionLog."Last Updated" := CurrentDateTime;
                     if DocumentType <> '' then
                         SubmissionLog."Document Type" := DocumentType;
+
+                    // Parse and store validation errors if status is Invalid or Rejected
+                    if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                        if SubmissionLog."Document UUID" <> '' then begin
+                            CorrelationId := CreateGuid();
+                            if ParseSubmissionResponseForErrors(SubmissionDetails, SubmissionLog."Document UUID", ErrorJsonText, HttpStatusCode) then begin
+                                // Store the error details using the same method as initial submission
+                                ParseAndStoreErrorResponse(SubmissionLog, ErrorJsonText, HttpStatusCode, CorrelationId);
+                            end;
+                        end;
+                    end;
+
                     SubmissionLog.Modify();
 
                     // Keep sales invoice header in sync
@@ -1939,6 +2055,9 @@ codeunit 50312 "eInvoice Submission Status"
         ApiSuccess: Boolean;
         LhdnStatus: Text;
         DocumentType: Text;
+        ErrorJsonText: Text;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
     begin
         if not IsJotexCompany() then begin
             Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
@@ -1965,9 +2084,29 @@ codeunit 50312 "eInvoice Submission Status"
             SubmissionLogRec.Status := LhdnStatus;
             SubmissionLogRec."Response Date" := CurrentDateTime;
             SubmissionLogRec."Last Updated" := CurrentDateTime;
-            SubmissionLogRec."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLogRec."Error Message"));
             if DocumentType <> '' then
                 SubmissionLogRec."Document Type" := DocumentType;
+
+            // Parse and store validation errors if status is Invalid or Rejected
+            if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                if SubmissionLogRec."Document UUID" <> '' then begin
+                    CorrelationId := CreateGuid();
+                    if ParseSubmissionResponseForErrors(SubmissionDetails, SubmissionLogRec."Document UUID", ErrorJsonText, HttpStatusCode) then begin
+                        // Store the error details using the same method as initial submission
+                        // This will populate the Error Message field with validation error details
+                        ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
+                    end else begin
+                        // If no errors found in response, set generic message
+                        SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - No detailed error information available from LHDN API', 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                    end;
+                end else begin
+                    // No Document UUID to match errors
+                    SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                end;
+            end else begin
+                // For Valid, Accepted, or other statuses, set generic success message
+                SubmissionLogRec."Error Message" := CopyStr(SubmissionDetails, 1, MaxStrLen(SubmissionLogRec."Error Message"));
+            end;
 
             if SubmissionLogRec.Modify() then begin
                 // Status refreshed successfully - no message needed as requested by user
@@ -2005,6 +2144,9 @@ codeunit 50312 "eInvoice Submission Status"
         LhdnStatus: Text;
         DocumentType: Text;
         ProgressDialog: Dialog;
+        ErrorJsonText: Text;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
     begin
         if not IsJotexCompany() then begin
             Message('Operation not permitted. This e-Invoice feature is enabled only for JOTEX SDN BHD.');
@@ -2044,12 +2186,31 @@ codeunit 50312 "eInvoice Submission Status"
                     SubmissionLog.Status := LhdnStatus;
                     SubmissionLog."Response Date" := CurrentDateTime;
                     SubmissionLog."Last Updated" := CurrentDateTime;
-                    SubmissionLog."Error Message" := CopyStr(StrSubstNo('Bulk refresh: %1. Method: %2',
-                                                                       LhdnStatus,
-                                                                       SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
-                                                             1, MaxStrLen(SubmissionLog."Error Message"));
                     if DocumentType <> '' then
                         SubmissionLog."Document Type" := DocumentType;
+
+                    // Parse and store validation errors if status is Invalid or Rejected
+                    if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                        if SubmissionLog."Document UUID" <> '' then begin
+                            CorrelationId := CreateGuid();
+                            if ParseSubmissionResponseForErrors(SubmissionDetails, SubmissionLog."Document UUID", ErrorJsonText, HttpStatusCode) then begin
+                                // Store the error details using the same method as initial submission
+                                ParseAndStoreErrorResponse(SubmissionLog, ErrorJsonText, HttpStatusCode, CorrelationId);
+                            end else begin
+                                // If no errors found in response, set generic message
+                                SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - No detailed error information available', 1, MaxStrLen(SubmissionLog."Error Message"));
+                            end;
+                        end else begin
+                            // No Document UUID to match errors
+                            SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Document UUID missing', 1, MaxStrLen(SubmissionLog."Error Message"));
+                        end;
+                    end else begin
+                        // For Valid, Accepted, or other statuses, set generic success message
+                        SubmissionLog."Error Message" := CopyStr(StrSubstNo('Bulk refresh: %1. Method: %2',
+                                                                           LhdnStatus,
+                                                                           SubmissionLog."Document UUID" <> '' ? 'Document-level UUID matching' : 'Document-level status'),
+                                                                 1, MaxStrLen(SubmissionLog."Error Message"));
+                    end;
 
                     if SubmissionLog.Modify() then begin
                         UpdatedCount += 1;
@@ -2126,6 +2287,7 @@ codeunit 50312 "eInvoice Submission Status"
         CorrelationId: Text;
         SanitizedUid: Text;
         ErrorDetails: Text;
+        HttpStatusCode: Integer;
     begin
         // Validate that we have a submission UID
         if SubmissionLogRec."Submission UID" = '' then begin
@@ -2202,8 +2364,9 @@ codeunit 50312 "eInvoice Submission Status"
                 SubmissionLogRec."Response Date" := CurrentDateTime;
                 SubmissionLogRec."Last Updated" := CurrentDateTime;
 
-                // Clear error fields only if status is Valid/Accepted (not Invalid/Rejected)
+                // Handle error details based on status
                 if (LhdnStatus = 'Valid') or (LhdnStatus = 'Accepted') then begin
+                    // Clear error fields for valid documents
                     SubmissionLogRec."Error Message" := '';
                     SubmissionLogRec."Error Code" := '';
                     SubmissionLogRec."Error English" := '';
@@ -2213,8 +2376,16 @@ codeunit 50312 "eInvoice Submission Status"
                     SubmissionLogRec."Error Target" := '';
                     Clear(SubmissionLogRec."Inner Errors");
                     SubmissionLogRec."HTTP Status Code" := 0;
+                end else if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                    // Parse and store validation errors from API response
+                    if SubmissionLogRec."Document UUID" <> '' then begin
+                        if ParseSubmissionResponseForErrors(ResponseText, SubmissionLogRec."Document UUID", ErrorDetails, HttpStatusCode) then begin
+                            // Store the error details using the same method as initial submission
+                            ParseAndStoreErrorResponse(SubmissionLogRec, ErrorDetails, HttpStatusCode, CorrelationId);
+                        end;
+                    end;
                 end;
-                // For Invalid/Rejected status, preserve error details from initial submission
+                // For other statuses (Submitted, In Progress), preserve existing error details
 
                 if SubmissionLogRec.Modify() then begin
                     // Synchronize the Posted Sales Invoice status

@@ -1278,6 +1278,30 @@ page 50316 "e-Invoice Submission Log"
     end;
 
     /// <summary>
+    /// Parse and store validation errors from LHDN API response
+    /// Uses the codeunit's error parsing methods to extract and store error details
+    /// </summary>
+    /// <param name="Entry">The submission log entry to update with error details</param>
+    /// <param name="ResponseText">The JSON response from LHDN API</param>
+    /// <returns>True if errors were found and stored successfully</returns>
+    local procedure ParseAndStoreValidationErrors(var Entry: Record "eInvoice Submission Log"; ResponseText: Text): Boolean
+    var
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+        ErrorJsonText: Text;
+        HttpStatusCode: Integer;
+        CorrelationId: Text;
+    begin
+        // Use the codeunit's ParseSubmissionResponseForErrors to extract error details
+        CorrelationId := CreateGuid();
+        if SubmissionStatusCU.ParseSubmissionResponseForErrors(ResponseText, Entry."Document UUID", ErrorJsonText, HttpStatusCode) then begin
+            // Store the error details using the same method as initial submission
+            SubmissionStatusCU.ParseAndStoreErrorResponse(Entry, ErrorJsonText, HttpStatusCode, CorrelationId);
+            exit(true);
+        end;
+        exit(false);
+    end;
+
+    /// <summary>
     /// Direct refresh using the same approach as Posted Sales Invoice page
     /// </summary>
     local procedure DirectRefreshSingle(var Entry: Record "eInvoice Submission Log"): Boolean
@@ -1326,12 +1350,32 @@ page 50316 "e-Invoice Submission Log"
                 Entry.Status := LhdnStatus;
                 Entry."Response Date" := CurrentDateTime;
                 Entry."Last Updated" := CurrentDateTime;
-                Entry."Error Message" := CopyStr('Status refreshed from LHDN via direct API (Submission Log).', 1, MaxStrLen(Entry."Error Message"));
+
                 // Populate UUID if missing
                 if Entry."Document UUID" = '' then
                     Entry."Document UUID" := CopyStr(ExtractUuidFromApiResponse(ResponseText), 1, MaxStrLen(Entry."Document UUID"));
+
                 // Extract Long ID when available (Valid/Cancelled docs)
                 Entry."Long ID" := CopyStr(ExtractLongIdFromApiResponse(ResponseText, Entry."Document UUID"), 1, MaxStrLen(Entry."Long ID"));
+
+                // Parse and store validation errors if status is Invalid or Rejected
+                if (LhdnStatus = 'Invalid') or (LhdnStatus = 'Rejected') then begin
+                    if Entry."Document UUID" <> '' then begin
+                        if ParseAndStoreValidationErrors(Entry, ResponseText) then begin
+                            // Validation errors were parsed and stored successfully
+                        end else begin
+                            // If no errors found in response, set generic message
+                            Entry."Error Message" := CopyStr('Status: Invalid - No detailed error information available from LHDN API', 1, MaxStrLen(Entry."Error Message"));
+                        end;
+                    end else begin
+                        // No Document UUID to match errors
+                        Entry."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(Entry."Error Message"));
+                    end;
+                end else begin
+                    // For Valid, Accepted, or other statuses, set generic success message
+                    Entry."Error Message" := CopyStr('Status refreshed from LHDN via direct API (Submission Log).', 1, MaxStrLen(Entry."Error Message"));
+                end;
+
                 Entry.Modify();
                 // Build and persist validation link and push to posted invoice
                 PopulateValidationLink(Entry);
