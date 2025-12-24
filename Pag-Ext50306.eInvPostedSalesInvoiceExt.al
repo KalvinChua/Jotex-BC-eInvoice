@@ -1311,6 +1311,7 @@
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := Rec."No.";
+            SubmissionLog."Customer No." := Rec."Sell-to Customer No.";
             SubmissionLog."Amount" := TotalAmount;
             SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";
@@ -1589,6 +1590,7 @@
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := DocNo;
+            SubmissionLog."Customer No." := Rec."Sell-to Customer No.";
             SubmissionLog."Amount" := TotalAmount;
             SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";

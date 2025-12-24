@@ -4885,6 +4885,7 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
+        SubmissionLog."Customer No." := SalesInvoiceHeader."Sell-to Customer No.";
         SubmissionLog."Customer Name" := CustomerName;
         SubmissionLog."Amount" := TotalAmount;
         SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
@@ -5700,6 +5701,7 @@ codeunit 50302 "eInvoice JSON Generator"
         SubmissionLog.Init();
         SubmissionLog."Entry No." := 0; // Auto-increment
         SubmissionLog."Invoice No." := SalesCrMemoHeader."No.";
+        SubmissionLog."Customer No." := SalesCrMemoHeader."Sell-to Customer No.";
         SubmissionLog."Customer Name" := CustomerName;
         SubmissionLog."Amount" := TotalAmount;
         SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;

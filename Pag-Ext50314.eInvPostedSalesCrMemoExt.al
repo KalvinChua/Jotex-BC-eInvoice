@@ -1016,6 +1016,7 @@
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := CreditMemoNo;
+            SubmissionLog."Customer No." := SalesCrMemoHeader."Sell-to Customer No.";
             SubmissionLog."Amount" := SalesCrMemoHeader.Amount;
             SubmissionLog."Amount Including VAT" := SalesCrMemoHeader."Amount Including VAT";
             SubmissionLog."Submission UID" := SalesCrMemoHeader."eInvoice Submission UID";
@@ -1444,6 +1445,7 @@
             // Create new log entry if none exists
             SubmissionLog.Init();
             SubmissionLog."Invoice No." := DocNo;
+            SubmissionLog."Customer No." := Rec."Sell-to Customer No.";
             SubmissionLog."Amount" := TotalAmount;
             SubmissionLog."Amount Including VAT" := TotalAmountInclVAT;
             SubmissionLog."Submission UID" := Rec."eInvoice Submission UID";

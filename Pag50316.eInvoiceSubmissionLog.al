@@ -794,6 +794,61 @@ page 50316 "e-Invoice Submission Log"
                 end;
             }
 
+            action(UpdateCustomerNumbers)
+            {
+                ApplicationArea = All;
+                Caption = 'Update Customer Numbers';
+                Image = Customer;
+                ToolTip = 'Update Customer No. field for existing submission log entries that have empty Customer No.';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    eInvoiceLogUpdate: Codeunit "eInvoice Submission Log Update";
+                begin
+                    if Confirm('This will update the Customer No. field for all existing submission log entries that have empty Customer No. Do you want to continue?', false) then begin
+                        eInvoiceLogUpdate.UpdateCustomerNoInSubmissionLog();
+                        CurrPage.Update(false);
+                    end;
+                end;
+            }
+
+            action(DiagnoseCustomerNo)
+            {
+                ApplicationArea = All;
+                Caption = 'Diagnose Customer No. Issue';
+                Image = Troubleshoot;
+                ToolTip = 'Diagnose why Customer No. is empty for the selected entry';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    eInvoiceLogUpdate: Codeunit "eInvoice Submission Log Update";
+                begin
+                    if Rec."Entry No." = 0 then begin
+                        Message('Please select a submission log entry first.');
+                        exit;
+                    end;
+                    eInvoiceLogUpdate.DiagnoseSubmissionLogEntry(Rec."Entry No.");
+                end;
+            }
+
+            action(ShowCustomerNoStatus)
+            {
+                ApplicationArea = All;
+                Caption = 'Show Customer No. Status';
+                Image = Statistics;
+                ToolTip = 'Show how many entries have/don''t have Customer No. populated';
+                Visible = true;
+
+                trigger OnAction()
+                var
+                    eInvoiceLogUpdate: Codeunit "eInvoice Submission Log Update";
+                begin
+                    eInvoiceLogUpdate.ShowSubmissionLogCustomerNoStatus();
+                end;
+            }
+
 
         }
     }
