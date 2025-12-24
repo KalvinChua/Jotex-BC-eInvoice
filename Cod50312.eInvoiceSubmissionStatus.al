@@ -1758,9 +1758,19 @@ codeunit 50312 "eInvoice Submission Status"
                                         // Store the error details using the same method as initial submission
                                         ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
                                     end else begin
-                                        // Preserve existing error details if they exist
-                                        if SubmissionLogRec."Error Message" = '' then
-                                            SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Error details were captured during initial submission';
+                                        // Try to reconstruct Error Message from existing error fields
+                                        if (SubmissionLogRec."Error Code" <> '') or (SubmissionLogRec."Error English" <> '') then begin
+                                            ErrorJsonText := '';
+                                            if SubmissionLogRec."Error Code" <> '' then
+                                                ErrorJsonText := SubmissionLogRec."Error Code" + ': ';
+                                            if SubmissionLogRec."Error English" <> '' then
+                                                ErrorJsonText += SubmissionLogRec."Error English"
+                                            else if SubmissionLogRec."Error Malay" <> '' then
+                                                ErrorJsonText += SubmissionLogRec."Error Malay";
+                                            if ErrorJsonText <> '' then
+                                                SubmissionLogRec."Error Message" := ErrorJsonText;
+                                        end else if SubmissionLogRec."Error Message" = '' then
+                                                SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Error details were captured during initial submission';
                                     end;
                                 end else begin
                                     // No Document UUID to match errors
@@ -2099,10 +2109,24 @@ codeunit 50312 "eInvoice Submission Status"
                         ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
                     end else begin
                         // LHDN Get Submission API doesn't return error details for already-Invalid documents
-                        // Preserve existing error details if they exist, otherwise set a generic message
-                        if SubmissionLogRec."Error Message" = '' then
+                        // Try to reconstruct Error Message from existing error fields if they exist
+                        if (SubmissionLogRec."Error Code" <> '') or (SubmissionLogRec."Error English" <> '') then begin
+                            // Reconstruct error message from existing fields
+                            ErrorJsonText := '';
+                            if SubmissionLogRec."Error Code" <> '' then
+                                ErrorJsonText := SubmissionLogRec."Error Code" + ': ';
+                            if SubmissionLogRec."Error English" <> '' then
+                                ErrorJsonText += SubmissionLogRec."Error English"
+                            else if SubmissionLogRec."Error Malay" <> '' then
+                                ErrorJsonText += SubmissionLogRec."Error Malay";
+
+                            if ErrorJsonText <> '' then
+                                SubmissionLogRec."Error Message" := CopyStr(ErrorJsonText, 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                        end else if SubmissionLogRec."Error Message" = '' then begin
+                            // No error details found anywhere - set generic message
                             SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - Error details were captured during initial submission', 1, MaxStrLen(SubmissionLogRec."Error Message"));
-                        // Keep existing error details intact
+                        end;
+                        // If Error Message already has content, keep it intact
                     end;
                 end else begin
                     // No Document UUID to match errors
@@ -2203,9 +2227,19 @@ codeunit 50312 "eInvoice Submission Status"
                                 // Store the error details using the same method as initial submission
                                 ParseAndStoreErrorResponse(SubmissionLog, ErrorJsonText, HttpStatusCode, CorrelationId);
                             end else begin
-                                // Preserve existing error details if they exist
-                                if SubmissionLog."Error Message" = '' then
-                                    SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Error details were captured during initial submission', 1, MaxStrLen(SubmissionLog."Error Message"));
+                                // Try to reconstruct Error Message from existing error fields
+                                if (SubmissionLog."Error Code" <> '') or (SubmissionLog."Error English" <> '') then begin
+                                    ErrorJsonText := '';
+                                    if SubmissionLog."Error Code" <> '' then
+                                        ErrorJsonText := SubmissionLog."Error Code" + ': ';
+                                    if SubmissionLog."Error English" <> '' then
+                                        ErrorJsonText += SubmissionLog."Error English"
+                                    else if SubmissionLog."Error Malay" <> '' then
+                                        ErrorJsonText += SubmissionLog."Error Malay";
+                                    if ErrorJsonText <> '' then
+                                        SubmissionLog."Error Message" := CopyStr(ErrorJsonText, 1, MaxStrLen(SubmissionLog."Error Message"));
+                                end else if SubmissionLog."Error Message" = '' then
+                                        SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Error details were captured during initial submission', 1, MaxStrLen(SubmissionLog."Error Message"));
                             end;
                         end else begin
                             // No Document UUID to match errors

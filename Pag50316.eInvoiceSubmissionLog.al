@@ -1365,9 +1365,20 @@ page 50316 "e-Invoice Submission Log"
                             // Validation errors were parsed and stored successfully
                         end else begin
                             // LHDN Get Submission API doesn't return error details for already-Invalid documents
-                            // Preserve existing error details if they exist
-                            if Entry."Error Message" = '' then
+                            // Try to reconstruct Error Message from existing error fields
+                            if (Entry."Error Code" <> '') or (Entry."Error English" <> '') then begin
+                                ResponseText := ''; // Reuse variable for error message construction
+                                if Entry."Error Code" <> '' then
+                                    ResponseText := Entry."Error Code" + ': ';
+                                if Entry."Error English" <> '' then
+                                    ResponseText += Entry."Error English"
+                                else if Entry."Error Malay" <> '' then
+                                    ResponseText += Entry."Error Malay";
+                                if ResponseText <> '' then
+                                    Entry."Error Message" := CopyStr(ResponseText, 1, MaxStrLen(Entry."Error Message"));
+                            end else if Entry."Error Message" = '' then begin
                                 Entry."Error Message" := CopyStr('Status: Invalid - Error details were captured during initial submission', 1, MaxStrLen(Entry."Error Message"));
+                            end;
                         end;
                     end else begin
                         // No Document UUID to match errors
