@@ -3091,8 +3091,96 @@ codeunit 50302 "eInvoice JSON Generator"
         // Update Sales Invoice Header with LHDN response data
         UpdateSalesInvoiceWithLhdnResponse(SalesInvoiceHeader, SubmissionUid, AcceptedArray, AcceptedCount);
 
+        // Log rejected documents with validation errors to submission log
+        if RejectedCount > 0 then
+            LogRejectedDocumentsWithErrors(SalesInvoiceHeader, SubmissionUid, RejectedArray, CorrelationId);
+
         // Background: try to fetch and store Validation URL (requires longId from Get Submission)
         TryFetchAndStoreValidationLink(SalesInvoiceHeader);
+    end;
+
+    /// <summary>
+    /// Log rejected documents with validation errors to submission log
+    /// Extracts error details from LHDN response and stores them using ParseAndStoreErrorResponse
+    /// </summary>
+    /// <param name="SalesInvoiceHeader">Sales Invoice Header record</param>
+    /// <param name="SubmissionUid">LHDN Submission UID</param>
+    /// <param name="RejectedArray">JSON array of rejected documents from LHDN response</param>
+    /// <param name="CorrelationId">Correlation ID for tracking</param>
+    local procedure LogRejectedDocumentsWithErrors(var SalesInvoiceHeader: Record "Sales Invoice Header"; SubmissionUid: Text; RejectedArray: JsonArray; CorrelationId: Text)
+    var
+        SubmissionLog: Record "eInvoice Submission Log";
+        SubmissionStatusCU: Codeunit "eInvoice Submission Status";
+        eInvoiceSetup: Record "eInvoiceSetup";
+        Customer: Record Customer;
+        JsonToken: JsonToken;
+        RejectedDoc: JsonObject;
+        ErrorObject: JsonObject;
+        DocumentUuid: Text;
+        DocumentStatus: Text;
+        ErrorJsonText: Text;
+        CustomerName: Text;
+        i: Integer;
+    begin
+        // Get customer name
+        CustomerName := '';
+        if Customer.Get(SalesInvoiceHeader."Sell-to Customer No.") then
+            CustomerName := Customer.Name;
+
+        // Get setup for environment
+        if not eInvoiceSetup.Get('SETUP') then
+            exit;
+
+        // Process each rejected document
+        for i := 0 to RejectedArray.Count() - 1 do begin
+            RejectedArray.Get(i, JsonToken);
+            if JsonToken.IsObject() then begin
+                RejectedDoc := JsonToken.AsObject();
+
+                // Extract document UUID and status
+                DocumentUuid := '';
+                DocumentStatus := '';
+                if RejectedDoc.Get('uuid', JsonToken) then
+                    DocumentUuid := JsonToken.AsValue().AsText();
+                if RejectedDoc.Get('status', JsonToken) then
+                    DocumentStatus := JsonToken.AsValue().AsText();
+
+                // Create submission log entry for rejected document
+                Clear(SubmissionLog);
+                SubmissionLog.Init();
+                SubmissionLog."Entry No." := 0; // Auto-increment
+                SubmissionLog."Invoice No." := SalesInvoiceHeader."No.";
+                SubmissionLog."Customer No." := SalesInvoiceHeader."Sell-to Customer No.";
+                SubmissionLog."Customer Name" := CopyStr(CustomerName, 1, MaxStrLen(SubmissionLog."Customer Name"));
+                SubmissionLog."Submission UID" := CopyStr(SubmissionUid, 1, MaxStrLen(SubmissionLog."Submission UID"));
+                SubmissionLog."Document UUID" := CopyStr(DocumentUuid, 1, MaxStrLen(SubmissionLog."Document UUID"));
+                SubmissionLog.Status := CopyStr(DocumentStatus, 1, MaxStrLen(SubmissionLog.Status));
+                SubmissionLog."Submission Date" := CurrentDateTime;
+                SubmissionLog."Response Date" := CurrentDateTime;
+                SubmissionLog."Last Updated" := CurrentDateTime;
+                SubmissionLog."Posting Date" := SalesInvoiceHeader."Posting Date";
+                SubmissionLog.Environment := eInvoiceSetup.Environment;
+                SubmissionLog.Amount := SalesInvoiceHeader.Amount;
+                SubmissionLog."Amount Including VAT" := SalesInvoiceHeader."Amount Including VAT";
+
+                // Insert the log entry first
+                if SubmissionLog.Insert() then begin
+                    // Extract and store error details if present
+                    if RejectedDoc.Get('error', JsonToken) and JsonToken.IsObject() then begin
+                        ErrorObject := JsonToken.AsObject();
+                        ErrorObject.WriteTo(ErrorJsonText);
+
+                        // Parse and store error details using the same method as initial submission
+                        // This will populate all error fields including Error Message, Error Code, etc.
+                        SubmissionStatusCU.ParseAndStoreErrorResponse(SubmissionLog, ErrorJsonText, 400, CorrelationId);
+                    end else begin
+                        // No error object found - set generic message
+                        SubmissionLog."Error Message" := CopyStr('Document rejected by LHDN - No detailed error information available', 1, MaxStrLen(SubmissionLog."Error Message"));
+                        SubmissionLog.Modify(true);
+                    end;
+                end;
+            end;
+        end;
     end;
 
     local procedure TryFetchAndStoreValidationLink(var SalesInvoiceHeader: Record "Sales Invoice Header")

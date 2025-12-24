@@ -1364,12 +1364,15 @@ page 50316 "e-Invoice Submission Log"
                         if ParseAndStoreValidationErrors(Entry, ResponseText) then begin
                             // Validation errors were parsed and stored successfully
                         end else begin
-                            // If no errors found in response, set generic message
-                            Entry."Error Message" := CopyStr('Status: Invalid - No detailed error information available from LHDN API', 1, MaxStrLen(Entry."Error Message"));
+                            // LHDN Get Submission API doesn't return error details for already-Invalid documents
+                            // Preserve existing error details if they exist
+                            if Entry."Error Message" = '' then
+                                Entry."Error Message" := CopyStr('Status: Invalid - Error details were captured during initial submission', 1, MaxStrLen(Entry."Error Message"));
                         end;
                     end else begin
                         // No Document UUID to match errors
-                        Entry."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(Entry."Error Message"));
+                        if Entry."Error Message" = '' then
+                            Entry."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(Entry."Error Message"));
                     end;
                 end else begin
                     // For Valid, Accepted, or other statuses, set generic success message

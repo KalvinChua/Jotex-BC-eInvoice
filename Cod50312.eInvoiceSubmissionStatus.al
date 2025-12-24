@@ -1758,12 +1758,14 @@ codeunit 50312 "eInvoice Submission Status"
                                         // Store the error details using the same method as initial submission
                                         ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
                                     end else begin
-                                        // If no errors found in response, set generic message
-                                        SubmissionLogRec."Error Message" := 'Background refresh: Invalid - No detailed error information available';
+                                        // Preserve existing error details if they exist
+                                        if SubmissionLogRec."Error Message" = '' then
+                                            SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Error details were captured during initial submission';
                                     end;
                                 end else begin
                                     // No Document UUID to match errors
-                                    SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Document UUID missing';
+                                    if SubmissionLogRec."Error Message" = '' then
+                                        SubmissionLogRec."Error Message" := 'Background refresh: Invalid - Document UUID missing';
                                 end;
                             end else begin
                                 // For Valid, Accepted, or other statuses, set generic success message
@@ -2096,12 +2098,16 @@ codeunit 50312 "eInvoice Submission Status"
                         // This will populate the Error Message field with validation error details
                         ParseAndStoreErrorResponse(SubmissionLogRec, ErrorJsonText, HttpStatusCode, CorrelationId);
                     end else begin
-                        // If no errors found in response, set generic message
-                        SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - No detailed error information available from LHDN API', 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                        // LHDN Get Submission API doesn't return error details for already-Invalid documents
+                        // Preserve existing error details if they exist, otherwise set a generic message
+                        if SubmissionLogRec."Error Message" = '' then
+                            SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - Error details were captured during initial submission', 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                        // Keep existing error details intact
                     end;
                 end else begin
                     // No Document UUID to match errors
-                    SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(SubmissionLogRec."Error Message"));
+                    if SubmissionLogRec."Error Message" = '' then
+                        SubmissionLogRec."Error Message" := CopyStr('Status: Invalid - Document UUID missing, cannot retrieve error details', 1, MaxStrLen(SubmissionLogRec."Error Message"));
                 end;
             end else begin
                 // For Valid, Accepted, or other statuses, set generic success message
@@ -2197,12 +2203,14 @@ codeunit 50312 "eInvoice Submission Status"
                                 // Store the error details using the same method as initial submission
                                 ParseAndStoreErrorResponse(SubmissionLog, ErrorJsonText, HttpStatusCode, CorrelationId);
                             end else begin
-                                // If no errors found in response, set generic message
-                                SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - No detailed error information available', 1, MaxStrLen(SubmissionLog."Error Message"));
+                                // Preserve existing error details if they exist
+                                if SubmissionLog."Error Message" = '' then
+                                    SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Error details were captured during initial submission', 1, MaxStrLen(SubmissionLog."Error Message"));
                             end;
                         end else begin
                             // No Document UUID to match errors
-                            SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Document UUID missing', 1, MaxStrLen(SubmissionLog."Error Message"));
+                            if SubmissionLog."Error Message" = '' then
+                                SubmissionLog."Error Message" := CopyStr('Bulk refresh: Invalid - Document UUID missing', 1, MaxStrLen(SubmissionLog."Error Message"));
                         end;
                     end else begin
                         // For Valid, Accepted, or other statuses, set generic success message
