@@ -1742,21 +1742,25 @@
         Entry."Validation Link" := CopyStr(ValidationUrl, 1, MaxStrLen(Entry."Validation Link"));
         Entry.Modify();
 
-        // Also update Posted Sales Invoice with QR URL when available
-        UpdatePostedInvoiceQrUrl(Entry."Invoice No.", ValidationUrl);
+        // Also update the posted document (invoice or credit memo) with QR URL when available
+        UpdatePostedDocumentQrUrl(Entry."Document Type", Entry."Invoice No.", ValidationUrl);
     end;
 
-    local procedure UpdatePostedInvoiceQrUrl(InvoiceNo: Code[20]; Url: Text)
+    local procedure UpdatePostedDocumentQrUrl(DocumentType: Code[20]; DocumentNo: Code[20]; Url: Text)
     var
         eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
+        eInvoiceQrManager: Codeunit "eInvoice QR Manager";
     begin
-        if (InvoiceNo = '') or (Url = '') then
+        if (DocumentNo = '') or (Url = '') then
             exit;
 
-        // Use codeunit with tabledata permissions to avoid page permission issues
-        if eInvoiceGenerator.UpdateInvoiceQrUrl(InvoiceNo, Url) then begin
-            // Automatically generate QR image after updating the URL
-            AutoGenerateInvoiceQrImage(InvoiceNo, Url);
+        // Document Type '02' is Credit Memo; route to the matching table, else assume Invoice
+        if DocumentType = '02' then begin
+            if eInvoiceQrManager.UpdateCreditMemoQrUrl(DocumentNo, Url) then
+                AutoGenerateCreditMemoQrImage(DocumentNo, Url);
+        end else begin
+            if eInvoiceGenerator.UpdateInvoiceQrUrl(DocumentNo, Url) then
+                AutoGenerateInvoiceQrImage(DocumentNo, Url);
         end;
     end;
 
@@ -1925,6 +1929,35 @@
             // Successfully generated QR image
             // Note: We don't update the page here as this is called from a background process
         end;
+    end;
+
+    /// <summary>
+    /// Automatically generates QR image for the credit memo using the validation URL
+    /// This is called after the QR URL is updated during status refresh
+    /// </summary>
+    /// <param name="CreditMemoNo">The credit memo number to generate QR for</param>
+    /// <param name="ValidationUrl">The validation URL to convert to QR</param>
+    local procedure AutoGenerateCreditMemoQrImage(CreditMemoNo: Code[20]; ValidationUrl: Text)
+    var
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        QrServiceUrl: Text;
+        InS: InStream;
+        eInvoiceQrManager: Codeunit "eInvoice QR Manager";
+    begin
+        if (CreditMemoNo = '') or (ValidationUrl = '') then
+            exit;
+
+        QrServiceUrl := StrSubstNo('https://quickchart.io/qr?text=%1&size=220', ValidationUrl);
+
+        if not HttpClient.Get(QrServiceUrl, Response) then
+            exit;
+
+        if not Response.IsSuccessStatusCode then
+            exit;
+
+        Response.Content().ReadAs(InS);
+        eInvoiceQrManager.UpdateCreditMemoQrImage(CreditMemoNo, InS, 'eInvoiceQR.png');
     end;
 
     /// <summary>

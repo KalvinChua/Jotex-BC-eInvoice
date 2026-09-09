@@ -542,21 +542,21 @@ page 50315 "e-Invoice Submission Log Card"
         Entry."Validation Link" := CopyStr(ValidationUrl, 1, MaxStrLen(Entry."Validation Link"));
         Entry.Modify();
 
-        // Also update Posted Sales Invoice with QR URL when available
-        UpdatePostedInvoiceQrUrl(Entry."Invoice No.", ValidationUrl);
+        // Also update the posted document (invoice or credit memo) with QR URL when available
+        UpdatePostedDocumentQrUrl(Entry."Document Type", Entry."Invoice No.", ValidationUrl);
     end;
 
-    local procedure UpdatePostedInvoiceQrUrl(InvoiceNo: Code[20]; Url: Text)
+    local procedure UpdatePostedDocumentQrUrl(DocumentType: Text; InvoiceNo: Code[20]; ValidationUrl: Text)
     var
         eInvoiceGenerator: Codeunit "eInvoice JSON Generator";
     begin
-        if (InvoiceNo = '') or (Url = '') then
+        if (InvoiceNo = '') or (ValidationUrl = '') then
             exit;
 
         // Use codeunit with tabledata permissions to avoid page permission issues
-        if eInvoiceGenerator.UpdateInvoiceQrUrl(InvoiceNo, Url) then begin
+        if eInvoiceGenerator.UpdateInvoiceQrUrl(InvoiceNo, ValidationUrl) then begin
             // Automatically generate QR image after updating the URL
-            AutoGenerateInvoiceQrImage(InvoiceNo, Url);
+            AutoGenerateInvoiceQrImage(InvoiceNo, ValidationUrl);
         end;
     end;
 
