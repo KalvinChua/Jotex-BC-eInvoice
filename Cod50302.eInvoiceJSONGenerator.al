@@ -922,22 +922,60 @@ codeunit 50302 "eInvoice JSON Generator"
 
     local procedure AddCreditMemoBillingReference(var InvoiceObject: JsonObject; SalesCrMemoHeader: Record "Sales Cr.Memo Header")
     var
+        Setup: Record "eInvoiceSetup";
+        SalesInvoiceHeader: Record "Sales Invoice Header";
+        SubmissionLog: Record "eInvoice Submission Log";
         BillingRefArray: JsonArray;
         BillingRefObject: JsonObject;
         InvoiceDocumentReferenceArray: JsonArray;
         InvoiceDocumentReferenceObject: JsonObject;
+        OriginalUUID: Text;
     begin
-        // LHDN COMPLIANCE: For credit notes adjusting invoices issued prior to e-Invoice implementation,
-        // use "NA" as the Original e-Invoice Reference Number since no IRBM Unique Identifier Number exists.
-        // Reference: LHDN e-Invoice Guidelines - Credit/Debit Note Adjustments
-        // "If adjustments are to be made to original invoices that were issued prior to the implementation
-        // of e-Invoice (i.e., no IRBM Unique Identifier Number has been assigned), taxpayers are then
-        // allowed to input "NA" in the 'Original e-Invoice Reference Number' data field."
-        //
-        // BUSINESS DECISION: Always use "NA" for all credit notes regardless of reference availability
+        // This implementation supports one original invoice per credit memo.
+        if SalesCrMemoHeader."Applies-to Doc. No." = '' then
+            Error('Credit memo %1 has no applied-to invoice. Specify the original invoice before submission.',
+                SalesCrMemoHeader."No.");
 
-        AddBasicField(InvoiceDocumentReferenceObject, 'ID', 'NA');
+        // Resolve the Business Central invoice that the credit memo adjusts.
+        if not SalesInvoiceHeader.Get(SalesCrMemoHeader."Applies-to Doc. No.") then
+            Error('Posted sales invoice %1 was not found.',
+                SalesCrMemoHeader."Applies-to Doc. No.");
 
+        if not Setup.Get('SETUP') then
+            Error('eInvoice Setup was not found.');
+
+        // Find a valid invoice submission in the same MyInvois environment.
+        SubmissionLog.SetRange("Invoice No.", SalesInvoiceHeader."No.");
+        SubmissionLog.SetRange("Document Type", '01');
+        SubmissionLog.SetRange(Status, 'Valid');
+
+        case Setup.Environment of
+            Setup.Environment::Preprod:
+                SubmissionLog.SetRange(Environment, SubmissionLog.Environment::Preprod);
+            Setup.Environment::Production:
+                SubmissionLog.SetRange(Environment, SubmissionLog.Environment::Production);
+        end;
+
+        if not SubmissionLog.FindFirst() then
+            Error('No valid %1 e-Invoice submission was found for invoice %2.',
+                Format(Setup.Environment), SalesInvoiceHeader."No.");
+
+        // Reject missing UUIDs instead of submitting "NA" or a placeholder.
+        OriginalUUID := DelChr(SubmissionLog."Document UUID", '<>', ' ');
+        if (OriginalUUID = '') or (LowerCase(OriginalUUID) = 'null') then
+            Error('The valid submission for invoice %1 has no document UUID.',
+                SalesInvoiceHeader."No.");
+
+        // Do not guess which UUID to use if multiple valid records exist.
+        if SubmissionLog.Next() <> 0 then
+            Error('Multiple valid submissions were found for invoice %1. Verify the correct UUID before submitting.',
+                SalesInvoiceHeader."No.");
+
+        // MyInvois requires the original invoice number and its matching UUID.
+        AddBasicField(InvoiceDocumentReferenceObject, 'ID', SalesInvoiceHeader."No.");
+        AddBasicField(InvoiceDocumentReferenceObject, 'UUID', OriginalUUID);
+
+        // Wrap the reference in the UBL JSON array structure.
         InvoiceDocumentReferenceArray.Add(InvoiceDocumentReferenceObject);
         BillingRefObject.Add('InvoiceDocumentReference', InvoiceDocumentReferenceArray);
         BillingRefArray.Add(BillingRefObject);
